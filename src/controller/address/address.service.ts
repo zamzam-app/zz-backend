@@ -15,7 +15,7 @@ import { UserRole } from '../users/entities/user.entity';
 export class AddressService {
   constructor(
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
-  ) { }
+  ) {}
 
   async create(
     createAddressDto: CreateAddressDto,

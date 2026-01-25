@@ -32,7 +32,7 @@ import {
 @UseGuards(JwtAuthGuard)
 @Controller('address')
 export class AddressController {
-  constructor(private readonly addressService: AddressService) { }
+  constructor(private readonly addressService: AddressService) {}
 
   @Post()
   @ApiAddressCreate()

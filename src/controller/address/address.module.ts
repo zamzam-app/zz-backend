@@ -11,4 +11,4 @@ import { Address, AddressSchema } from './entities/address.entity';
   controllers: [AddressController],
   providers: [AddressService],
 })
-export class AddressModule { }
+export class AddressModule {}
