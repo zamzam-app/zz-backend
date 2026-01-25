@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { UserDocument } from '../users/entities/user.entity';
+import { UserDocument, UserRole } from '../users/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -43,37 +43,33 @@ export class AuthService {
     return this.login(user);
   }
 
-  // Users OTP login
+  // Users OTP login (Auto-registration supported)
   async signInWithOtp(verifyOtpDto: VerifyOtpDto): Promise<LoginResponse> {
-    const user = await this.verifyOtp(
-      verifyOtpDto.phoneNumber,
-      verifyOtpDto.otp,
-    );
-
-    if (user.role !== 'user') {
-      throw new UnauthorizedException('Unauthorized role for OTP login');
-    }
-
-    return this.login(user);
-  }
-
-  async verifyOtp(phoneNumber: string, otp: string): Promise<ValidatedUser> {
-    // TODO: Remove this after OTP integration
-    if (otp !== '123456') {
+    // 1. Initial OTP Check (hardcoded for now)
+    if (verifyOtpDto.otp !== '123456') {
       throw new UnauthorizedException('Invalid OTP');
     }
 
-    const user = await this.usersService.findOneByPhoneNumber(phoneNumber);
-    if (!user) {
-      throw new UnauthorizedException('User not found');
+    // 2. Find or Create User
+    let userDoc = (await this.usersService.findOneByPhoneNumber(
+      verifyOtpDto.phoneNumber,
+    )) as UserDocument | null;
+
+    if (!userDoc) {
+      userDoc = (await this.usersService.create({
+        phoneNumber: verifyOtpDto.phoneNumber,
+        role: 'user' as UserRole,
+      })) as UserDocument;
     }
 
-    const result = user.toObject();
-    delete (result as { password?: string }).password;
-    return result as ValidatedUser;
+    // 3. Sanitize and Login
+    const sanitizedUser = userDoc.toObject();
+    delete (sanitizedUser as { password?: string }).password;
+
+    return this.login(sanitizedUser as ValidatedUser);
   }
 
-  refresh(refreshToken: string): AuthTokens {
+  async refresh(refreshToken: string): Promise<AuthTokens> {
     if (!refreshToken) {
       throw new UnauthorizedException('No refresh token found');
     }
@@ -86,9 +82,13 @@ export class AuthService {
     const { pass, name, email } = validateUserDto;
     let user: UserDocument | null = null;
     if (name) {
-      user = await this.usersService.findOneByName(name);
+      user = (await this.usersService.findOneByName(
+        name,
+      )) as UserDocument | null;
     } else if (email) {
-      user = await this.usersService.findOneByEmail(email);
+      user = (await this.usersService.findOneByEmail(
+        email,
+      )) as UserDocument | null;
     }
 
     if (user && user.password && (await bcrypt.compare(pass, user.password))) {

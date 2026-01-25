@@ -43,9 +43,11 @@ export class AuthController {
 
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token using refresh token cookie' })
-  refresh(@Request() req: ExpressRequest): Omit<AuthTokens, 'refresh_token'> {
+  async refresh(
+    @Request() req: ExpressRequest,
+  ): Promise<Omit<AuthTokens, 'refresh_token'>> {
     const refreshToken = req.cookies['refresh_token'] as string;
-    const result = this.authService.refresh(refreshToken);
+    const result = await this.authService.refresh(refreshToken);
     return { access_token: result.access_token };
   }
 
