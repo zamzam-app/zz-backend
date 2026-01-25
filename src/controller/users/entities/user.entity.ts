@@ -67,6 +67,18 @@ export class User extends BaseEntity {
   })
   @Prop({ type: [{ type: MongooseSchema.Types.ObjectId }], required: false })
   outlets?: string[];
+
+  @ApiProperty({
+    example: '60d5ecb86217152c9043e02d',
+    description: 'Associated address ID',
+    required: false,
+  })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Address',
+    required: false,
+  })
+  addressId?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

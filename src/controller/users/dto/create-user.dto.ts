@@ -73,4 +73,13 @@ export class CreateUserDto {
   @IsMongoId({ each: true })
   @IsOptional()
   outlets?: string[];
+
+  @ApiProperty({
+    example: '60d5ecb86217152c9043e02d',
+    description: 'Associated address ID',
+    required: false,
+  })
+  @IsMongoId()
+  @IsOptional()
+  addressId?: string;
 }
