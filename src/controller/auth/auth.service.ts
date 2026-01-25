@@ -1,26 +1,98 @@
-import { Injectable } from '@nestjs/common';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { UsersService } from '../users/users.service';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { User, UserDocument } from '../users/entities/user.entity';
 
 @Injectable()
 export class AuthService {
-  create(createAuthDto: CreateAuthDto) {
-    return 'This action adds a new auth';
+  constructor(
+    private usersService: UsersService,
+    private jwtService: JwtService,
+    private configService: ConfigService,
+  ) {}
+
+  async validateUser(
+    username: string | undefined,
+    pass: string,
+    email?: string,
+  ) {
+    let user: UserDocument | null = null;
+    if (username) {
+      user = (await this.usersService.findOneByUsername(
+        username,
+      )) as UserDocument;
+    } else if (email) {
+      user = (await this.usersService.findOneByEmail(email)) as UserDocument;
+    }
+
+    if (user && user.password === pass) {
+      const result = user.toObject();
+      delete (result as any).password;
+      return result;
+    }
+    return null;
   }
 
-  findAll() {
-    return `This action returns all auth`;
+  async verifyOtp(phoneNumber: string, otp: string): Promise<any> {
+    if (otp !== '123456') {
+      // TODO: Remove this after OTP integration
+      throw new UnauthorizedException('Invalid OTP');
+    }
+
+    const user = (await this.usersService.findOneByPhoneNumber(
+      phoneNumber,
+    )) as UserDocument;
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const result = user.toObject();
+    delete (result as any).password;
+    return result;
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} auth`;
+  async login(user: any) {
+    const payload = {
+      username: user.userName,
+      sub: user._id,
+      role: user.userRole,
+    };
+    return this.generateTokens(payload);
   }
 
-  update(id: number, updateAuthDto: UpdateAuthDto) {
-    return `This action updates a #${id} auth`;
+  async generateTokens(payload: any) {
+    const accessToken = this.jwtService.sign(payload, {
+      secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+      expiresIn: '15m',
+    });
+
+    const refreshToken = this.jwtService.sign(payload, {
+      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      expiresIn: '7d',
+    });
+
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    };
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} auth`;
+  async refreshTokens(refreshToken: string) {
+    try {
+      const payload = this.jwtService.verify(refreshToken, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      });
+
+      const newPayload = {
+        username: payload.username,
+        sub: payload.sub,
+        role: payload.role,
+      };
+
+      return this.generateTokens(newPayload);
+    } catch (e) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 }

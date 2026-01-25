@@ -26,6 +26,18 @@ export class UsersService {
     return user;
   }
 
+  async findOneByUsername(userName: string) {
+    return this.userModel.findOne({ userName }).exec();
+  }
+
+  async findOneByEmail(email: string) {
+    return this.userModel.findOne({ email }).exec();
+  }
+
+  async findOneByPhoneNumber(phoneNumber: string) {
+    return this.userModel.findOne({ phoneNumber }).exec();
+  }
+
   async update(id: string, updateUserDto: UpdateUserDto) {
     const updatedUser = await this.userModel
       .findByIdAndUpdate(id, updateUserDto, { new: true })
