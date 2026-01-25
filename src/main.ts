@@ -9,6 +9,7 @@ async function bootstrap() {
   app.use(cookieParser());
   app.setGlobalPrefix('api');
 
+  // swagger documentation setup
   const config = new DocumentBuilder()
     .setTitle('ZZ Backend API')
     .setDescription('The ZZ Backend API description')
