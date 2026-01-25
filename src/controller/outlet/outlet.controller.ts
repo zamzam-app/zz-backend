@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { OutletService } from './outlet.service';
 import { CreateOutletDto } from './dto/create-outlet.dto';
@@ -23,6 +24,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
+import { QueryOutletDto } from './dto/query-outlet.dto';
 
 @ApiTags('outlet')
 @ApiBearerAuth()
@@ -41,8 +43,8 @@ export class OutletController {
   @Get()
   @Roles(UserRole.USER, UserRole.MANAGER, UserRole.ADMIN)
   @ApiOutletFindAll()
-  findAll() {
-    return this.outletService.findAll();
+  findAll(@Query() query: QueryOutletDto) {
+    return this.outletService.findAll(query);
   }
 
   @Get(':id')

@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { CreateOutletDto } from './dto/create-outlet.dto';
 import { UpdateOutletDto } from './dto/update-outlet.dto';
 import { Outlet, OutletDocument } from './entities/outlet.entity';
+import { QueryOutletDto } from './dto/query-outlet.dto';
 
 @Injectable()
 export class OutletService {
@@ -16,8 +17,33 @@ export class OutletService {
     return createdOutlet.save();
   }
 
-  async findAll(): Promise<Outlet[]> {
-    return this.outletModel.find({ isDeleted: false }).exec();
+  async findAll(query: QueryOutletDto) {
+    const { page = 1, limit = 10, name, type } = query;
+    const filter: any = { isDeleted: false };
+
+    if (name) {
+      filter.name = { $regex: name, $options: 'i' };
+    }
+
+    if (type) {
+      filter.type = type;
+    }
+
+    const [data, total] = await Promise.all([
+      this.outletModel
+        .find(filter)
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .exec(),
+      this.outletModel.countDocuments(filter),
+    ]);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
   }
 
   async findOne(id: string): Promise<Outlet> {

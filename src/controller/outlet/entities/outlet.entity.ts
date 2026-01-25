@@ -49,7 +49,7 @@ export class Outlet extends BaseEntity {
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    nullable: true,
   })
   managerId: string;
 

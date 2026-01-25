@@ -19,10 +19,20 @@ export function ApiOutletCreate() {
 
 export function ApiOutletFindAll() {
   return applyDecorators(
-    ApiOperation({ summary: 'Retrieve all outlets' }),
+    ApiOperation({ summary: 'Retrieve all outlets with pagination' }),
     ApiOkResponse({
-      description: 'Successfully retrieved all outlets.',
-      type: [Outlet],
+      description: 'Successfully retrieved outlets.',
+      schema: {
+        properties: {
+          data: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/Outlet' },
+          },
+          total: { type: 'number' },
+          page: { type: 'number' },
+          limit: { type: 'number' },
+        },
+      },
     }),
   );
 }
