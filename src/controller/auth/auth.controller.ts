@@ -28,7 +28,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const user = await this.authService.validateUser(
-      loginDto.userName,
+      loginDto.name,
       loginDto.password,
       loginDto.email,
     );

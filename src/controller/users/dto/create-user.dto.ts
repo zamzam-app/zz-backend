@@ -5,17 +5,28 @@ import {
   IsOptional,
   IsString,
   IsEmail,
+  IsArray,
+  IsMongoId,
 } from 'class-validator';
 import { UserRole } from '../entities/user.entity';
 
 export class CreateUserDto {
   @ApiProperty({
     example: 'johndoe',
-    description: 'The unique username of the user',
+    description: 'The unique name of the user',
   })
   @IsString()
   @IsOptional()
-  userName: string;
+  name: string;
+
+  @ApiProperty({
+    example: 'john_doe_99',
+    description: 'The username of the user',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  userName?: string;
 
   @ApiProperty({
     example: 'user',
@@ -24,7 +35,7 @@ export class CreateUserDto {
   })
   @IsEnum(UserRole)
   @IsNotEmpty()
-  userRole: UserRole;
+  role: UserRole;
 
   @ApiProperty({
     example: 'password123',
@@ -52,4 +63,14 @@ export class CreateUserDto {
   @IsEmail()
   @IsOptional()
   email?: string;
+
+  @ApiProperty({
+    example: ['60d5ecb86217152c9043e02d'],
+    description: 'Array of outlet IDs associated with the user',
+    required: false,
+  })
+  @IsArray()
+  @IsMongoId({ each: true })
+  @IsOptional()
+  outlets?: string[];
 }

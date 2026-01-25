@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
 
@@ -14,10 +14,18 @@ export enum UserRole {
 export class User {
   @ApiProperty({
     example: 'johndoe',
-    description: 'The unique username of the user',
+    description: 'The unique name of the user',
   })
   @Prop({ required: false })
-  userName: string;
+  name: string;
+
+  @ApiProperty({
+    example: 'john_doe_99',
+    description: 'The username of the user',
+    required: false,
+  })
+  @Prop({ required: false, unique: true, sparse: true })
+  userName?: string;
 
   @ApiProperty({
     example: 'user',
@@ -25,7 +33,7 @@ export class User {
     description: 'The role of the user',
   })
   @Prop({ required: true, enum: UserRole, default: UserRole.USER })
-  userRole: string;
+  role: string;
 
   @ApiProperty({
     example: 'password123',
@@ -50,6 +58,14 @@ export class User {
   })
   @Prop({ required: false })
   email?: string;
+
+  @ApiProperty({
+    example: ['60d5ecb86217152c9043e02d'],
+    description: 'Array of outlet IDs associated with the user',
+    required: false,
+  })
+  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId }], required: false })
+  outlets?: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
