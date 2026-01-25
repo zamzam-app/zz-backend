@@ -6,7 +6,7 @@ import {
   Body,
   Get,
   Res,
-  UnauthorizedException,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -14,9 +14,12 @@ import { ApiBody, ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import type { Response, Request as ExpressRequest } from 'express';
+import { AuthTokens, LoginResponse } from './interfaces/auth.interfaces';
+import { CookieInterceptor } from './interceptors/cookie.interceptor';
 
 @ApiTags('auth')
 @Controller('auth')
+@UseInterceptors(CookieInterceptor)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -25,19 +28,8 @@ export class AuthController {
   @ApiBody({ type: LoginDto })
   async login(
     @Body() loginDto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const user = await this.authService.validateUser(
-      loginDto.name,
-      loginDto.password,
-      loginDto.email,
-    );
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    const tokens = await this.authService.login(user);
-    this.setRefreshTokenCookie(res, tokens.refresh_token);
-    return { access_token: tokens.access_token };
+  ): Promise<Omit<LoginResponse, 'refresh_token'>> {
+    return this.authService.signIn(loginDto);
   }
 
   @Post('verify-otp')
@@ -45,35 +37,21 @@ export class AuthController {
   @ApiBody({ type: VerifyOtpDto })
   async verifyOtp(
     @Body() verifyOtpDto: VerifyOtpDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const user = await this.authService.verifyOtp(
-      verifyOtpDto.phoneNumber,
-      verifyOtpDto.otp,
-    );
-    const tokens = await this.authService.login(user);
-    this.setRefreshTokenCookie(res, tokens.refresh_token);
-    return { access_token: tokens.access_token };
+  ): Promise<Omit<LoginResponse, 'refresh_token'>> {
+    return this.authService.signInWithOtp(verifyOtpDto);
   }
 
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token using refresh token cookie' })
-  async refresh(
-    @Request() req: ExpressRequest,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const refreshToken = req.cookies['refresh_token'];
-    if (!refreshToken) {
-      throw new UnauthorizedException('No refresh token found');
-    }
-    const tokens = await this.authService.refreshTokens(refreshToken);
-    this.setRefreshTokenCookie(res, tokens.refresh_token);
-    return { access_token: tokens.access_token };
+  refresh(@Request() req: ExpressRequest): Omit<AuthTokens, 'refresh_token'> {
+    const refreshToken = req.cookies['refresh_token'] as string;
+    const result = this.authService.refresh(refreshToken);
+    return { access_token: result.access_token };
   }
 
   @Post('logout')
   @ApiOperation({ summary: 'Logout and clear refresh token cookie' })
-  async logout(@Res({ passthrough: true }) res: Response) {
+  logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie('refresh_token');
     return { message: 'Logged out successfully' };
   }
@@ -84,14 +62,5 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile (protected)' })
   getProfile(@Request() req: ExpressRequest) {
     return req.user;
-  }
-
-  private setRefreshTokenCookie(res: Response, token: string) {
-    res.cookie('refresh_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
   }
 }

@@ -24,4 +24,6 @@ async function bootstrap() {
     'Bootstrap',
   );
 }
-bootstrap();
+bootstrap().catch((err) => {
+  Logger.error(err, 'Bootstrap');
+});
