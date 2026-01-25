@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
+import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type UserDocument = HydratedDocument<User>;
 
@@ -11,7 +12,7 @@ export enum UserRole {
 }
 
 @Schema({ timestamps: true })
-export class User {
+export class User extends BaseEntity {
   @ApiProperty({
     example: 'johndoe',
     description: 'The unique name of the user',
