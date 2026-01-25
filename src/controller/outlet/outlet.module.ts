@@ -1,0 +1,14 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { OutletService } from './outlet.service';
+import { OutletController } from './outlet.controller';
+import { Outlet, OutletSchema } from './entities/outlet.entity';
+
+@Module({
+  imports: [
+    MongooseModule.forFeature([{ name: Outlet.name, schema: OutletSchema }]),
+  ],
+  controllers: [OutletController],
+  providers: [OutletService],
+})
+export class OutletModule {}
