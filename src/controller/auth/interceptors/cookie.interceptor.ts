@@ -16,8 +16,10 @@ export class CookieInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       map((data: LoginResponse | AuthTokens) => {
-        if (data && 'refresh_token' in data) {
+        if (data && data.refresh_token) {
           this.setRefreshTokenCookie(res, data.refresh_token);
+          // Strip the refresh token from the response body
+          delete data.refresh_token;
         }
         return data;
       }),

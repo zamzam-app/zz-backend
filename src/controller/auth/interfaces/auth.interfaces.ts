@@ -11,7 +11,7 @@ export interface JwtPayload {
 
 export interface AuthTokens {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
 }
 
 export interface LoginResponse extends AuthTokens {
