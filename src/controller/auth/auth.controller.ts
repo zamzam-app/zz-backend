@@ -14,7 +14,12 @@ import { ApiBody, ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import type { Response, Request as ExpressRequest } from 'express';
-import { AuthTokens, LoginResponse } from './interfaces/auth.interfaces';
+import {
+  AuthTokens,
+  LoginResponse,
+  JwtPayload,
+  ValidatedUser,
+} from './interfaces/auth.interfaces';
 import { CookieInterceptor } from './interceptors/cookie.interceptor';
 
 @ApiTags('auth')
@@ -43,11 +48,9 @@ export class AuthController {
 
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token using refresh token cookie' })
-  async refresh(
-    @Request() req: ExpressRequest,
-  ): Promise<Omit<AuthTokens, 'refresh_token'>> {
+  refresh(@Request() req: ExpressRequest): Omit<AuthTokens, 'refresh_token'> {
     const refreshToken = req.cookies['refresh_token'] as string;
-    const result = await this.authService.refresh(refreshToken);
+    const result = this.authService.refresh(refreshToken);
     return { access_token: result.access_token };
   }
 
@@ -62,7 +65,9 @@ export class AuthController {
   @Get('profile')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user profile (protected)' })
-  getProfile(@Request() req: ExpressRequest) {
-    return req.user;
+  async getProfile(
+    @Request() req: ExpressRequest & { user: JwtPayload },
+  ): Promise<ValidatedUser> {
+    return this.authService.getProfile(req.user.sub);
   }
 }

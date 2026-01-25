@@ -51,15 +51,15 @@ export class AuthService {
     }
 
     // 2. Find or Create User
-    let userDoc = (await this.usersService.findOneByPhoneNumber(
+    let userDoc = await this.usersService.findOneByPhoneNumber(
       verifyOtpDto.phoneNumber,
-    )) as UserDocument | null;
+    );
 
     if (!userDoc) {
-      userDoc = (await this.usersService.create({
+      userDoc = await this.usersService.create({
         phoneNumber: verifyOtpDto.phoneNumber,
         role: 'user' as UserRole,
-      })) as UserDocument;
+      });
     }
 
     // 3. Sanitize and Login
@@ -69,7 +69,14 @@ export class AuthService {
     return this.login(sanitizedUser as ValidatedUser);
   }
 
-  async refresh(refreshToken: string): Promise<AuthTokens> {
+  async getProfile(userId: string): Promise<ValidatedUser> {
+    const userDoc = await this.usersService.findOne(userId);
+    const sanitizedUser = userDoc.toObject();
+    delete (sanitizedUser as { password?: string }).password;
+    return sanitizedUser as ValidatedUser;
+  }
+
+  refresh(refreshToken: string): AuthTokens {
     if (!refreshToken) {
       throw new UnauthorizedException('No refresh token found');
     }
@@ -82,13 +89,9 @@ export class AuthService {
     const { pass, name, email } = validateUserDto;
     let user: UserDocument | null = null;
     if (name) {
-      user = (await this.usersService.findOneByName(
-        name,
-      )) as UserDocument | null;
+      user = await this.usersService.findOneByName(name);
     } else if (email) {
-      user = (await this.usersService.findOneByEmail(
-        email,
-      )) as UserDocument | null;
+      user = await this.usersService.findOneByEmail(email);
     }
 
     if (user && user.password && (await bcrypt.compare(pass, user.password))) {

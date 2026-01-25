@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { UserRole } from '../users/entities/user.entity';
 import { ROLES_KEY } from './roles.decorator';
 import { Request } from 'express';
-import { ValidatedUser } from './interfaces/auth.interfaces';
+import { JwtPayload } from './interfaces/auth.interfaces';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -19,7 +19,7 @@ export class RolesGuard implements CanActivate {
     }
     const req = context
       .switchToHttp()
-      .getRequest<Request & { user: ValidatedUser }>();
+      .getRequest<Request & { user: JwtPayload }>();
     const user = req.user;
 
     // Check if the user's role matches any of the required roles
