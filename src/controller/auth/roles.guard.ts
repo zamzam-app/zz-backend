@@ -24,6 +24,6 @@ export class RolesGuard implements CanActivate {
 
     // Check if the user's role matches any of the required roles
     // Explicit comparison with UserRole enum to satisfy lint
-    return requiredRoles.some((role) => user?.role === (role as string));
+    return requiredRoles.some((role) => user?.role === role);
   }
 }

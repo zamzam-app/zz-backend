@@ -19,7 +19,7 @@ export class OutletService {
 
   async findAll(query: QueryOutletDto) {
     const { page = 1, limit = 10, name, type } = query;
-    const filter: any = { isDeleted: false };
+    const filter: Record<string, any> = { isDeleted: false };
 
     if (name) {
       filter.name = { $regex: name, $options: 'i' };
