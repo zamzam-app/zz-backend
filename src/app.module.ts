@@ -10,6 +10,7 @@ import { ProductModule } from './controller/product/product.module';
 import { OutletModule } from './controller/outlet/outlet.module';
 import { OutletTypeModule } from './controller/outlet-type/outlet-type.module';
 import { FormModule } from './controller/forms/form.module';
+import { RatingModule } from './controller/rating/rating.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { FormModule } from './controller/forms/form.module';
     OutletModule,
     OutletTypeModule,
     FormModule,
+    RatingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

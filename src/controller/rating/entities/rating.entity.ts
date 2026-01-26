@@ -18,7 +18,7 @@ export class Response {
   @Prop({ type: MongooseSchema.Types.ObjectId, required: true })
   questionId: ObjectId;
 
-  @Prop({ required: true })
+  @Prop({ type: [String], required: true })
   answer: string | string[] | number;
 }
 
