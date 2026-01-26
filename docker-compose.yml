@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    # We removed 'depends_on' because the database is now in the cloud,
+    # so we don't need to wait for a local container to start.
