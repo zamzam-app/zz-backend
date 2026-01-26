@@ -19,7 +19,7 @@ export class OutletType extends BaseEntity {
     description: 'Array of menu object IDs',
     type: [String],
   })
-  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Menu' }] })
+  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Outlet' }] })
   menu: string[];
 
   @ApiProperty({
