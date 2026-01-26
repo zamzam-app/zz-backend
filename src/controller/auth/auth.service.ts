@@ -106,7 +106,7 @@ export class AuthService {
     const payload: JwtPayload = {
       name: user.name,
       sub: user._id.toString(),
-      role: user.role,
+      role: user.role as UserRole,
     };
     const tokens = this.generateTokens(payload);
     return {

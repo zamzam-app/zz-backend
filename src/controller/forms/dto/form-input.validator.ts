@@ -6,7 +6,7 @@ import {
 import { FieldType } from '../entities/form.entity';
 
 export function IsValidFormInput(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isValidFormInput',
       target: object.constructor,

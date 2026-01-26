@@ -35,6 +35,8 @@ export class FormController {
   constructor(private readonly formService: FormService) {}
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiFormCreate()
   create(
     @Body() createFormDto: CreateFormDto,
@@ -61,12 +63,16 @@ export class FormController {
   }
 
   @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiFormUpdate()
   update(@Param('id') id: string, @Body() updateFormDto: UpdateFormDto) {
     return this.formService.update(id, updateFormDto);
   }
 
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   @ApiFormRemove()
   remove(@Param('id') id: string) {
     return this.formService.remove(id);

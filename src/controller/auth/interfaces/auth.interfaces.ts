@@ -1,10 +1,10 @@
-import { User } from '../../users/entities/user.entity';
+import { User, UserRole } from '../../users/entities/user.entity';
 import { Types } from 'mongoose';
 
 export interface JwtPayload {
   name: string;
   sub: string;
-  role: string;
+  role: UserRole;
   iat?: number;
   exp?: number;
 }

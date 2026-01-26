@@ -1,104 +1,110 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type FormDocument = HydratedDocument<Form>;
 
-export enum FieldType {
-  ShortAnswer = 'ShortAnswer',
-  Paragraph = 'Paragraph',
-  MultipleChoice = 'MultipleChoice',
-  Checkboxes = 'Checkboxes',
-  StarRating = 'StarRating',
+export enum QuestionType {
+  ShortAnswer = 'short_answer',
+  Paragraph = 'paragraph',
+  MultipleChoice = 'multiple_choice',
+  Checkboxes = 'checkbox',
+  StarRating = 'rating',
 }
 
-export class FormField {
+export class Option {
   @ApiProperty({
-    example: 'field_1',
-    description: 'Unique identifier for the field',
+    example: 'Blue',
+    description: 'Text of the option',
   })
   @Prop({ required: true })
-  field_id: string;
+  text: string;
+}
+
+export class Question {
+  @ApiProperty({
+    example: 'short_answer',
+    description: 'Type of the question',
+    enum: QuestionType,
+  })
+  @Prop({ required: true, enum: QuestionType })
+  type: QuestionType;
 
   @ApiProperty({
     example: 'What is your name?',
-    description: 'Label for the field',
+    description: 'Title of the question',
   })
   @Prop({ required: true })
-  field_label: string;
+  title: string;
 
   @ApiProperty({
-    example: FieldType.ShortAnswer,
-    description: 'Type of the field',
-    enum: FieldType,
-  })
-  @Prop({ required: true, enum: FieldType })
-  field_type: FieldType;
-
-  @ApiProperty({
-    description:
-      'Input value based on field type - string for ShortAnswer/Paragraph, string for MultipleChoice, string[] for Checkboxes, number for StarRating',
+    example: 'Please enter your full name',
+    description: 'Hint for the question',
     required: false,
   })
   @Prop({ required: false })
-  input?: string | string[] | number;
+  hint?: string;
+
+  @ApiProperty({
+    example: [{ text: 'Option 1' }, { text: 'Option 2' }],
+    description: 'Array of options for multiple choice or checkbox questions',
+    type: [Object],
+    required: false,
+  })
+  @Prop({ required: false, type: [Object] })
+  options?: Option[];
+
+  @ApiProperty({
+    example: true,
+    description: 'Whether the question is required',
+  })
+  @Prop({ required: true })
+  isRequired: boolean;
+
+  @ApiProperty({
+    example: 5,
+    description: 'Maximum rating for star rating questions',
+    required: false,
+  })
+  @Prop({ required: false })
+  maxRatings?: number;
 }
 
-export const FormFieldSchema = SchemaFactory.createForClass(FormField);
+export const QuestionSchema = SchemaFactory.createForClass(Question);
 
 @Schema({ timestamps: true })
 export class Form extends BaseEntity {
+  @ApiProperty({
+    example: 'Customer Feedback Form',
+    description: 'Title of the form',
+  })
+  @Prop({ required: true })
+  title: string;
+
   @ApiProperty({ example: 1, description: 'Version number of the form' })
-  @Prop({ required: true, type: Number })
+  @Prop({ nullable: true, type: Number })
   version: number;
 
   @ApiProperty({
     example: [
       {
-        field_id: 'field_1',
-        field_label: 'What is your name?',
-        field_type: FieldType.ShortAnswer,
-        input: 'John Doe',
+        type: QuestionType.ShortAnswer,
+        title: 'What is your name?',
+        hint: 'Please enter your full name',
+        isRequired: true,
       },
       {
-        field_id: 'field_2',
-        field_label: 'Tell us about yourself',
-        field_type: FieldType.Paragraph,
-        input: 'I am a software developer...',
-      },
-      {
-        field_id: 'field_3',
-        field_label: 'What is your favorite color?',
-        field_type: FieldType.MultipleChoice,
-        input: 'Blue',
-      },
-      {
-        field_id: 'field_4',
-        field_label: 'What programming languages do you know?',
-        field_type: FieldType.Checkboxes,
-        input: ['JavaScript', 'TypeScript', 'Python'],
-      },
-      {
-        field_id: 'field_5',
-        field_label: 'Rate our service',
-        field_type: FieldType.StarRating,
-        input: 5,
+        type: QuestionType.Paragraph,
+        title: 'Tell us about yourself',
+        isRequired: false,
       },
     ],
-    description: 'Array of form fields',
-    type: [FormField],
+    description: 'Array of form questions',
+    type: [Question],
   })
-  @Prop({ required: true, type: [FormFieldSchema] })
-  fields: FormField[];
-
-  @ApiProperty({
-    example: '60d5ecb86217152c9043e02d',
-    description: 'Associated user ID',
-    required: false,
-  })
-  @Prop({ type: Types.ObjectId, required: false })
-  userId?: string;
+  @Prop({ required: true, type: [QuestionSchema] })
+  questions: Question[];
 }
 
 export const FormSchema = SchemaFactory.createForClass(Form);
