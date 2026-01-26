@@ -1,13 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
-  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsArray,
   IsMongoId,
 } from 'class-validator';
-import { OutletType } from '../entities/outlet.entity';
 
 export class CreateOutletDto {
   @ApiProperty({ example: 'Downtown Bistro', description: 'Outlet name' })
@@ -67,11 +65,10 @@ export class CreateOutletDto {
   productTemplateId?: string;
 
   @ApiProperty({
-    example: 'restaurant',
-    enum: OutletType,
-    description: 'Type of outlet',
+    example: '60d5ecb86217152c9043e02d',
+    description: 'Associated outlet type ID',
   })
-  @IsEnum(OutletType)
+  @IsMongoId()
   @IsNotEmpty()
-  type: OutletType;
+  type: string;
 }
