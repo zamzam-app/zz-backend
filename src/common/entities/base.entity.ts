@@ -1,7 +1,8 @@
 import { Prop } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
+import { Document } from 'mongoose';
 
-export class BaseEntity {
+export class BaseEntity extends Document {
   @ApiProperty({
     example: true,
     description: 'Whether the record is active',
