@@ -5,12 +5,6 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type OutletDocument = HydratedDocument<Outlet>;
 
-export enum OutletType {
-  BUN_CAFE = 'bun-cafe',
-  RESTAURANT = 'restaurant',
-  SUPER_MARKET = 'super-market',
-}
-
 @Schema({ timestamps: true })
 export class Outlet extends BaseEntity {
   @ApiProperty({ example: 'Downtown Bistro', description: 'Outlet name' })
@@ -68,12 +62,15 @@ export class Outlet extends BaseEntity {
   productTemplateId?: string;
 
   @ApiProperty({
-    example: 'restaurant',
-    enum: OutletType,
-    description: 'Type of outlet',
+    example: '60d5ecb86217152c9043e02d',
+    description: 'Associated outlet type ID',
   })
-  @Prop({ type: String, enum: OutletType, required: true })
-  type: OutletType;
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'OutletType',
+    required: true,
+  })
+  type: string;
 }
 
 export const OutletSchema = SchemaFactory.createForClass(Outlet);
