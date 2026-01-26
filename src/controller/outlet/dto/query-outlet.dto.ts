@@ -1,7 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-import { OutletType } from '../entities/outlet.entity';
 
 export class QueryOutletDto {
   @ApiPropertyOptional({
@@ -36,10 +42,9 @@ export class QueryOutletDto {
   name?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by outlet type',
-    enum: OutletType,
+    description: 'Filter by outlet type ID',
   })
   @IsOptional()
-  @IsEnum(OutletType)
-  type?: OutletType;
+  @IsMongoId()
+  type?: string;
 }

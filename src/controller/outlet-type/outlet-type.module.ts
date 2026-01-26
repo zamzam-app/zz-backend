@@ -12,5 +12,6 @@ import { OutletType, OutletTypeSchema } from './entities/outlet-type.entity';
   ],
   controllers: [OutletTypeController],
   providers: [OutletTypeService],
+  exports: [OutletTypeService],
 })
 export class OutletTypeModule {}
