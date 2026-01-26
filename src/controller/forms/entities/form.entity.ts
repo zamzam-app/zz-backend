@@ -3,6 +3,7 @@ import { HydratedDocument } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type FormDocument = HydratedDocument<Form>;
+export type QuestionDocument = HydratedDocument<Question>;
 
 export enum QuestionType {
   ShortAnswer = 'short_answer',
@@ -16,10 +17,13 @@ export enum QuestionType {
 export class Option {
   @Prop({ required: true })
   text: string;
+
+  @Prop({ required: false })
+  selected?: boolean;
 }
 
 @Schema()
-export class Question {
+export class Question extends BaseEntity {
   @Prop({ required: true, enum: QuestionType })
   type: QuestionType;
 

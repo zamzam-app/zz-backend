@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
+import {
+  HydratedDocument,
+  Schema as MongooseSchema,
+  type ObjectId,
+} from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type RatingDocument = HydratedDocument<Rating>;
@@ -12,7 +16,7 @@ export enum RatingType {
 @Schema()
 export class Response {
   @Prop({ type: MongooseSchema.Types.ObjectId, required: true })
-  questionId: string;
+  questionId: ObjectId;
 
   @Prop({ required: true })
   answer: string | string[] | number;

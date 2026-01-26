@@ -27,16 +27,16 @@ export class RatingController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.ratingService.findOne(+id);
+    return this.ratingService.findOne(id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateRatingDto: UpdateRatingDto) {
-    return this.ratingService.update(+id, updateRatingDto);
+    return this.ratingService.update(id, updateRatingDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.ratingService.remove(+id);
+    return this.ratingService.remove(id);
   }
 }
