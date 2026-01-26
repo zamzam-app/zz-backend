@@ -55,11 +55,8 @@ export class FormController {
 
   @Get(':id')
   @ApiFormFindOne()
-  async findOne(
-    @Param('id') id: string,
-    @Request() req: ExpressRequest & { user: JwtPayload },
-  ) {
-    return this.formService.findOne(id, req.user);
+  async findOne(@Param('id') id: string) {
+    return this.formService.findOne(id);
   }
 
   @Patch(':id')
