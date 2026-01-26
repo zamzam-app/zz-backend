@@ -1,94 +1,115 @@
-// import { ApiProperty } from '@nestjs/swagger';
-// import {
-//   IsArray,
-//   IsEnum,
-//   IsNotEmpty,
-//   IsNumber,
-//   IsOptional,
-//   IsString,
-//   ValidateNested,
-//   IsMongoId,
-// } from 'class-validator';
-// import { Type } from 'class-transformer';
-// import { FieldType } from '../entities/form.entity';
-// import { IsValidFormInput } from './form-input.validator';
+import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+  IsMongoId,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { QuestionType, Option } from '../entities/form.entity';
 
-// export class FormFieldDto {
-//   @ApiProperty({
-//     example: 'field_1',
-//     description: 'Unique identifier for the field',
-//   })
-//   @IsString()
-//   @IsNotEmpty()
-//   field_id: string;
+export class QuestionDto {
+  @ApiProperty({
+    example: 'short_answer',
+    description: 'Type of the question',
+    enum: QuestionType,
+  })
+  @IsEnum(QuestionType)
+  @IsNotEmpty()
+  type: QuestionType;
 
-//   @ApiProperty({
-//     example: 'What is your name?',
-//     description: 'Label for the field',
-//   })
-//   @IsString()
-//   @IsNotEmpty()
-//   field_label: string;
+  @ApiProperty({
+    example: 'What is your name?',
+    description: 'Title of the question',
+  })
+  @IsString()
+  @IsNotEmpty()
+  title: string;
 
-//   @ApiProperty({
-//     example: FieldType.ShortAnswer,
-//     description: 'Type of the field',
-//     enum: FieldType,
-//   })
-//   @IsEnum(FieldType)
-//   field_type: FieldType;
+  @ApiProperty({
+    example: 'Please enter your full name',
+    description: 'Hint for the question',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  hint?: string;
 
-//   @ApiProperty({
-//     description:
-//       'Input value - text for ShortAnswer, textarea for Paragraph, radiobutton selection for MultipleChoice, checkbox selections for Checkboxes, number (1-5) for StarRating',
-//     required: false,
-//     examples: {
-//       ShortAnswer: 'John Doe',
-//       Paragraph: 'This is a longer text response...',
-//       MultipleChoice: 'Option A',
-//       Checkboxes: ['Option A', 'Option C'],
-//       StarRating: 4,
-//     },
-//   })
-//   @IsOptional()
-//   @IsValidFormInput()
-//   input?: string | string[] | number;
-// }
+  @ApiProperty({
+    example: [{ text: 'Option 1' }, { text: 'Option 2' }],
+    description: 'Array of options for multiple choice or checkbox questions',
+    type: [Object],
+    required: false,
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => Object)
+  @IsOptional()
+  options?: Option[];
 
-// export class CreateFormDto {
-//   @ApiProperty({ example: 1, description: 'Version number of the form' })
-//   @IsNumber()
-//   version: number;
+  @ApiProperty({
+    example: true,
+    description: 'Whether the question is required',
+  })
+  @IsNotEmpty()
+  isRequired: boolean;
 
-//   @ApiProperty({
-//     example: [
-//       {
-//         field_id: 'field_1',
-//         field_label: 'What is your name?',
-//         field_type: FieldType.ShortAnswer,
-//         input: 'John Doe',
-//       },
-//       {
-//         field_id: 'field_2',
-//         field_label: 'Tell us about yourself',
-//         field_type: FieldType.Paragraph,
-//         input: 'I am a software developer...',
-//       },
-//     ],
-//     description: 'Array of form fields',
-//     type: [FormFieldDto],
-//   })
-//   @IsArray()
-//   @ValidateNested({ each: true })
-//   @Type(() => FormFieldDto)
-//   fields: FormFieldDto[];
+  @ApiProperty({
+    example: 5,
+    description: 'Maximum rating for star rating questions',
+    required: false,
+  })
+  @IsNumber()
+  @IsOptional()
+  maxRatings?: number;
+}
 
-//   @ApiProperty({
-//     example: '60d5ecb86217152c9043e02d',
-//     description: 'Associated user ID',
-//     required: false,
-//   })
-//   @IsMongoId()
-//   @IsOptional()
-//   userId?: string;
-// }
+export class CreateFormDto {
+  @ApiProperty({
+    example: 'Customer Feedback Form',
+    description: 'Title of the form',
+  })
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @ApiProperty({ example: 1, description: 'Version number of the form' })
+  @IsNumber()
+  @IsOptional()
+  version?: number;
+
+  @ApiProperty({
+    example: [
+      {
+        type: QuestionType.ShortAnswer,
+        title: 'What is your name?',
+        hint: 'Please enter your full name',
+        isRequired: true,
+      },
+      {
+        type: QuestionType.Paragraph,
+        title: 'Tell us about yourself',
+        isRequired: false,
+      },
+    ],
+    description: 'Array of form questions',
+    type: [QuestionDto],
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => QuestionDto)
+  questions: QuestionDto[];
+
+  @ApiProperty({
+    example: '60d5ecb86217152c9043e02d',
+    description: 'Associated user ID',
+    required: false,
+  })
+  @IsMongoId()
+  @IsOptional()
+  userId?: string;
+}
