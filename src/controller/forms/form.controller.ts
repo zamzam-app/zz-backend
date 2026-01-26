@@ -1,17 +1,17 @@
 import {
   Controller,
   Get,
-  // Post,
-  // Body,
-  // Patch,
+  Post,
+  Body,
+  Patch,
   Param,
   Delete,
   UseGuards,
   Request,
 } from '@nestjs/common';
 import { FormService } from './form.service';
-// import { CreateFormDto } from './dto/create-form.dto';
-// import { UpdateFormDto } from './dto/update-form.dto';
+import { CreateFormDto } from './dto/create-form.dto';
+import { UpdateFormDto } from './dto/update-form.dto';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { JwtPayload } from '../auth/interfaces/auth.interfaces';
@@ -20,11 +20,11 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
 import {
-  // ApiFormCreate,
+  ApiFormCreate,
   ApiFormFindAll,
   ApiFormFindOne,
+  ApiFormUpdate,
   ApiFormRemove,
-  // ApiFormUpdate,
 } from './dto/form.swagger';
 
 @ApiTags('forms')
@@ -34,16 +34,16 @@ import {
 export class FormController {
   constructor(private readonly formService: FormService) {}
 
-  // @Post()
-  // @UseGuards(RolesGuard)
-  // @Roles(UserRole.ADMIN)
-  // @ApiFormCreate()
-  // create(
-  //   @Body() createFormDto: CreateFormDto,
-  //   @Request() req: ExpressRequest & { user: JwtPayload },
-  // ) {
-  //   return this.formService.create(createFormDto, req.user.sub);
-  // }
+  @Post()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiFormCreate()
+  create(
+    @Body() createFormDto: CreateFormDto,
+    @Request() req: ExpressRequest & { user: JwtPayload },
+  ) {
+    return this.formService.create(createFormDto, req.user.sub);
+  }
 
   @Get()
   @UseGuards(RolesGuard)
@@ -62,13 +62,13 @@ export class FormController {
     return this.formService.findOne(id, req.user);
   }
 
-  // @Patch(':id')
-  // @UseGuards(RolesGuard)
-  // @Roles(UserRole.ADMIN)
-  // @ApiFormUpdate()
-  // update(@Param('id') id: string, @Body() updateFormDto: UpdateFormDto) {
-  //   return this.formService.update(id, updateFormDto);
-  // }
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiFormUpdate()
+  update(@Param('id') id: string, @Body() updateFormDto: UpdateFormDto) {
+    return this.formService.update(id, updateFormDto);
+  }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
