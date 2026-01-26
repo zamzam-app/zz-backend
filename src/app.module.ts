@@ -9,6 +9,7 @@ import { AddressModule } from './controller/address/address.module';
 import { ProductModule } from './controller/product/product.module';
 import { OutletModule } from './controller/outlet/outlet.module';
 import { OutletTypeModule } from './controller/outlet-type/outlet-type.module';
+import { FormModule } from './controller/forms/form.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { OutletTypeModule } from './controller/outlet-type/outlet-type.module';
     ProductModule,
     OutletModule,
     OutletTypeModule,
+    FormModule,
   ],
   controllers: [AppController],
   providers: [AppService],
