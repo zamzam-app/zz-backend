@@ -12,16 +12,22 @@ import { OutletTypeModule } from './controller/outlet-type/outlet-type.module';
 import { FormModule } from './controller/forms/form.module';
 import { RatingModule } from './controller/rating/rating.module';
 
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
     MongooseModule.forRootAsync({
+      
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => {
+        const dns=require('dns');
+        dns.setServers(["1.1.1.1", "8.8.8.8"]);
+        return {
         uri: configService.get<string>('MONGO_URI'),
-      }),
+        };
+      },
       inject: [ConfigService],
     }),
     UsersModule,
