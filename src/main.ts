@@ -6,6 +6,20 @@ import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Enable CORS for local development
+  app.enableCors({
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://127.0.0.1:5174',
+      'https://zz-user.vercel.app',
+      'https://zz-admin-zeta.vercel.app',
+    ],
+    credentials: true,
+  });
+
   app.use(cookieParser());
   app.setGlobalPrefix('api');
 
