@@ -41,7 +41,7 @@ export class User extends BaseEntity {
     description: 'The password of the user',
     required: false,
   })
-  @Prop({ required: false })
+  @Prop({ required: false, select: false })
   password?: string;
 
   @ApiProperty({

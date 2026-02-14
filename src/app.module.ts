@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import * as dns from 'dns';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './controller/users/users.module';
@@ -12,20 +13,17 @@ import { OutletTypeModule } from './controller/outlet-type/outlet-type.module';
 import { FormModule } from './controller/forms/form.module';
 import { RatingModule } from './controller/rating/rating.module';
 
-
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
     MongooseModule.forRootAsync({
-      
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const dns=require('dns');
-        dns.setServers(["1.1.1.1", "8.8.8.8"]);
+        dns.setServers(['1.1.1.1', '8.8.8.8']);
         return {
-        uri: configService.get<string>('MONGO_URI'),
+          uri: configService.get<string>('MONGO_URI'),
         };
       },
       inject: [ConfigService],
