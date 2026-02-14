@@ -32,6 +32,7 @@ export class OutletService {
     const [data, total] = await Promise.all([
       this.outletModel
         .find(filter)
+        .populate('managerId', 'name')
         .skip((page - 1) * limit)
         .limit(limit)
         .exec(),

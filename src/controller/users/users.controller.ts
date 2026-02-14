@@ -59,16 +59,13 @@ export class UsersController {
   @Post('change-password/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiOperation({ summary: 'Change user password' })
-  changePassword(
-  @Param('id') id: string,
-  @Body() dto: ChangePasswordDto,
-   ) {
-  return this.usersService.changePassword(
-    id,
-    dto.oldPassword,
-    dto.newPassword,
-  );
-}
+  changePassword(@Param('id') id: string, @Body() dto: ChangePasswordDto) {
+    return this.usersService.changePassword(
+      id,
+      dto.oldPassword,
+      dto.newPassword,
+    );
+  }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
