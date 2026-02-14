@@ -28,7 +28,7 @@ import {
 } from './dto/form.swagger';
 
 @ApiTags('forms')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 @UseGuards(JwtAuthGuard)
 @Controller('forms')
 export class FormController {

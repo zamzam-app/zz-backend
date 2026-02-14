@@ -11,6 +11,10 @@ import { RatingService } from './rating.service';
 import { CreateRatingDto } from './dto/create-rating.dto';
 import { UpdateRatingDto } from './dto/update-rating.dto';
 
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+
+@ApiTags('rating')
+@ApiBearerAuth('JWT-auth')
 @Controller('rating')
 export class RatingController {
   constructor(private readonly ratingService: RatingService) {}
