@@ -5,6 +5,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { User } from './entities/user.entity';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
+import { BadRequestException } from '@nestjs/common';
+
 
 @Injectable()
 export class UsersService {
@@ -52,6 +54,28 @@ export class UsersService {
     }
     return updatedUser;
   }
+
+  async changePassword(
+  userId: string,
+  oldPassword: string,
+  newPassword: string,
+) {
+  const user = await this.findOne(userId);
+
+  if (!user.password && user.password === undefined) {
+    throw new BadRequestException('User does not have a password set');
+  }
+
+  // compare old password
+  const isMatch = await bcrypt.compare(oldPassword, user.password);
+  if (!isMatch) {
+    throw new BadRequestException('Old password is incorrect');
+  }
+
+  user.password = await bcrypt.hash(newPassword, 10);
+  return user.save();
+}
+
 
   async remove(id: string) {
     const deletedUser = await this.userModel.findByIdAndDelete(id).exec();
