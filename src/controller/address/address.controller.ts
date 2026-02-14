@@ -28,7 +28,7 @@ import {
 } from './dto/address.swagger';
 
 @ApiTags('address')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 @UseGuards(JwtAuthGuard)
 @Controller('address')
 export class AddressController {

@@ -25,7 +25,7 @@ import {
 } from './dto/outlet-type.swagger';
 
 @ApiTags('Outlet Type')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 @Controller('outlet-type')
