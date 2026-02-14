@@ -63,7 +63,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('profile')
-  @ApiBearerAuth()
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Get current user profile (protected)' })
   async getProfile(
     @Request() req: ExpressRequest & { user: JwtPayload },

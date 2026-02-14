@@ -27,7 +27,7 @@ import { UserRole } from '../users/entities/user.entity';
 import { QueryOutletDto } from './dto/query-outlet.dto';
 
 @ApiTags('outlet')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('outlet')
 export class OutletController {
