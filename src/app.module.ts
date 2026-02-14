@@ -11,6 +11,7 @@ import { OutletModule } from './controller/outlet/outlet.module';
 import { OutletTypeModule } from './controller/outlet-type/outlet-type.module';
 import { FormModule } from './controller/forms/form.module';
 import { RatingModule } from './controller/rating/rating.module';
+import * as dns from 'dns';
 
 @Module({
   imports: [
@@ -19,9 +20,12 @@ import { RatingModule } from './controller/rating/rating.module';
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGO_URI'),
-      }),
+      useFactory: (configService: ConfigService) => {
+        dns.setServers(['1.1.1.1', '8.8.8.8']);
+        return {
+          uri: configService.get<string>('MONGO_URI'),
+        };
+      },
       inject: [ConfigService],
     }),
     UsersModule,

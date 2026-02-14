@@ -16,10 +16,11 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from './entities/user.entity';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @ApiTags('users')
 @Controller('users')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -53,6 +54,17 @@ export class UsersController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(id, updateUserDto);
+  }
+
+  @Post('change-password/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiOperation({ summary: 'Change user password' })
+  changePassword(@Param('id') id: string, @Body() dto: ChangePasswordDto) {
+    return this.usersService.changePassword(
+      id,
+      dto.oldPassword,
+      dto.newPassword,
+    );
   }
 
   @Delete(':id')
