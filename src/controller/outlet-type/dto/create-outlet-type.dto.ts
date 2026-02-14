@@ -17,6 +17,14 @@ export class CreateOutletTypeDto {
   name: string;
 
   @ApiProperty({
+    example: 'A place where people can eat and dine',
+    description: 'Description of the outlet type',
+  })
+  @IsString()
+  @IsNotEmpty()
+  description: string;
+
+  @ApiProperty({
     example: ['60d5ecb86217152c9043e02d'],
     description: 'Array of menu object IDs',
     type: [String],
