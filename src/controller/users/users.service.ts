@@ -32,12 +32,20 @@ export class UsersService {
     return user;
   }
 
-  async findOneByName(name: string) {
-    return this.userModel.findOne({ name }).exec();
+  async findOneByName(name: string, includePassword = false) {
+    const query = this.userModel.findOne({ name });
+    if (includePassword) {
+      query.select('+password');
+    }
+    return query.exec();
   }
 
-  async findOneByEmail(email: string) {
-    return this.userModel.findOne({ email }).exec();
+  async findOneByEmail(email: string, includePassword = false) {
+    const query = this.userModel.findOne({ email });
+    if (includePassword) {
+      query.select('+password');
+    }
+    return query.exec();
   }
 
   async findOneByPhoneNumber(phoneNumber: string) {
@@ -59,7 +67,13 @@ export class UsersService {
     oldPassword: string,
     newPassword: string,
   ) {
-    const user = await this.findOne(userId);
+    const user = await this.userModel
+      .findById(userId)
+      .select('+password')
+      .exec();
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
 
     if (!user.password && user.password === undefined) {
       throw new BadRequestException('User does not have a password set');

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import * as dns from 'dns';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './controller/users/users.module';
@@ -11,7 +12,6 @@ import { OutletModule } from './controller/outlet/outlet.module';
 import { OutletTypeModule } from './controller/outlet-type/outlet-type.module';
 import { FormModule } from './controller/forms/form.module';
 import { RatingModule } from './controller/rating/rating.module';
-import * as dns from 'dns';
 
 @Module({
   imports: [
