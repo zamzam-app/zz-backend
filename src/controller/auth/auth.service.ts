@@ -89,14 +89,13 @@ export class AuthService {
     const { pass, name, email } = validateUserDto;
     let user: UserDocument | null = null;
     if (name) {
-      user = await this.usersService.findOneByName(name);
+      user = await this.usersService.findOneByName(name, true);
     } else if (email) {
-      user = await this.usersService.findOneByEmail(email);
+      user = await this.usersService.findOneByEmail(email, true);
     }
 
     if (user && user.password && (await bcrypt.compare(pass, user.password))) {
       const result = user.toObject();
-      delete (result as { password?: string }).password;
       return result as ValidatedUser;
     }
     return null;

@@ -28,13 +28,22 @@ export class Outlet extends BaseEntity {
   @ApiProperty({
     example: '60d5ecb86217152c9043e02d',
     description: 'Associated address ID',
+    required: false,
   })
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'Address',
-    required: true,
+    required: false,
   })
-  addressId: string;
+  addressId?: string;
+
+  @ApiProperty({
+    example: '123 Main St, City, Country',
+    description: 'Outlet address string',
+    required: false,
+  })
+  @Prop({ required: false })
+  address?: string;
 
   @ApiProperty({
     example: '60d5ecb86217152c9043e02d',
