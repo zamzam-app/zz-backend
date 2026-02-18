@@ -5,12 +5,19 @@ import {
   type ObjectId,
 } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
+import { ApiProperty } from '@nestjs/swagger';
 
 export type RatingDocument = HydratedDocument<Rating>;
 
 export enum RatingType {
   COMPLAINT = 'complaint',
   REVIEW = 'review',
+}
+
+export enum ComplaintStatus {
+  PENDING = 'pending',
+  RESOLVED = 'resolved',
+  DISMISSED = 'dismissed',
 }
 
 @Schema()
@@ -24,6 +31,26 @@ export class Response {
 
   @Prop({ type: [String], required: true })
   answer: string | string[] | number;
+
+  @ApiProperty({ default: false })
+  @Prop({ required: false, default: false })
+  isComplaint?: boolean;
+
+  @ApiProperty({ enum: ComplaintStatus, default: ComplaintStatus.PENDING })
+  @Prop({
+    required: false,
+    enum: ComplaintStatus,
+    default: ComplaintStatus.PENDING,
+  })
+  complaintStatus?: ComplaintStatus;
+
+  @ApiProperty()
+  @Prop({ required: false })
+  complaintResolvedAt?: Date;
+
+  @ApiProperty()
+  @Prop({ required: false })
+  complaintManagerNotes?: string;
 }
 
 export const ResponseSchema = SchemaFactory.createForClass(Response);
