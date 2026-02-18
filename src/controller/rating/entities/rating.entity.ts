@@ -15,7 +15,11 @@ export enum RatingType {
 
 @Schema()
 export class Response {
-  @Prop({ type: MongooseSchema.Types.ObjectId, required: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    required: true,
+    ref: 'Question',
+  })
   questionId: ObjectId;
 
   @Prop({ type: [String], required: true })

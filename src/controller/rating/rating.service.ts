@@ -24,7 +24,9 @@ export class RatingService {
 
   async create(createRatingDto: CreateRatingDto): Promise<Rating> {
     // Validate form exists
-    const form = await this.formModel.findById(createRatingDto.formId);
+    const form = await this.formModel
+      .findById(createRatingDto.formId)
+      .populate('questions');
     if (!form) {
       throw new NotFoundException('Form not found');
     }
@@ -48,6 +50,7 @@ export class RatingService {
       .populate('formId')
       .populate('userId')
       .populate('outletId')
+      .populate('response.questionId')
       .exec();
   }
 
@@ -61,6 +64,7 @@ export class RatingService {
       .populate('formId')
       .populate('userId')
       .populate('outletId')
+      .populate('response.questionId')
       .exec();
 
     if (!rating || rating.isDeleted) {
@@ -83,7 +87,9 @@ export class RatingService {
     // If response is being updated, recalculate totalRatings
     const updateData: UpdateRatingDto = { ...updateRatingDto };
     if (updateRatingDto.response) {
-      const form = await this.formModel.findById(existingRating.formId);
+      const form = await this.formModel
+        .findById(existingRating.formId)
+        .populate('questions');
       if (!form) {
         throw new NotFoundException('Associated form not found');
       }
@@ -99,6 +105,7 @@ export class RatingService {
       .populate('formId')
       .populate('userId')
       .populate('outletId')
+      .populate('response.questionId')
       .exec();
 
     if (!updatedRating) {

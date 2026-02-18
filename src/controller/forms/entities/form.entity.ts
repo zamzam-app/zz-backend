@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type FormDocument = HydratedDocument<Form>;
@@ -22,7 +22,7 @@ export class Option {
   selected?: boolean;
 }
 
-@Schema()
+@Schema({ timestamps: true })
 export class Question extends BaseEntity {
   @Prop({ required: true, enum: QuestionType })
   type: QuestionType;
@@ -30,14 +30,14 @@ export class Question extends BaseEntity {
   @Prop({ required: true })
   title: string;
 
+  @Prop({ required: true })
+  isRequired: boolean;
+
   @Prop({ required: false })
   hint?: string;
 
   @Prop({ required: false, type: [Object] })
   options?: Option[];
-
-  @Prop({ required: true })
-  isRequired: boolean;
 
   @Prop({ required: false })
   maxRatings?: number;
@@ -53,7 +53,10 @@ export class Form extends BaseEntity {
   @Prop({ nullable: true, type: Number })
   version: number;
 
-  @Prop({ required: true, type: [QuestionSchema] })
+  @Prop({
+    required: true,
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Question' }],
+  })
   questions: Question[];
 }
 
