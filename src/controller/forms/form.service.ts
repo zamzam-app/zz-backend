@@ -35,20 +35,23 @@ export class FormService {
       userId: createFormDto.userId || userId,
     });
     const savedForm = await createdForm.save();
-    return savedForm.populate('questions');
+    const populatedForm = await savedForm.populate('questions');
+    return populatedForm.toObject() as Form;
   }
 
   async findAll(): Promise<Form[]> {
-    return this.formModel
+    return (await this.formModel
       .find({ isDeleted: false })
       .populate('questions')
-      .exec();
+      .lean()
+      .exec()) as unknown as Form[];
   }
 
   async findOne(id: string): Promise<Form> {
     const form = await this.formModel
       .findOne({ _id: new Types.ObjectId(id), isDeleted: false })
       .populate('questions')
+      .lean()
       .exec();
     if (!form) {
       throw new NotFoundException(`Form with ID ${id} not found`);
@@ -79,12 +82,13 @@ export class FormService {
         { new: true },
       )
       .populate('questions')
+      .lean()
       .exec();
 
     if (!updatedForm) {
       throw new NotFoundException(`Form with ID ${id} not found`);
     }
-    return updatedForm;
+    return updatedForm as unknown as Form;
   }
 
   async remove(id: string): Promise<{ message: string }> {
