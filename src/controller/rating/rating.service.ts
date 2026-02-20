@@ -8,12 +8,8 @@ import { Model, Types } from 'mongoose';
 import { CreateRatingDto, ResponseDto } from './dto/create-rating.dto';
 import { UpdateRatingDto } from './dto/update-rating.dto';
 import { Rating, RatingDocument } from './entities/rating.entity';
-import {
-  Form,
-  FormDocument,
-  Question,
-  QuestionType,
-} from '../forms/entities/form.entity';
+import { Form, FormDocument } from '../forms/entities/form.entity';
+import { Question, QuestionType } from '../question/entities/question.entity';
 
 @Injectable()
 export class RatingService {

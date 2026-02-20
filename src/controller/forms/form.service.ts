@@ -2,12 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateFormDto } from './dto/create-form.dto';
 import { UpdateFormDto } from './dto/update-form.dto';
 import { InjectModel } from '@nestjs/mongoose';
+import { Form, FormDocument } from './entities/form.entity';
 import {
-  Form,
-  FormDocument,
   Question,
   QuestionDocument,
-} from './entities/form.entity';
+} from '../question/entities/question.entity';
 import { Model, Types, UpdateQuery } from 'mongoose';
 
 @Injectable()

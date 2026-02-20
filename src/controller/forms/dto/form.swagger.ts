@@ -6,7 +6,8 @@ import {
   ApiNotFoundResponse,
   ApiProperty,
 } from '@nestjs/swagger';
-import { Form, QuestionType } from '../entities/form.entity';
+import { Form } from '../entities/form.entity';
+import { QuestionType } from '../../question/entities/question.entity';
 
 export class QuestionDtoSwagger {
   @ApiProperty({

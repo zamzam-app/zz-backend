@@ -2,12 +2,8 @@ import { Module } from '@nestjs/common';
 import { FormService } from './form.service';
 import { FormController } from './form.controller';
 import { MongooseModule } from '@nestjs/mongoose';
-import {
-  Form,
-  FormSchema,
-  Question,
-  QuestionSchema,
-} from './entities/form.entity';
+import { Form, FormSchema } from './entities/form.entity';
+import { Question, QuestionSchema } from '../question/entities/question.entity';
 
 @Module({
   imports: [

@@ -9,7 +9,7 @@ import {
   IsMongoId,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { QuestionType } from '../entities/form.entity';
+import { QuestionType } from '../../question/entities/question.entity';
 import { IsBoolean } from 'class-validator';
 
 export class OptionDto {
