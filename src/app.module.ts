@@ -11,6 +11,7 @@ import { ProductModule } from './controller/product/product.module';
 import { OutletModule } from './controller/outlet/outlet.module';
 import { OutletTypeModule } from './controller/outlet-type/outlet-type.module';
 import { FormModule } from './controller/forms/form.module';
+import { QuestionModule } from './controller/question/question.module';
 import { RatingModule } from './controller/rating/rating.module';
 
 @Module({
@@ -35,6 +36,7 @@ import { RatingModule } from './controller/rating/rating.module';
     OutletModule,
     OutletTypeModule,
     FormModule,
+    QuestionModule,
     RatingModule,
   ],
   controllers: [AppController],
