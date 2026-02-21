@@ -13,7 +13,7 @@ import { CreateOutletTypeDto } from './dto/create-outlet-type.dto';
 import { UpdateOutletTypeDto } from './dto/update-outlet-type.dto';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '../users/entities/user.entity';
+import { UserRole } from '../users/interfaces/user.interface';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {

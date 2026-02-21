@@ -33,8 +33,10 @@ export class ProductService {
   async findAll(query: QueryProductDto): Promise<FindAllProductsResult> {
     try {
       const page = query.page ?? 1;
-      const limit = query.limit ?? 10;
-      const skip = (page - 1) * limit;
+      const limit = query.limit;
+      const skip = limit ? (page - 1) * limit : 0;
+
+      const dataPipeline = limit ? [{ $skip: skip }, { $limit: limit }] : [];
 
       const [result] = await this.productModel
         .aggregate<{
@@ -44,7 +46,7 @@ export class ProductService {
           { $match: { isDeleted: false } },
           {
             $facet: {
-              data: [{ $skip: skip }, { $limit: limit }],
+              data: dataPipeline,
               totalCount: [{ $count: 'count' }],
             },
           },
@@ -52,15 +54,16 @@ export class ProductService {
         .exec();
 
       const total = result.totalCount[0]?.count ?? 0;
+      const effectiveLimit = limit ?? total;
 
       return {
         data: result.data,
         meta: {
           total,
-          currentPage: page,
-          hasPrevPage: page > 1,
-          hasNextPage: page * limit < total,
-          limit,
+          currentPage: limit ? page : 1,
+          hasPrevPage: limit ? page > 1 : false,
+          hasNextPage: limit ? page * limit < total : false,
+          limit: effectiveLimit,
         },
       };
     } catch (err) {

@@ -1,8 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+import { UserRole } from '../interfaces/user.interface';
 
-export class QueryProductDto {
+export class QueryUserDto {
   @ApiPropertyOptional({
     description: 'Page number',
     default: 1,
@@ -15,8 +16,8 @@ export class QueryProductDto {
   page?: number = 1;
 
   @ApiPropertyOptional({
-    description:
-      'Number of items per page. Omit to return all items (no pagination).',
+    description: 'Number of items per page',
+    default: 10,
     minimum: 1,
     maximum: 100,
   })
@@ -25,5 +26,13 @@ export class QueryProductDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit?: number;
+  limit?: number = 10;
+
+  @ApiPropertyOptional({
+    description: 'Filter users by role',
+    enum: UserRole,
+  })
+  @IsOptional()
+  @IsEnum(UserRole)
+  role?: UserRole;
 }
