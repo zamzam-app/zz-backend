@@ -10,14 +10,15 @@ export class Form extends BaseEntity {
   @Prop({ required: true })
   title: string;
 
-  @Prop({ nullable: true, type: Number })
-  version: number;
-
   @Prop({
     required: true,
     type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Question' }],
   })
   questions: Question[];
+
+  // might remove this later.
+  @Prop({ required: false, type: Number, default: 1 })
+  version: number;
 }
 
 export const FormSchema = SchemaFactory.createForClass(Form);
