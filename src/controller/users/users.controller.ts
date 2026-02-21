@@ -9,13 +9,18 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { CreateUserDto, ApiCreateUserOperation } from './dto/create-user.dto';
-import { UpdateUserDto, ApiUpdateUserOperation } from './dto/update-user.dto';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import {
-  ChangePasswordDto,
-  ApiChangePasswordOperation,
-} from './dto/change-password.dto';
-import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+  ApiUserCreate,
+  ApiUserFindAll,
+  ApiUserFindOne,
+  ApiUserUpdate,
+  ApiUserChangePassword,
+  ApiUserRemove,
+} from './dto/user.swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -28,9 +33,9 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @ApiCreateUserOperation
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
+  @ApiUserCreate()
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
   }
@@ -38,30 +43,30 @@ export class UsersController {
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  @ApiOperation({ summary: 'Retrieve all users (Admin/Manager only)' })
+  @ApiUserFindAll()
   findAll() {
     return this.usersService.findAll();
   }
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Retrieve a user by ID' })
+  @ApiUserFindOne()
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiUpdateUserOperation
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
+  @ApiUserUpdate()
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(id, updateUserDto);
   }
 
   @Post('change-password/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @ApiChangePasswordOperation
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
+  @ApiUserChangePassword()
   changePassword(@Param('id') id: string, @Body() dto: ChangePasswordDto) {
     return this.usersService.changePassword(
       id,
@@ -73,7 +78,7 @@ export class UsersController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Delete a user by ID (Admin only)' })
+  @ApiUserRemove()
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
   }

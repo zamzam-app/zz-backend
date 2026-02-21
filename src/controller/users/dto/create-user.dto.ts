@@ -1,4 +1,4 @@
-import { ApiOperation, ApiProperty } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEnum,
   IsNotEmpty,
@@ -10,10 +10,6 @@ import {
   IsDateString,
 } from 'class-validator';
 import { UserRole } from '../entities/user.entity';
-
-export const ApiCreateUserOperation = ApiOperation({
-  summary: 'Create a new user',
-});
 
 export class CreateUserDto {
   @ApiProperty({
