@@ -1,17 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
+import { BaseEntity } from '../../../common/entities/base.entity';
 import { Question } from '../../question/entities/question.entity';
 
 export type FormDocument = HydratedDocument<Form>;
 
 @Schema({ timestamps: true })
-export class Form {
-  @Prop({ default: true })
-  isActive: boolean;
-
-  @Prop({ default: false })
-  isDeleted: boolean;
-
+export class Form extends BaseEntity {
   @Prop({ required: true })
   title: string;
 
@@ -23,8 +18,6 @@ export class Form {
     type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Question' }],
   })
   questions: Question[];
-
-  _id: Types.ObjectId;
 }
 
 export const FormSchema = SchemaFactory.createForClass(Form);

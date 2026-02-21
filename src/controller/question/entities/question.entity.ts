@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
+import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type QuestionDocument = HydratedDocument<Question>;
 
@@ -16,18 +17,12 @@ export class Option {
   @Prop({ required: true })
   text: string;
 
-  @Prop({ required: false })
+  @Prop({ required: false, default: false })
   selected?: boolean;
 }
 
 @Schema({ timestamps: true })
-export class Question {
-  @Prop({ default: true })
-  isActive: boolean;
-
-  @Prop({ default: false })
-  isDeleted: boolean;
-
+export class Question extends BaseEntity {
   @Prop({ required: true, enum: QuestionType })
   type: QuestionType;
 
@@ -45,8 +40,6 @@ export class Question {
 
   @Prop({ required: false })
   maxRatings?: number;
-
-  _id: Types.ObjectId;
 }
 
 export const QuestionSchema = SchemaFactory.createForClass(Question);
