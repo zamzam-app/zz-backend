@@ -21,7 +21,7 @@ export enum ComplaintStatus {
 }
 
 @Schema()
-export class Response {
+export class UserResponse {
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     required: true,
@@ -46,24 +46,26 @@ export class Response {
 
   @ApiProperty()
   @Prop({ required: false })
-  complaintResolvedAt?: Date;
+  resolvedAt?: Date;
 
   @ApiProperty()
   @Prop({ required: false })
-  complaintManagerNotes?: string;
+  resolutionNotes?: string;
+
+  @ApiProperty()
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    required: false,
+    default: null,
+  })
+  resolutionBy?: ObjectId;
 }
 
-export const ResponseSchema = SchemaFactory.createForClass(Response);
+export const UserResponseSchema = SchemaFactory.createForClass(UserResponse);
 
 @Schema({ timestamps: true })
 export class Rating extends BaseEntity {
-  @Prop({
-    type: MongooseSchema.Types.ObjectId,
-    ref: 'Form',
-    required: true,
-  })
-  formId: string;
-
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'User',
@@ -78,12 +80,13 @@ export class Rating extends BaseEntity {
   })
   outletId: string;
 
-  @Prop({ required: true, type: [ResponseSchema] })
-  response: Response[];
+  @Prop({ required: true, type: [UserResponseSchema] })
+  userResponses: UserResponse[];
 
-  @Prop({ required: true, type: Number })
-  totalRatings: number;
+  @Prop({ required: true, type: Number, max: 5, min: 1 })
+  overallRating: number;
 
+  // Might use later for other types of ratings
   @Prop({
     type: String,
     enum: RatingType,
@@ -91,6 +94,15 @@ export class Rating extends BaseEntity {
     required: false,
   })
   type?: RatingType;
+
+  // Not used as we can get from outlet
+  @Prop({
+    type: String,
+    ref: 'Form',
+    required: false,
+    default: null,
+  })
+  formId?: string;
 }
 
 export const RatingSchema = SchemaFactory.createForClass(Rating);

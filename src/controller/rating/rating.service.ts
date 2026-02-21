@@ -5,11 +5,10 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { CreateRatingDto, ResponseDto } from './dto/create-rating.dto';
+import { CreateRatingDto } from './dto/create-rating.dto';
 import { UpdateRatingDto } from './dto/update-rating.dto';
 import { Rating, RatingDocument } from './entities/rating.entity';
 import { Form, FormDocument } from '../forms/entities/form.entity';
-import { Question, QuestionType } from '../question/entities/question.entity';
 
 @Injectable()
 export class RatingService {
@@ -27,16 +26,13 @@ export class RatingService {
       throw new NotFoundException('Form not found');
     }
 
-    // Calculate totalRatings (average of star ratings from responses)
-    const totalRatings = this.calculateAverageRating(
-      createRatingDto.response,
-      form.questions,
-    );
+    // // Calculate totalRatings (average of star ratings from responses)
+    // const totalRatings = this.calculateAverageRating(
+    //   createRatingDto.response,
+    //   form.questions,
+    // );
 
-    const createdRating = new this.ratingModel({
-      ...createRatingDto,
-      totalRatings,
-    });
+    const createdRating = new this.ratingModel(createRatingDto);
     return createdRating.save();
   }
 
@@ -90,10 +86,10 @@ export class RatingService {
         throw new NotFoundException('Associated form not found');
       }
 
-      updateData.totalRatings = this.calculateAverageRating(
-        updateRatingDto.response,
-        form.questions,
-      );
+      // updateData.totalRatings = this.calculateAverageRating(
+      //   updateRatingDto.response,
+      //   form.questions,
+      // );
     }
 
     const updatedRating = await this.ratingModel
@@ -128,26 +124,26 @@ export class RatingService {
     return rating;
   }
 
-  private calculateAverageRating(
-    responses: ResponseDto[],
-    questions: Question[],
-  ): number {
-    const starRatingResponses = responses.filter((response) => {
-      const question = questions.find(
-        (q) => q._id.toString() === response.questionId.toString(),
-      );
-      return question && question.type === QuestionType.StarRating;
-    });
+  // private calculateAverageRating(
+  //   responses: ResponseDto[],
+  //   questions: Question[],
+  // ): number {
+  //   const starRatingResponses = responses.filter((response) => {
+  //     const question = questions.find(
+  //       (q) => q._id.toString() === response.questionId.toString(),
+  //     );
+  //     return question && question.type === QuestionType.StarRating;
+  //   });
 
-    if (starRatingResponses.length === 0) {
-      return 0;
-    }
+  //   if (starRatingResponses.length === 0) {
+  //     return 0;
+  //   }
 
-    const totalRating = starRatingResponses.reduce((sum, response) => {
-      const rating = typeof response.answer === 'number' ? response.answer : 0;
-      return sum + rating;
-    }, 0);
+  //   const totalRating = starRatingResponses.reduce((sum, response) => {
+  //     const rating = typeof response.answer === 'number' ? response.answer : 0;
+  //     return sum + rating;
+  //   }, 0);
 
-    return totalRating / starRatingResponses.length;
-  }
+  //   return totalRating / starRatingResponses.length;
+  // }
 }
