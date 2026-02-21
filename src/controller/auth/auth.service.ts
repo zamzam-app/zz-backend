@@ -72,9 +72,9 @@ export class AuthService {
 
   async getProfile(userId: string): Promise<ValidatedUser> {
     const userDoc = await this.usersService.findOne(userId);
-    const sanitizedUser = userDoc.toObject();
-    delete (sanitizedUser as { password?: string }).password;
-    return sanitizedUser as ValidatedUser;
+    const sanitizedUser = { ...userDoc } as Record<string, unknown>;
+    delete sanitizedUser.password;
+    return sanitizedUser as unknown as ValidatedUser;
   }
 
   refresh(refreshToken: string): AuthTokens {

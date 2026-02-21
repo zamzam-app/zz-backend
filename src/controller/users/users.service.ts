@@ -42,12 +42,17 @@ export class UsersService {
 
       const dataPipeline = limit ? [{ $skip: skip }, { $limit: limit }] : [];
 
+      const matchStage: Record<string, unknown> = { isDeleted: false };
+      if (query.role != null) {
+        matchStage.role = query.role;
+      }
+
       const [result] = await this.userModel
         .aggregate<{
           data: User[];
           totalCount: [{ count: number }];
         }>([
-          { $match: { isDeleted: false } },
+          { $match: matchStage },
           {
             $facet: {
               data: dataPipeline,
@@ -80,7 +85,7 @@ export class UsersService {
 
   async findOne(id: string) {
     try {
-      const user = await this.userModel.findById(id).exec();
+      const user = await this.userModel.findById(id).lean().exec();
       if (!user) {
         throw new NotFoundException(`User with ID ${id} not found`);
       }
@@ -187,7 +192,13 @@ export class UsersService {
 
   async remove(id: string) {
     try {
-      const deletedUser = await this.userModel.findByIdAndDelete(id).exec();
+      const deletedUser = await this.userModel
+        .findOneAndUpdate(
+          { _id: id, isDeleted: false },
+          { isDeleted: true },
+          { new: true },
+        )
+        .exec();
       if (!deletedUser) {
         throw new NotFoundException(`User with ID ${id} not found`);
       }

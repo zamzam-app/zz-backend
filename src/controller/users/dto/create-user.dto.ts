@@ -8,6 +8,7 @@ import {
   IsArray,
   IsMongoId,
   IsDateString,
+  IsBoolean,
 } from 'class-validator';
 import { UserRole } from '../interfaces/user.interface';
 
@@ -94,4 +95,22 @@ export class CreateUserDto {
   @IsDateString()
   @IsOptional()
   lastLoginAt?: string;
+
+  @ApiProperty({
+    example: true,
+    description: 'Whether the user is active',
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+
+  @ApiProperty({
+    example: false,
+    description: 'Whether the user is deleted',
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isDeleted?: boolean;
 }
