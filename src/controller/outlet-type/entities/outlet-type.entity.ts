@@ -12,7 +12,9 @@ export class OutletType extends BaseEntity {
   @Prop({ required: true })
   description: string;
 
-  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Outlet' }] })
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Outlet', default: [] }],
+  })
   menu: string[];
 
   @Prop({ type: MongooseSchema.Types.ObjectId, required: false })
