@@ -5,7 +5,6 @@ import {
   type ObjectId,
 } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { ApiProperty } from '@nestjs/swagger';
 
 export type RatingDocument = HydratedDocument<Rating>;
 
@@ -32,11 +31,9 @@ export class UserResponse {
   @Prop({ type: [String], required: true })
   answer: string | string[] | number;
 
-  @ApiProperty({ default: false })
   @Prop({ required: false, default: false })
   isComplaint?: boolean;
 
-  @ApiProperty({ enum: ComplaintStatus, default: ComplaintStatus.PENDING })
   @Prop({
     required: false,
     enum: ComplaintStatus,
@@ -44,15 +41,12 @@ export class UserResponse {
   })
   complaintStatus?: ComplaintStatus;
 
-  @ApiProperty()
   @Prop({ required: false })
   resolvedAt?: Date;
 
-  @ApiProperty()
   @Prop({ required: false })
   resolutionNotes?: string;
 
-  @ApiProperty()
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'User',
