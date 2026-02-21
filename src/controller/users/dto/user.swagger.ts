@@ -24,10 +24,25 @@ export function ApiUserFindAll() {
     ApiOperation({ summary: 'Retrieve all users (Admin/Manager only)' }),
     ApiExtraModels(User),
     ApiOkResponse({
-      description: 'Successfully retrieved users.',
+      description: 'Successfully retrieved users with pagination meta.',
       schema: {
-        type: 'array',
-        items: { $ref: getSchemaPath(User) },
+        type: 'object',
+        properties: {
+          data: {
+            type: 'array',
+            items: { $ref: getSchemaPath(User) },
+          },
+          meta: {
+            type: 'object',
+            properties: {
+              total: { type: 'number', example: 42 },
+              currentPage: { type: 'number', example: 1 },
+              hasPrevPage: { type: 'boolean', example: false },
+              hasNextPage: { type: 'boolean', example: true },
+              limit: { type: 'number', example: 10 },
+            },
+          },
+        },
       },
     }),
   );

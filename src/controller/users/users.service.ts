@@ -7,9 +7,11 @@ import {
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { QueryUserDto } from './dto/query-user.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { User } from './entities/user.entity';
 import { Model } from 'mongoose';
+import { FindAllUsersResult } from './interfaces/query-user.interface';
 import * as bcrypt from 'bcrypt';
 import { hashPassword } from '../../util/password.util';
 
@@ -32,9 +34,42 @@ export class UsersService {
     }
   }
 
-  async findAll() {
+  async findAll(query: QueryUserDto): Promise<FindAllUsersResult> {
     try {
-      return this.userModel.find().exec();
+      const page = query.page ?? 1;
+      const limit = query.limit;
+      const skip = limit ? (page - 1) * limit : 0;
+
+      const dataPipeline = limit ? [{ $skip: skip }, { $limit: limit }] : [];
+
+      const [result] = await this.userModel
+        .aggregate<{
+          data: User[];
+          totalCount: [{ count: number }];
+        }>([
+          { $match: { isDeleted: false } },
+          {
+            $facet: {
+              data: dataPipeline,
+              totalCount: [{ $count: 'count' }],
+            },
+          },
+        ])
+        .exec();
+
+      const total = result.totalCount[0]?.count ?? 0;
+      const effectiveLimit = limit ?? total;
+
+      return {
+        data: result.data,
+        meta: {
+          total,
+          currentPage: limit ? page : 1,
+          hasPrevPage: limit ? page > 1 : false,
+          hasNextPage: limit ? page * limit < total : false,
+          limit: effectiveLimit,
+        },
+      };
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
