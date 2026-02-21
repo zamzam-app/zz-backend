@@ -11,6 +11,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { User } from './entities/user.entity';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../../util/password.util';
 
 @Injectable()
 export class UsersService {
@@ -19,11 +20,7 @@ export class UsersService {
   async create(createUserDto: CreateUserDto) {
     try {
       if (createUserDto.password) {
-        const salt = await bcrypt.genSalt(10);
-        createUserDto.password = await bcrypt.hash(
-          createUserDto.password,
-          salt,
-        );
+        createUserDto.password = await hashPassword(createUserDto.password);
       }
       const createdUser = new this.userModel(createUserDto);
       return createdUser.save();
@@ -143,7 +140,7 @@ export class UsersService {
         throw new BadRequestException('Old password is incorrect');
       }
 
-      user.password = await bcrypt.hash(newPassword, 10);
+      user.password = await hashPassword(newPassword);
       return user.save();
     } catch (error) {
       if (error instanceof HttpException) throw error;
