@@ -100,7 +100,7 @@ export class ProductService {
         .findOneAndUpdate(
           { _id: new Types.ObjectId(id), isDeleted: false },
           [{ $set: updateProductDto as Record<string, unknown> }],
-          { new: true },
+          { new: true, updatePipeline: true },
         )
         .exec();
 
