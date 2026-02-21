@@ -6,10 +6,12 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
+import { QueryProductDto } from './dto/query-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
@@ -41,8 +43,8 @@ export class ProductController {
   @Get()
   @Roles(UserRole.USER, UserRole.MANAGER, UserRole.ADMIN)
   @ApiProductFindAll()
-  findAll() {
-    return this.productService.findAll();
+  findAll(@Query() query: QueryProductDto) {
+    return this.productService.findAll(query);
   }
 
   @Get(':id')

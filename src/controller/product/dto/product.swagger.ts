@@ -1,9 +1,11 @@
 import { applyDecorators } from '@nestjs/common';
 import {
-  ApiOperation,
+  ApiExtraModels,
   ApiOkResponse,
+  ApiOperation,
   ApiCreatedResponse,
   ApiNotFoundResponse,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import { Product } from '../entities/product.entity';
 
@@ -19,10 +21,29 @@ export function ApiProductCreate() {
 
 export function ApiProductFindAll() {
   return applyDecorators(
-    ApiOperation({ summary: 'Retrieve all products' }),
+    ApiOperation({ summary: 'Retrieve all products (paginated)' }),
+    ApiExtraModels(Product),
     ApiOkResponse({
-      description: 'Successfully retrieved all products.',
-      type: [Product],
+      description: 'Successfully retrieved products with pagination meta.',
+      schema: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'array',
+            items: { $ref: getSchemaPath(Product) },
+          },
+          meta: {
+            type: 'object',
+            properties: {
+              total: { type: 'number', example: 42 },
+              currentPage: { type: 'number', example: 1 },
+              hasPrevPage: { type: 'boolean', example: false },
+              hasNextPage: { type: 'boolean', example: true },
+              limit: { type: 'number', example: 10 },
+            },
+          },
+        },
+      },
     }),
   );
 }
