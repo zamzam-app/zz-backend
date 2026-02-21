@@ -4,11 +4,6 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type ProductDocument = HydratedDocument<Product>;
 
-export enum ProductType {
-  PREMADE = 'premade',
-  CUSTOM = 'custom',
-}
-
 @Schema({ timestamps: true })
 export class Product extends BaseEntity {
   @Prop({ required: true })
@@ -25,9 +20,6 @@ export class Product extends BaseEntity {
 
   @Prop({ type: [String], required: true })
   images: string[];
-
-  @Prop({ type: String, enum: ProductType, required: true })
-  type: ProductType;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);

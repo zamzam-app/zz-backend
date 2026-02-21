@@ -34,6 +34,9 @@ export class Outlet extends BaseEntity {
   @Prop({ type: MongooseSchema.Types.ObjectId, required: false, default: null })
   formId: string;
 
+  @Prop({ required: true, unique: true })
+  qrToken: string;
+
   // This can be used to store address in address collection.
   @Prop({
     type: MongooseSchema.Types.ObjectId,
