@@ -9,7 +9,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ApiBody, ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';

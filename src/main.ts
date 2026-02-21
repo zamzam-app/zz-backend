@@ -6,6 +6,15 @@ import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableCors({
+    origin: [
+      'http://localhost:5173',
+      'https://zz-admin-zeta.vercel.app',
+      'https://zz-user.vercel.app',
+    ],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+  });
   app.use(cookieParser());
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
@@ -30,7 +39,7 @@ async function bootstrap() {
         description: 'Enter JWT token',
         in: 'header',
       },
-      'JWT-auth', // This name here is important for matching in controllers
+      'JWT-auth',
     )
     .build();
   const document = () => SwaggerModule.createDocument(app, config);

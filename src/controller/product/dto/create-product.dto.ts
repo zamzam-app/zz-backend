@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
-  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -8,7 +7,6 @@ import {
   IsArray,
   IsMongoId,
 } from 'class-validator';
-import { ProductType } from '../entities/product.entity';
 
 export class CreateProductDto {
   @ApiProperty({ example: 'Wireless Headphones', description: 'Product name' })
@@ -46,13 +44,4 @@ export class CreateProductDto {
   @IsString({ each: true })
   @IsNotEmpty()
   images: string[];
-
-  @ApiProperty({
-    example: 'premade',
-    enum: ProductType,
-    description: 'Type of product',
-  })
-  @IsEnum(ProductType)
-  @IsNotEmpty()
-  type: ProductType;
 }

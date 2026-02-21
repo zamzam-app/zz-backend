@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { CreateOutletDto } from './dto/create-outlet.dto';
 import { UpdateOutletDto } from './dto/update-outlet.dto';
 import { Outlet, OutletDocument } from './entities/outlet.entity';
 import { QueryOutletDto } from './dto/query-outlet.dto';
+import { generateOutletQrToken } from '../../util/outlet-qr-token.util';
 
 @Injectable()
 export class OutletService {
@@ -13,7 +14,13 @@ export class OutletService {
   ) {}
 
   async create(createOutletDto: CreateOutletDto): Promise<Outlet> {
-    const createdOutlet = new this.outletModel(createOutletDto);
+    const _id = new Types.ObjectId();
+    const qrToken = generateOutletQrToken(_id.toString());
+    const createdOutlet = new this.outletModel({
+      ...createOutletDto,
+      _id,
+      qrToken,
+    });
     return createdOutlet.save();
   }
 

@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsMongoId,
   IsNotEmpty,
@@ -17,6 +18,10 @@ export class ResponseDto {
 
   @IsNotEmpty()
   answer: string | string[] | number;
+
+  @IsOptional()
+  @IsBoolean()
+  isComplaint?: boolean;
 }
 
 export class CreateRatingDto {
