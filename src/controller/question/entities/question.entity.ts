@@ -17,7 +17,7 @@ export class Option {
   @Prop({ required: true })
   text: string;
 
-  @Prop({ required: false, default: false })
+  @Prop({ required: true, default: false })
   selected?: boolean;
 }
 
@@ -32,14 +32,17 @@ export class Question extends BaseEntity {
   @Prop({ required: true })
   isRequired: boolean;
 
-  @Prop({ required: false })
-  hint?: string;
-
   @Prop({ required: false, type: [Object] })
   options?: Option[];
 
   @Prop({ required: false })
   maxRatings?: number;
+
+  @Prop({ required: false, type: Number, default: 1 })
+  starStep?: number;
+
+  @Prop({ required: false })
+  hint?: string;
 }
 
 export const QuestionSchema = SchemaFactory.createForClass(Question);
