@@ -1,40 +1,19 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-} from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ApiUploadController, ApiUploadSignature } from './dto/upload.swagger';
 import { UploadService } from './upload.service';
 
+@ApiUploadController()
 @Controller('upload')
+@UseGuards(JwtAuthGuard)
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
-  @Post()
-  create() {
-    return this.uploadService.create();
-  }
-
-  @Get()
-  findAll() {
-    return this.uploadService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.uploadService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string) {
-    return this.uploadService.update(+id);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.uploadService.remove(+id);
+  @Get('signature')
+  @ApiUploadSignature()
+  getSignature(@Query('folder') folder?: string) {
+    return this.uploadService.getSignedUploadParams(
+      folder ? { folder } : undefined,
+    );
   }
 }
