@@ -46,6 +46,7 @@ export class Outlet extends BaseEntity {
   @Prop({ type: MongooseSchema.Types.ObjectId, required: false, default: null })
   formId: string;
 
+  // This can be used to store QR token for the outlet.
   @Prop({ required: true, unique: true })
   qrToken: string;
 
