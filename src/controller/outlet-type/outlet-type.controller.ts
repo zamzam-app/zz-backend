@@ -12,10 +12,10 @@ import { OutletTypeService } from './outlet-type.service';
 import { CreateOutletTypeDto } from './dto/create-outlet-type.dto';
 import { UpdateOutletTypeDto } from './dto/update-outlet-type.dto';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
-import { RolesGuard } from '../auth/roles.guard';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   ApiOutletTypeCreate,
   ApiOutletTypeFindAll,
