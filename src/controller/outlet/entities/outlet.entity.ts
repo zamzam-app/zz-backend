@@ -4,6 +4,18 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type OutletDocument = HydratedDocument<Outlet>;
 
+@Schema({ _id: false })
+export class OutletMenuItem {
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Product', required: true })
+  productId: string;
+
+  @Prop({ required: true, default: true })
+  isAvailable: boolean;
+}
+
+export const OutletMenuItemSchema =
+  SchemaFactory.createForClass(OutletMenuItem);
+
 @Schema({ timestamps: true })
 export class Outlet extends BaseEntity {
   @Prop({
@@ -49,7 +61,11 @@ export class Outlet extends BaseEntity {
   @Prop({ required: false })
   address?: string;
 
-  // This can be used to store menu (product template) for the outlet.
+  // This can be used to store menu items for the outlet.
+  @Prop({ type: [OutletMenuItemSchema], required: false, default: [] })
+  menuItems?: OutletMenuItem[];
+
+  // This can be used to store menu (product template) for the outlet. Will implement this later.
   @Prop({ type: MongooseSchema.Types.ObjectId, required: false })
   productTemplateId?: string;
 }
