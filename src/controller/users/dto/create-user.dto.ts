@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiOperation, ApiProperty } from '@nestjs/swagger';
 import {
   IsEnum,
   IsNotEmpty,
@@ -7,8 +7,13 @@ import {
   IsEmail,
   IsArray,
   IsMongoId,
+  IsDateString,
 } from 'class-validator';
 import { UserRole } from '../entities/user.entity';
+
+export const ApiCreateUserOperation = ApiOperation({
+  summary: 'Create a new user',
+});
 
 export class CreateUserDto {
   @ApiProperty({
@@ -82,4 +87,15 @@ export class CreateUserDto {
   @IsMongoId()
   @IsOptional()
   addressId?: string;
+
+  @ApiProperty({
+    example: '2025-02-21T12:00:00.000Z',
+    description: 'Timestamp of the user’s last login (ISO 8601)',
+    required: false,
+    type: String,
+    format: 'date-time',
+  })
+  @IsDateString()
+  @IsOptional()
+  lastLoginAt?: string;
 }

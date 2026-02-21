@@ -9,14 +9,17 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { CreateUserDto, ApiCreateUserOperation } from './dto/create-user.dto';
+import { UpdateUserDto, ApiUpdateUserOperation } from './dto/update-user.dto';
+import {
+  ChangePasswordDto,
+  ApiChangePasswordOperation,
+} from './dto/change-password.dto';
 import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from './entities/user.entity';
-import { ChangePasswordDto } from './dto/change-password.dto';
 
 @ApiTags('users')
 @Controller('users')
@@ -25,7 +28,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new user' })
+  @ApiCreateUserOperation
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   create(@Body() createUserDto: CreateUserDto) {
@@ -49,7 +52,7 @@ export class UsersController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Update a user by ID' })
+  @ApiUpdateUserOperation
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
@@ -58,7 +61,7 @@ export class UsersController {
 
   @Post('change-password/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @ApiOperation({ summary: 'Change user password' })
+  @ApiChangePasswordOperation
   changePassword(@Param('id') id: string, @Body() dto: ChangePasswordDto) {
     return this.usersService.changePassword(
       id,
