@@ -1,14 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
+import { UserRole } from '../interfaces/user.interface';
 
 export type UserDocument = HydratedDocument<User>;
-
-export enum UserRole {
-  USER = 'user',
-  ADMIN = 'admin',
-  MANAGER = 'manager',
-}
 
 @Schema({ timestamps: true })
 export class User extends BaseEntity {
@@ -16,7 +11,7 @@ export class User extends BaseEntity {
   name: string;
 
   @Prop({ required: true, enum: UserRole, default: UserRole.USER })
-  role: string;
+  role: UserRole;
 
   @Prop({
     type: MongooseSchema.Types.ObjectId,

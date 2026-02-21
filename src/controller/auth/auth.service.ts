@@ -2,7 +2,8 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { UserDocument, UserRole } from '../users/entities/user.entity';
+import { UserDocument } from '../users/entities/user.entity';
+import { UserRole } from '../users/interfaces/user.interface';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -34,7 +35,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (user.role !== 'admin' && user.role !== 'manager') {
+    if (user.role !== UserRole.ADMIN && user.role !== UserRole.MANAGER) {
       throw new UnauthorizedException(
         'Unauthorized role for this login method',
       );
@@ -105,7 +106,7 @@ export class AuthService {
     const payload: JwtPayload = {
       name: user.name,
       sub: user._id.toString(),
-      role: user.role as UserRole,
+      role: user.role,
     };
     const tokens = this.generateTokens(payload);
     return {

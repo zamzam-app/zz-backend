@@ -9,7 +9,7 @@ import {
   IsMongoId,
   IsDateString,
 } from 'class-validator';
-import { UserRole } from '../entities/user.entity';
+import { UserRole } from '../interfaces/user.interface';
 
 export class CreateUserDto {
   @ApiProperty({
