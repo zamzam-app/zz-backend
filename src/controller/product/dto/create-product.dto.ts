@@ -1,12 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  IsArray,
-  IsMongoId,
-} from 'class-validator';
+import { IsArray, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 
 export class CreateProductDto {
   @ApiProperty({ example: 'Wireless Headphones', description: 'Product name' })
@@ -26,15 +19,6 @@ export class CreateProductDto {
   @IsString()
   @IsNotEmpty()
   description: string;
-
-  @ApiProperty({
-    example: '60d5ecb86217152c9043e02d',
-    description: 'Associated ratings ID',
-    required: false,
-  })
-  @IsMongoId()
-  @IsOptional()
-  ratingsId?: string;
 
   @ApiProperty({
     example: ['image1.jpg', 'image2.jpg'],

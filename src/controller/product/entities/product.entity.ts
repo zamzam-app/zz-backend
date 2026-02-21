@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type ProductDocument = HydratedDocument<Product>;
@@ -14,9 +14,6 @@ export class Product extends BaseEntity {
 
   @Prop({ required: true })
   description: string;
-
-  @Prop({ type: MongooseSchema.Types.ObjectId, required: false })
-  ratingsId?: string;
 
   @Prop({ type: [String], required: true })
   images: string[];
