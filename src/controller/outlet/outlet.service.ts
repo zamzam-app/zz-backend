@@ -60,6 +60,24 @@ export class OutletService {
             preserveNullAndEmptyArrays: true,
           },
         },
+        {
+          $lookup: {
+            from: 'outlettypes',
+            localField: 'outletType',
+            foreignField: '_id',
+            as: 'outletType',
+            pipeline: [
+              { $match: { isDeleted: false } },
+              { $project: { _id: 1, name: 1 } },
+            ],
+          },
+        },
+        {
+          $unwind: {
+            path: '$outletType',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
         ...(limit ? [{ $skip: skip }, { $limit: limit }] : []),
       ];
 

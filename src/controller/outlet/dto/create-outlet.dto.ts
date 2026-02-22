@@ -34,7 +34,6 @@ export class CreateOutletDto {
     example: '60d5ecb86217152c9043e02d',
     description: 'Associated outlet type ID',
   })
-  @IsMongoId()
   @IsNotEmpty()
   outletType: string;
 
