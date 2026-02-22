@@ -69,6 +69,14 @@ export class Outlet extends BaseEntity {
   // This can be used to store menu (product template) for the outlet. Will implement this later.
   @Prop({ type: MongooseSchema.Types.ObjectId, required: false })
   productTemplateId?: string;
+
+  // Google Maps Link
+  @Prop({ required: false })
+  googleMapsLink?: string;
+
+  // Tables in the outlet
+  @Prop({ type: [String], required: false, default: [] })
+  tables?: string[];
 }
 
 export const OutletSchema = SchemaFactory.createForClass(Outlet);

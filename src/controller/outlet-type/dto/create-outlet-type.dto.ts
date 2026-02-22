@@ -31,7 +31,7 @@ export class CreateOutletTypeDto {
   })
   @IsArray()
   @IsMongoId({ each: true })
-  @IsNotEmpty()
+  @IsOptional()
   menu: string[];
 
   @ApiProperty({

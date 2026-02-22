@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { OutletTypeService } from './outlet-type.service';
 import { CreateOutletTypeDto } from './dto/create-outlet-type.dto';
@@ -23,6 +24,7 @@ import {
   ApiOutletTypeUpdate,
   ApiOutletTypeRemove,
 } from './dto/outlet-type.swagger';
+import { QueryOutletTypeDto } from './dto/query-outlet-type.dto';
 
 @ApiTags('Outlet Type')
 @ApiBearerAuth('JWT-auth')
@@ -40,8 +42,8 @@ export class OutletTypeController {
 
   @Get()
   @ApiOutletTypeFindAll()
-  findAll() {
-    return this.outletTypeService.findAll();
+  findAll(@Query() query: QueryOutletTypeDto) {
+    return this.outletTypeService.findAll(query);
   }
 
   @Get(':id')

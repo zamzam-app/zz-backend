@@ -1,9 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateOutletTypeDto } from './dto/create-outlet-type.dto';
 import { UpdateOutletTypeDto } from './dto/update-outlet-type.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { OutletType, OutletTypeDocument } from './entities/outlet-type.entity';
 import { Model, Types } from 'mongoose';
+import { QueryOutletTypeDto } from './dto/query-outlet-type.dto';
+import { FindAllOutletTypesResult } from './interface/query-outlet-type.interface';
 
 @Injectable()
 export class OutletTypeService {
@@ -17,8 +24,48 @@ export class OutletTypeService {
     return createdOutletType.save();
   }
 
-  async findAll(): Promise<OutletType[]> {
-    return this.outletTypeModel.find({ isDeleted: false }).exec();
+  async findAll(query: QueryOutletTypeDto): Promise<FindAllOutletTypesResult> {
+    try {
+      const page = query.page ?? 1;
+      const limit = query.limit;
+      const skip = limit ? (page - 1) * limit : 0;
+
+      const dataPipeline = limit ? [{ $skip: skip }, { $limit: limit }] : [];
+
+      const [result] = await this.outletTypeModel
+        .aggregate<{
+          data: OutletType[];
+          totalCount: [{ count: number }];
+        }>([
+          { $match: { isDeleted: false } },
+          {
+            $facet: {
+              data: dataPipeline,
+              totalCount: [{ $count: 'count' }],
+            },
+          },
+        ])
+        .exec();
+
+      const total = result.totalCount[0]?.count ?? 0;
+      const effectiveLimit = limit ?? total;
+
+      return {
+        data: result.data,
+        meta: {
+          total,
+          currentPage: limit ? page : 1,
+          hasPrevPage: limit ? page > 1 : false,
+          hasNextPage: limit ? page * limit < total : false,
+          limit: effectiveLimit,
+        },
+      };
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      throw new InternalServerErrorException(
+        err instanceof Error ? err.message : 'Failed to fetch outlet types',
+      );
+    }
   }
 
   async findOne(id: string): Promise<OutletType> {
