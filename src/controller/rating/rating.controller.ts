@@ -6,9 +6,11 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { RatingService } from './rating.service';
 import { CreateRatingDto } from './dto/create-rating.dto';
+import { QueryRatingDto } from './dto/query-rating.dto';
 import { UpdateRatingDto } from './dto/update-rating.dto';
 
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -25,8 +27,8 @@ export class RatingController {
   }
 
   @Get()
-  findAll() {
-    return this.ratingService.findAll();
+  findAll(@Query() query: QueryRatingDto) {
+    return this.ratingService.findAll(query);
   }
 
   @Get(':id')
