@@ -6,6 +6,8 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  Max,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -46,6 +48,13 @@ export class CreateRatingDto {
   @IsNumber()
   @IsOptional()
   totalRatings?: number;
+
+  /** Overall rating 1–5. If omitted, derived from star-rating question or totalRatings. */
+  @IsNumber()
+  @Min(1)
+  @Max(5)
+  @IsOptional()
+  overallRating?: number;
 
   @IsEnum(RatingType)
   @IsOptional()

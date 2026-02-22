@@ -9,6 +9,7 @@ import { CreateRatingDto } from './dto/create-rating.dto';
 import { UpdateRatingDto } from './dto/update-rating.dto';
 import { Rating, RatingDocument } from './entities/rating.entity';
 import { Form, FormDocument } from '../forms/entities/form.entity';
+import { Question, QuestionType } from '../question/entities/question.entity';
 
 @Injectable()
 export class RatingService {
@@ -18,7 +19,6 @@ export class RatingService {
   ) {}
 
   async create(createRatingDto: CreateRatingDto): Promise<Rating> {
-    // Validate form exists
     const form = await this.formModel
       .findById(createRatingDto.formId)
       .populate('questions');
@@ -26,14 +26,52 @@ export class RatingService {
       throw new NotFoundException('Form not found');
     }
 
-    // // Calculate totalRatings (average of star ratings from responses)
-    // const totalRatings = this.calculateAverageRating(
-    //   createRatingDto.response,
-    //   form.questions,
-    // );
+    const userResponses = createRatingDto.response.map((r) => ({
+      questionId: new Types.ObjectId(r.questionId),
+      answer: r.answer,
+      ...(r.isComplaint !== undefined && { isComplaint: r.isComplaint }),
+    }));
 
-    const createdRating = new this.ratingModel(createRatingDto);
+    const overallRating = this.resolveOverallRating(
+      createRatingDto,
+      form.questions as (Question & { _id: Types.ObjectId })[],
+    );
+
+    const doc = {
+      userId: createRatingDto.userId,
+      outletId: createRatingDto.outletId,
+      userResponses,
+      overallRating,
+      formId: createRatingDto.formId,
+      ...(createRatingDto.type && { type: createRatingDto.type }),
+    };
+
+    const createdRating = new this.ratingModel(doc);
     return createdRating.save();
+  }
+
+  private resolveOverallRating(
+    dto: CreateRatingDto,
+    questions: (Question & { _id: Types.ObjectId })[],
+  ): number {
+    if (dto.overallRating != null) {
+      return dto.overallRating;
+    }
+    if (dto.totalRatings != null) {
+      return Math.min(5, Math.max(1, Math.round(dto.totalRatings)));
+    }
+    const ratingQuestion = questions.find(
+      (q) => q.type === QuestionType.StarRating,
+    );
+    if (ratingQuestion) {
+      const response = dto.response.find(
+        (r) => r.questionId === ratingQuestion._id.toString(),
+      );
+      if (response != null && typeof response.answer === 'number') {
+        return Math.min(5, Math.max(1, Math.round(response.answer)));
+      }
+    }
+    return 1;
   }
 
   async findAll(): Promise<Rating[]> {
@@ -42,7 +80,7 @@ export class RatingService {
       .populate('formId')
       .populate('userId')
       .populate('outletId')
-      .populate('response.questionId')
+      .populate('userResponses.questionId')
       .exec();
   }
 
@@ -56,7 +94,7 @@ export class RatingService {
       .populate('formId')
       .populate('userId')
       .populate('outletId')
-      .populate('response.questionId')
+      .populate('userResponses.questionId')
       .exec();
 
     if (!rating || rating.isDeleted) {
@@ -76,28 +114,51 @@ export class RatingService {
       throw new NotFoundException('Rating not found');
     }
 
-    // If response is being updated, recalculate totalRatings
-    const updateData: UpdateRatingDto = { ...updateRatingDto };
-    if (updateRatingDto.response) {
-      const form = await this.formModel
-        .findById(existingRating.formId)
-        .populate('questions');
-      if (!form) {
-        throw new NotFoundException('Associated form not found');
-      }
+    const updateData: Record<string, unknown> = { ...updateRatingDto };
 
-      // updateData.totalRatings = this.calculateAverageRating(
-      //   updateRatingDto.response,
-      //   form.questions,
-      // );
+    if (updateRatingDto.response) {
+      updateData.userResponses = updateRatingDto.response.map((r) => ({
+        questionId: new Types.ObjectId(r.questionId),
+        answer: r.answer,
+        ...(r.isComplaint !== undefined && { isComplaint: r.isComplaint }),
+      }));
+      delete updateData.response;
+
+      if (updateRatingDto.overallRating == null) {
+        const form = await this.formModel
+          .findById(existingRating.formId)
+          .populate('questions');
+        if (form) {
+          updateData.overallRating = this.resolveOverallRating(
+            {
+              ...updateRatingDto,
+              response: updateRatingDto.response,
+            } as CreateRatingDto,
+            form.questions as (Question & { _id: Types.ObjectId })[],
+          );
+        }
+      }
     }
+    if (updateRatingDto.overallRating != null) {
+      updateData.overallRating = updateRatingDto.overallRating;
+    }
+    if (
+      updateRatingDto.totalRatings != null &&
+      updateData.overallRating === undefined
+    ) {
+      updateData.overallRating = Math.min(
+        5,
+        Math.max(1, Math.round(updateRatingDto.totalRatings)),
+      );
+    }
+    delete updateData.totalRatings;
 
     const updatedRating = await this.ratingModel
       .findByIdAndUpdate(id, updateData, { new: true })
       .populate('formId')
       .populate('userId')
       .populate('outletId')
-      .populate('response.questionId')
+      .populate('userResponses.questionId')
       .exec();
 
     if (!updatedRating) {
