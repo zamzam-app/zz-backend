@@ -25,15 +25,15 @@ export class OutletService {
   }
 
   async findAll(query: QueryOutletDto) {
-    const { page = 1, limit = 10, name, type } = query;
+    const { page = 1, limit = 10, name, outletType } = query;
     const filter: Record<string, any> = { isDeleted: false };
 
     if (name) {
       filter.name = { $regex: name, $options: 'i' };
     }
 
-    if (type) {
-      filter.type = type;
+    if (outletType) {
+      filter.outletType = outletType;
     }
 
     const [data, total] = await Promise.all([
