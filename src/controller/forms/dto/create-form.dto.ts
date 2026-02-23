@@ -9,7 +9,18 @@ import {
   IsMongoId,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { QuestionType, Option } from '../entities/form.entity';
+import { QuestionType } from '../../question/entities/question.entity';
+import { IsBoolean } from 'class-validator';
+
+export class OptionDto {
+  @IsString()
+  @IsNotEmpty()
+  text: string;
+
+  @IsBoolean()
+  @IsOptional()
+  selected?: boolean;
+}
 
 export class QuestionDto {
   @IsEnum(QuestionType)
@@ -26,16 +37,21 @@ export class QuestionDto {
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => Object)
+  @Type(() => OptionDto)
   @IsOptional()
-  options?: Option[];
+  options?: OptionDto[];
 
   @IsNotEmpty()
+  @IsBoolean()
   isRequired: boolean;
 
   @IsNumber()
   @IsOptional()
   maxRatings?: number;
+
+  @IsNumber()
+  @IsOptional()
+  starStep?: number;
 }
 
 export class CreateFormDto {

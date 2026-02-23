@@ -9,7 +9,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Address, AddressDocument } from './entities/address.entity';
 import { Model, Types } from 'mongoose';
 import { JwtPayload } from '../auth/interfaces/auth.interfaces';
-import { UserRole } from '../users/entities/user.entity';
+import { UserRole } from '../users/interfaces/user.interface';
 
 @Injectable()
 export class AddressService {

@@ -1,10 +1,13 @@
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsMongoId,
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  Max,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -17,6 +20,10 @@ export class ResponseDto {
 
   @IsNotEmpty()
   answer: string | string[] | number;
+
+  @IsOptional()
+  @IsBoolean()
+  isComplaint?: boolean;
 }
 
 export class CreateRatingDto {
@@ -41,6 +48,13 @@ export class CreateRatingDto {
   @IsNumber()
   @IsOptional()
   totalRatings?: number;
+
+  /** Overall rating 1–5. If omitted, derived from star-rating question or totalRatings. */
+  @IsNumber()
+  @Min(1)
+  @Max(5)
+  @IsOptional()
+  overallRating?: number;
 
   @IsEnum(RatingType)
   @IsOptional()

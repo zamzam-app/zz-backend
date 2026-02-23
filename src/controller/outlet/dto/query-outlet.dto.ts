@@ -46,5 +46,5 @@ export class QueryOutletDto {
   })
   @IsOptional()
   @IsMongoId()
-  type?: string;
+  outletType?: string;
 }

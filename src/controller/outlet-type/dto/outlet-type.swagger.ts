@@ -19,10 +19,27 @@ export function ApiOutletTypeCreate() {
 
 export function ApiOutletTypeFindAll() {
   return applyDecorators(
-    ApiOperation({ summary: 'Get all active outlet types' }),
+    ApiOperation({ summary: 'Get all active outlet types with pagination' }),
     ApiOkResponse({
       description: 'Return all active outlet types.',
-      type: [OutletType],
+      schema: {
+        properties: {
+          data: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/OutletType' },
+          },
+          meta: {
+            type: 'object',
+            properties: {
+              total: { type: 'number' },
+              currentPage: { type: 'number' },
+              hasPrevPage: { type: 'boolean' },
+              hasNextPage: { type: 'boolean' },
+              limit: { type: 'number' },
+            },
+          },
+        },
+      },
     }),
   );
 }
