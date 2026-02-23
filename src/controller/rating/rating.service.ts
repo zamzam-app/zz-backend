@@ -9,6 +9,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateRatingDto } from './dto/create-rating.dto';
 import { QueryRatingDto } from './dto/query-rating.dto';
+import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateRatingDto } from './dto/update-rating.dto';
 import { Rating, RatingDocument } from './entities/rating.entity';
 import { Form, FormDocument } from '../forms/entities/form.entity';
@@ -104,6 +105,57 @@ export class RatingService {
           },
         },
         { $project: { userIdLookup: 0, outletIdLookup: 0 } },
+        {
+          $lookup: {
+            from: 'questions',
+            let: {
+              ids: {
+                $map: {
+                  input: '$userResponses',
+                  as: 'ur',
+                  in: '$$ur.questionId',
+                },
+              },
+            },
+            pipeline: [
+              { $match: { $expr: { $in: ['$_id', '$$ids'] } } },
+              { $project: { _id: 1, title: 1 } },
+            ],
+            as: 'questionsLookup',
+          },
+        },
+        {
+          $addFields: {
+            userResponses: {
+              $map: {
+                input: '$userResponses',
+                as: 'ur',
+                in: {
+                  $mergeObjects: [
+                    '$$ur',
+                    {
+                      questionId: {
+                        $arrayElemAt: [
+                          {
+                            $filter: {
+                              input: '$questionsLookup',
+                              as: 'q',
+                              cond: {
+                                $eq: ['$$q._id', '$$ur.questionId'],
+                              },
+                            },
+                          },
+                          0,
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        { $project: { questionsLookup: 0 } },
       ];
 
       const dataPipeline = [
@@ -356,6 +408,64 @@ export class RatingService {
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to update rating',
+      );
+    }
+  }
+
+  async resolveComplaint(
+    ratingId: string,
+    dto: ResolveComplaintDto,
+  ): Promise<Rating> {
+    try {
+      if (!Types.ObjectId.isValid(ratingId)) {
+        throw new BadRequestException('Invalid rating ID');
+      }
+      if (!Types.ObjectId.isValid(dto.questionId)) {
+        throw new BadRequestException('Invalid question ID');
+      }
+
+      const questionIdObj = new Types.ObjectId(dto.questionId);
+      const resolvedByObj = new Types.ObjectId(dto.resolvedBy);
+      const now = new Date();
+
+      const $set: Record<string, unknown> = {
+        'userResponses.$.isComplaint': false,
+        'userResponses.$.complaintStatus': dto.complaintStatus,
+        'userResponses.$.resolvedAt': now,
+        'userResponses.$.resolutionBy': resolvedByObj,
+      };
+      if (dto.resolutionNotes !== undefined) {
+        $set['userResponses.$.resolutionNotes'] = dto.resolutionNotes;
+      }
+      if (dto.answer !== undefined) {
+        $set['userResponses.$.answer'] = dto.answer;
+      }
+
+      const filter = {
+        _id: new Types.ObjectId(ratingId),
+        isDeleted: false,
+        'userResponses.questionId': questionIdObj,
+      };
+      const updated = await this.ratingModel
+        .findOneAndUpdate(
+          filter as Record<string, unknown>,
+          { $set },
+          { new: true },
+        )
+        .exec();
+
+      if (!updated) {
+        throw new NotFoundException(
+          'Rating not found or question not found in rating',
+        );
+      }
+
+      return this.findOne(ratingId);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to resolve complaint',
       );
     }
   }
