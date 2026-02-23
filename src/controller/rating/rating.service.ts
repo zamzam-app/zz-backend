@@ -35,19 +35,16 @@ export class RatingService {
         ...(r.isComplaint !== undefined && { isComplaint: r.isComplaint }),
       }));
 
-      const overallRating =
-        createRatingDto.overallRating ??
-        (createRatingDto.totalRatings != null
-          ? Math.min(5, Math.max(1, Math.round(createRatingDto.totalRatings)))
-          : 1);
-
       const doc = {
         userId: createRatingDto.userId,
         outletId: createRatingDto.outletId,
         userResponses,
-        overallRating,
+        overallRating: createRatingDto.overallRating ?? 1,
         formId: createRatingDto.formId,
         ...(createRatingDto.type && { type: createRatingDto.type }),
+        ...(createRatingDto.overallRating != null && {
+          overallRating: createRatingDto.overallRating,
+        }),
       };
 
       const createdRating = new this.ratingModel(doc);
