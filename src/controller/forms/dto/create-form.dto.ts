@@ -48,6 +48,10 @@ export class QuestionDto {
   @IsNumber()
   @IsOptional()
   maxRatings?: number;
+
+  @IsNumber()
+  @IsOptional()
+  starStep?: number;
 }
 
 export class CreateFormDto {

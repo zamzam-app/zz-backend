@@ -1,6 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  HttpException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { CreateFormDto } from './dto/create-form.dto';
 import { UpdateFormDto } from './dto/update-form.dto';
+import { QueryFormDto } from './dto/query-form.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Form, FormDocument } from './entities/form.entity';
 import {
@@ -8,6 +14,7 @@ import {
   QuestionDocument,
 } from '../question/entities/question.entity';
 import { Model, Types, UpdateQuery } from 'mongoose';
+import { FindAllFormsResult } from './interfaces/find-all-forms.interface';
 
 @Injectable()
 export class FormService {
@@ -38,12 +45,70 @@ export class FormService {
     return populatedForm.toObject() as Form;
   }
 
-  async findAll(): Promise<Form[]> {
-    return (await this.formModel
-      .find({ isDeleted: false })
-      .populate('questions')
-      .lean()
-      .exec()) as unknown as Form[];
+  async findAll(query: QueryFormDto): Promise<FindAllFormsResult> {
+    try {
+      const page = query.page ?? 1;
+      const limit = query.limit;
+      const skip = limit ? (page - 1) * limit : 0;
+
+      const dataPipeline = limit
+        ? [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $lookup: {
+                from: 'questions',
+                localField: 'questions',
+                foreignField: '_id',
+                as: 'questions',
+              },
+            },
+          ]
+        : [
+            {
+              $lookup: {
+                from: 'questions',
+                localField: 'questions',
+                foreignField: '_id',
+                as: 'questions',
+              },
+            },
+          ];
+
+      const [result] = await this.formModel
+        .aggregate<{
+          data: Form[];
+          totalCount: [{ count: number }];
+        }>([
+          { $match: { isDeleted: false } },
+          {
+            $facet: {
+              data: dataPipeline,
+              totalCount: [{ $count: 'count' }],
+            },
+          },
+        ])
+        .exec();
+
+      const total = result.totalCount[0]?.count ?? 0;
+      const effectiveLimit = limit ?? total;
+
+      return {
+        data: result.data,
+        meta: {
+          total,
+          currentPage: limit ? page : 1,
+          hasPrevPage: limit ? page > 1 : false,
+          hasNextPage: limit ? page * limit < total : false,
+          limit: effectiveLimit,
+        },
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to retrieve forms',
+      );
+    }
   }
 
   async findOne(id: string): Promise<Form> {
