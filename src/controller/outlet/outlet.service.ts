@@ -78,6 +78,56 @@ export class OutletService {
             preserveNullAndEmptyArrays: true,
           },
         },
+        {
+          $lookup: {
+            from: 'products',
+            let: { menuProductIds: '$menuItems.productId' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $in: ['$_id', { $ifNull: ['$$menuProductIds', []] }],
+                  },
+                },
+              },
+              { $project: { _id: 1, name: 1 } },
+            ],
+            as: '_productsLookup',
+          },
+        },
+        {
+          $addFields: {
+            menuItems: {
+              $map: {
+                input: { $ifNull: ['$menuItems', []] },
+                as: 'mi',
+                in: {
+                  $mergeObjects: [
+                    '$$mi',
+                    {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: '$_productsLookup',
+                            as: 'p',
+                            cond: { $eq: ['$$p._id', '$$mi.productId'] },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            _productsLookup: 0,
+            'menuItems.productId': 0,
+          },
+        },
         ...(limit ? [{ $skip: skip }, { $limit: limit }] : []),
       ];
 
