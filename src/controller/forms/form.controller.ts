@@ -6,12 +6,14 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
 import { FormService } from './form.service';
 import { CreateFormDto } from './dto/create-form.dto';
 import { UpdateFormDto } from './dto/update-form.dto';
+import { QueryFormDto } from './dto/query-form.dto';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { JwtPayload } from '../auth/interfaces/auth.interfaces';
@@ -49,8 +51,8 @@ export class FormController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiFormFindAll()
-  findAll() {
-    return this.formService.findAll();
+  findAll(@Query() query: QueryFormDto) {
+    return this.formService.findAll(query);
   }
 
   @Get(':id')
