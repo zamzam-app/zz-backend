@@ -24,6 +24,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { UserRole } from '../users/interfaces/user.interface';
 
 @ApiTags('product')
@@ -41,7 +42,7 @@ export class ProductController {
   }
 
   @Get()
-  @Roles(UserRole.USER, UserRole.MANAGER, UserRole.ADMIN)
+  @Public()
   @ApiProductFindAll()
   findAll(@Query() query: QueryProductDto) {
     return this.productService.findAll(query);
