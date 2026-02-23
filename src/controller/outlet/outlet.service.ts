@@ -1,10 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { CreateOutletDto } from './dto/create-outlet.dto';
 import { UpdateOutletDto } from './dto/update-outlet.dto';
 import { Outlet, OutletDocument } from './entities/outlet.entity';
 import { QueryOutletDto } from './dto/query-outlet.dto';
+import { FindAllOutletsResult } from './interface/query-outlet.interface';
+import { generateOutletQrToken } from '../../util/outlet-qr-token.util';
 
 @Injectable()
 export class OutletService {
@@ -13,38 +20,151 @@ export class OutletService {
   ) {}
 
   async create(createOutletDto: CreateOutletDto): Promise<Outlet> {
-    const createdOutlet = new this.outletModel(createOutletDto);
+    const _id = new Types.ObjectId();
+    const qrToken = generateOutletQrToken(_id.toString());
+    const createdOutlet = new this.outletModel({
+      ...createOutletDto,
+      _id,
+      qrToken,
+    });
     return createdOutlet.save();
   }
 
-  async findAll(query: QueryOutletDto) {
-    const { page = 1, limit = 10, name, type } = query;
-    const filter: Record<string, any> = { isDeleted: false };
+  async findAll(query: QueryOutletDto): Promise<FindAllOutletsResult> {
+    try {
+      const page = query.page ?? 1;
+      const limit = query.limit;
+      const skip = limit ? (page - 1) * limit : 0;
 
-    if (name) {
-      filter.name = { $regex: name, $options: 'i' };
+      const matchStage: Record<string, unknown> = { isDeleted: false };
+      if (query.name) {
+        matchStage.name = { $regex: query.name, $options: 'i' };
+      }
+      if (query.outletType) {
+        matchStage.outletType = new Types.ObjectId(query.outletType);
+      }
+
+      const dataPipeline = [
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'managerId',
+            foreignField: '_id',
+            as: 'managerId',
+            pipeline: [{ $project: { name: 1 } }],
+          },
+        },
+        {
+          $unwind: {
+            path: '$managerId',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $lookup: {
+            from: 'outlettypes',
+            localField: 'outletType',
+            foreignField: '_id',
+            as: 'outletType',
+            pipeline: [
+              { $match: { isDeleted: false } },
+              { $project: { _id: 1, name: 1 } },
+            ],
+          },
+        },
+        {
+          $unwind: {
+            path: '$outletType',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $lookup: {
+            from: 'products',
+            let: { menuProductIds: '$menuItems.productId' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $in: ['$_id', { $ifNull: ['$$menuProductIds', []] }],
+                  },
+                },
+              },
+              { $project: { _id: 1, name: 1 } },
+            ],
+            as: '_productsLookup',
+          },
+        },
+        {
+          $addFields: {
+            menuItems: {
+              $map: {
+                input: { $ifNull: ['$menuItems', []] },
+                as: 'mi',
+                in: {
+                  $mergeObjects: [
+                    '$$mi',
+                    {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: '$_productsLookup',
+                            as: 'p',
+                            cond: { $eq: ['$$p._id', '$$mi.productId'] },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            _productsLookup: 0,
+            'menuItems.productId': 0,
+          },
+        },
+        ...(limit ? [{ $skip: skip }, { $limit: limit }] : []),
+      ];
+
+      const [result] = await this.outletModel
+        .aggregate<{
+          data: Outlet[];
+          totalCount: [{ count: number }];
+        }>([
+          { $match: matchStage },
+          {
+            $facet: {
+              data: dataPipeline,
+              totalCount: [{ $count: 'count' }],
+            },
+          },
+        ])
+        .exec();
+
+      const total = result.totalCount[0]?.count ?? 0;
+      const effectiveLimit = limit ?? total;
+
+      return {
+        data: result.data,
+        meta: {
+          total,
+          currentPage: limit ? page : 1,
+          hasPrevPage: limit ? page > 1 : false,
+          hasNextPage: limit ? page * limit < total : false,
+          limit: effectiveLimit,
+        },
+      };
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      throw new InternalServerErrorException(
+        err instanceof Error ? err.message : 'Failed to fetch outlets',
+      );
     }
-
-    if (type) {
-      filter.type = type;
-    }
-
-    const [data, total] = await Promise.all([
-      this.outletModel
-        .find(filter)
-        .populate('managerId', 'name')
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .exec(),
-      this.outletModel.countDocuments(filter),
-    ]);
-
-    return {
-      data,
-      total,
-      page,
-      limit,
-    };
   }
 
   async findOne(id: string): Promise<Outlet> {

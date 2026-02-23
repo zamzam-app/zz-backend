@@ -7,8 +7,10 @@ import {
   IsEmail,
   IsArray,
   IsMongoId,
+  IsDateString,
+  IsBoolean,
 } from 'class-validator';
-import { UserRole } from '../entities/user.entity';
+import { UserRole } from '../interfaces/user.interface';
 
 export class CreateUserDto {
   @ApiProperty({
@@ -82,4 +84,33 @@ export class CreateUserDto {
   @IsMongoId()
   @IsOptional()
   addressId?: string;
+
+  @ApiProperty({
+    example: '2025-02-21T12:00:00.000Z',
+    description: 'Timestamp of the user’s last login (ISO 8601)',
+    required: false,
+    type: String,
+    format: 'date-time',
+  })
+  @IsDateString()
+  @IsOptional()
+  lastLoginAt?: string;
+
+  @ApiProperty({
+    example: true,
+    description: 'Whether the user is active',
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+
+  @ApiProperty({
+    example: false,
+    description: 'Whether the user is deleted',
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isDeleted?: boolean;
 }

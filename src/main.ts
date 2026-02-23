@@ -17,9 +17,9 @@ async function bootstrap() {
       'https://zz-user.vercel.app',
       'https://zz-admin-zeta.vercel.app',
     ],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
-
   app.use(cookieParser());
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
@@ -44,7 +44,7 @@ async function bootstrap() {
         description: 'Enter JWT token',
         in: 'header',
       },
-      'JWT-auth', // This name here is important for matching in controllers
+      'JWT-auth',
     )
     .build();
   const document = () => SwaggerModule.createDocument(app, config);

@@ -6,10 +6,12 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
+import { QueryProductDto } from './dto/query-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
@@ -19,10 +21,10 @@ import {
   ApiProductRemove,
   ApiProductUpdate,
 } from './dto/product.swagger';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
-import { UserRole } from '../users/entities/user.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../users/interfaces/user.interface';
 
 @ApiTags('product')
 @ApiBearerAuth('JWT-auth')
@@ -41,8 +43,8 @@ export class ProductController {
   @Get()
   @Roles(UserRole.USER, UserRole.MANAGER, UserRole.ADMIN)
   @ApiProductFindAll()
-  findAll() {
-    return this.productService.findAll();
+  findAll(@Query() query: QueryProductDto) {
+    return this.productService.findAll(query);
   }
 
   @Get(':id')

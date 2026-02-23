@@ -5,8 +5,11 @@ import {
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiProperty,
+  ApiExtraModels,
+  getSchemaPath,
 } from '@nestjs/swagger';
-import { Form, QuestionType } from '../entities/form.entity';
+import { Form } from '../entities/form.entity';
+import { QuestionType } from '../../question/entities/question.entity';
 
 export class QuestionDtoSwagger {
   @ApiProperty({
@@ -101,9 +104,28 @@ export function ApiFormCreate() {
 export function ApiFormFindAll() {
   return applyDecorators(
     ApiOperation({ summary: 'Get all active forms (Admin only)' }),
+    ApiExtraModels(Form),
     ApiOkResponse({
-      description: 'Return all active forms.',
-      type: [Form],
+      description: 'Return all active forms with pagination meta.',
+      schema: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'array',
+            items: { $ref: getSchemaPath(Form) },
+          },
+          meta: {
+            type: 'object',
+            properties: {
+              total: { type: 'number', example: 42 },
+              currentPage: { type: 'number', example: 1 },
+              hasPrevPage: { type: 'boolean', example: false },
+              hasNextPage: { type: 'boolean', example: true },
+              limit: { type: 'number', example: 10 },
+            },
+          },
+        },
+      },
     }),
   );
 }
