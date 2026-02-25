@@ -32,7 +32,7 @@ export class CreateRatingDto {
   formId: string;
 
   @IsMongoId()
-  @IsNotEmpty()
+  @IsOptional()
   userId: string;
 
   @IsMongoId()
