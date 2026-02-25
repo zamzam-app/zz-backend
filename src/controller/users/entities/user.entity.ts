@@ -37,6 +37,9 @@ export class User extends BaseEntity {
   @Prop({ required: false })
   phoneNumber?: string;
 
+  @Prop({ required: false, select: false })
+  otp?: string;
+
   @Prop({ required: false, type: Date, default: null })
   dob?: Date;
 

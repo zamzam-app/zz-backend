@@ -63,9 +63,14 @@ export class AuthService {
       });
     }
 
-    // 3. Sanitize and Login
+    // 3. Clear OTP from DB after successful verification
+    const userId = userDoc._id.toString();
+    await this.usersService.clearOtp(userId);
+
+    // 4. Sanitize and Login (ensure otp/password never in response)
     const sanitizedUser = userDoc.toObject();
     delete (sanitizedUser as { password?: string }).password;
+    delete (sanitizedUser as { otp?: string }).otp;
 
     return this.login(sanitizedUser as ValidatedUser);
   }
