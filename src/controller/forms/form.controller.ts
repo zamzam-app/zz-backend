@@ -28,16 +28,16 @@ import {
   ApiFormUpdate,
   ApiFormRemove,
 } from './dto/form.swagger';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('forms')
-@ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard)
 @Controller('forms')
 export class FormController {
   constructor(private readonly formService: FormService) {}
 
   @Post()
-  @UseGuards(RolesGuard)
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiFormCreate()
   create(
@@ -48,13 +48,15 @@ export class FormController {
   }
 
   @Get()
-  @UseGuards(RolesGuard)
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiFormFindAll()
   findAll(@Query() query: QueryFormDto) {
     return this.formService.findAll(query);
   }
 
+  @Public()
   @Get(':id')
   @ApiFormFindOne()
   async findOne(@Param('id') id: string) {
@@ -62,7 +64,8 @@ export class FormController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiFormUpdate()
   update(@Param('id') id: string, @Body() updateFormDto: UpdateFormDto) {
@@ -70,7 +73,8 @@ export class FormController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiFormRemove()
   remove(@Param('id') id: string) {
