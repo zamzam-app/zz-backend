@@ -156,6 +156,16 @@ export class UsersService {
     }
   }
 
+  async setOtp(userId: string, otp: string): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, { otp }).exec();
+  }
+
+  async clearOtp(userId: string): Promise<void> {
+    await this.userModel
+      .findByIdAndUpdate(userId, { $unset: { otp: 1 } })
+      .exec();
+  }
+
   async changePassword(
     userId: string,
     oldPassword: string,
