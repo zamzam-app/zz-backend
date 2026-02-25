@@ -75,28 +75,39 @@ export class AuthService {
       throw new UnauthorizedException('Invalid OTP');
     }
 
-    // 2. Find or Create User
-    let userDoc = await this.usersService.findOneByPhoneNumber(
-      verifyOtpDto.phoneNumber,
-    );
-
-    if (!userDoc) {
-      userDoc = await this.usersService.create({
-        phoneNumber: verifyOtpDto.phoneNumber,
-        role: 'user' as UserRole,
-      });
+    // 2. Find or Create User (by userId if provided, else by phoneNumber)
+    let userDoc: UserDocument | (Record<string, unknown> & { _id: unknown });
+    const requestUserId = verifyOtpDto.userId;
+    if (requestUserId) {
+      const found = await this.usersService.findOne(requestUserId);
+      userDoc = found as unknown as Record<string, unknown> & { _id: unknown };
+    } else {
+      let byPhone = await this.usersService.findOneByPhoneNumber(
+        verifyOtpDto.phoneNumber,
+      );
+      if (!byPhone) {
+        byPhone = await this.usersService.create({
+          phoneNumber: verifyOtpDto.phoneNumber,
+          role: UserRole.USER,
+        });
+      }
+      userDoc = byPhone;
     }
 
     // 3. Clear OTP from DB after successful verification
-    const userId = userDoc._id.toString();
+    const userId = String(userDoc._id);
     await this.usersService.clearOtp(userId);
 
     // 4. Sanitize and Login (ensure otp/password never in response)
-    const sanitizedUser = userDoc.toObject();
-    delete (sanitizedUser as { password?: string }).password;
-    delete (sanitizedUser as { otp?: string }).otp;
+    const raw =
+      typeof (userDoc as { toObject?: () => unknown }).toObject === 'function'
+        ? (userDoc as { toObject: () => unknown }).toObject()
+        : { ...userDoc };
+    const sanitizedUser = raw as Record<string, unknown>;
+    delete sanitizedUser.password;
+    delete sanitizedUser.otp;
 
-    return this.login(sanitizedUser as ValidatedUser);
+    return this.login(sanitizedUser as unknown as ValidatedUser);
   }
 
   async getProfile(userId: string): Promise<ValidatedUser> {
