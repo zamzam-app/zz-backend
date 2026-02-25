@@ -10,9 +10,11 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { Public } from './decorators/public.decorator';
 import { ApiBody, ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { RequestOtpDto } from './dto/request-otp.dto';
 import type { Response, Request as ExpressRequest } from 'express';
 import {
   AuthTokens,
@@ -28,6 +30,7 @@ import { CookieInterceptor } from './interceptors/cookie.interceptor';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
   @Post('login')
   @ApiOperation({ summary: 'Admin/Manager Login (Username/Email + Password)' })
   @ApiBody({ type: LoginDto })
@@ -37,8 +40,24 @@ export class AuthController {
     return this.authService.signIn(loginDto);
   }
 
+  @Public()
+  @Post('request-otp')
+  @ApiOperation({
+    summary: 'Request OTP for phone login (creates user if not found)',
+  })
+  @ApiBody({ type: RequestOtpDto })
+  async requestOtp(
+    @Body() requestOtpDto: RequestOtpDto,
+  ): Promise<{ message: string }> {
+    return this.authService.requestOtp(requestOtpDto);
+  }
+
+  @Public()
   @Post('verify-otp')
-  @ApiOperation({ summary: 'User Login (Phone + OTP)' })
+  @ApiOperation({
+    summary:
+      'User Login (Phone + OTP). OTP is cleared from DB after successful verification.',
+  })
   @ApiBody({ type: VerifyOtpDto })
   async verifyOtp(
     @Body() verifyOtpDto: VerifyOtpDto,
@@ -46,6 +65,7 @@ export class AuthController {
     return this.authService.signInWithOtp(verifyOtpDto);
   }
 
+  @Public()
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token using refresh token cookie' })
   refresh(@Request() req: ExpressRequest): Omit<AuthTokens, 'refresh_token'> {
@@ -54,6 +74,7 @@ export class AuthController {
     return { access_token: result.access_token };
   }
 
+  @Public()
   @Post('logout')
   @ApiOperation({ summary: 'Logout and clear refresh token cookie' })
   logout(@Res({ passthrough: true }) res: Response) {

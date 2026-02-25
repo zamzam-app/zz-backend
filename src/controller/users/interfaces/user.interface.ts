@@ -14,6 +14,7 @@ export interface UserDb {
   userName?: string;
   outlets?: string[];
   phoneNumber?: string;
+  otp?: string;
   dob?: Date;
   lastLoginAt?: Date;
   isActive: boolean;
