@@ -86,6 +86,15 @@ export class CreateUserDto {
   addressId?: string;
 
   @ApiProperty({
+    example: '1990-05-15',
+    description: 'Date of birth (ISO date string)',
+    required: false,
+  })
+  @IsDateString()
+  @IsOptional()
+  dob?: string;
+
+  @ApiProperty({
     example: '2025-02-21T12:00:00.000Z',
     description: 'Timestamp of the user’s last login (ISO 8601)',
     required: false,
