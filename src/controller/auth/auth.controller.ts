@@ -14,6 +14,7 @@ import { Public } from './decorators/public.decorator';
 import { ApiBody, ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { RequestOtpDto } from './dto/request-otp.dto';
 import type { Response, Request as ExpressRequest } from 'express';
 import {
   AuthTokens,
@@ -37,6 +38,18 @@ export class AuthController {
     @Body() loginDto: LoginDto,
   ): Promise<Omit<LoginResponse, 'refresh_token'>> {
     return this.authService.signIn(loginDto);
+  }
+
+  @Public()
+  @Post('request-otp')
+  @ApiOperation({
+    summary: 'Request OTP for phone login (creates user if not found)',
+  })
+  @ApiBody({ type: RequestOtpDto })
+  async requestOtp(
+    @Body() requestOtpDto: RequestOtpDto,
+  ): Promise<{ message: string }> {
+    return this.authService.requestOtp(requestOtpDto);
   }
 
   @Public()
