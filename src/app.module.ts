@@ -14,6 +14,7 @@ import { FormModule } from './controller/forms/form.module';
 import { QuestionModule } from './controller/question/question.module';
 import { RatingModule } from './controller/rating/rating.module';
 import { UploadModule } from './controller/upload/upload.module';
+import { OutletTableModule } from './controller/outlet-table/outlet-table.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { UploadModule } from './controller/upload/upload.module';
     QuestionModule,
     RatingModule,
     UploadModule,
+    OutletTableModule,
   ],
   controllers: [AppController],
   providers: [AppService],
