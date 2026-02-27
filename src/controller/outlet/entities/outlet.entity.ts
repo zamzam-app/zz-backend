@@ -74,9 +74,13 @@ export class Outlet extends BaseEntity {
   @Prop({ required: false })
   googleMapsLink?: string;
 
-  // Tables in the outlet
-  @Prop({ type: [String], required: false, default: [] })
-  tables?: string[];
+  // Stores references to outlet tables in the OutletTable collection.
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'OutletTable' }],
+    required: false,
+    default: [],
+  })
+  tableIds?: string[];
 }
 
 export const OutletSchema = SchemaFactory.createForClass(Outlet);
