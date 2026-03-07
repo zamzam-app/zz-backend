@@ -28,13 +28,13 @@ import { Public } from '../auth/decorators/public.decorator';
 import { UserRole } from '../users/interfaces/user.interface';
 
 @ApiTags('product')
-@ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('product')
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
   @Post()
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiProductCreate()
   create(@Body() createProductDto: CreateProductDto) {
@@ -49,13 +49,14 @@ export class ProductController {
   }
 
   @Get(':id')
-  @Roles(UserRole.USER, UserRole.MANAGER, UserRole.ADMIN)
   @ApiProductFindOne()
   findOne(@Param('id') id: string) {
     return this.productService.findOne(id);
   }
 
   @Patch(':id')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiProductUpdate()
   update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto) {
@@ -63,6 +64,8 @@ export class ProductController {
   }
 
   @Delete(':id')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiProductRemove()
   remove(@Param('id') id: string) {
