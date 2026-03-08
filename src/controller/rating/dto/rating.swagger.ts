@@ -9,7 +9,7 @@ import {
   ApiBadRequestResponse,
   ApiBody,
 } from '@nestjs/swagger';
-import { Rating, RatingType, ComplaintStatus } from '../entities/rating.entity';
+import { Rating, ComplaintStatus } from '../entities/rating.entity';
 
 export class ResponseDtoSwagger {
   @ApiProperty({
@@ -59,14 +59,6 @@ export class CreateRatingDtoSwagger {
     type: [ResponseDtoSwagger],
   })
   response: ResponseDtoSwagger[];
-
-  @ApiProperty({
-    example: 'review',
-    enum: RatingType,
-    description: 'Type of rating (complaint or review)',
-    required: false,
-  })
-  type?: RatingType;
 }
 
 export class UpdateRatingDtoSwagger {
@@ -82,14 +74,6 @@ export class UpdateRatingDtoSwagger {
     required: false,
   })
   response?: ResponseDtoSwagger[];
-
-  @ApiProperty({
-    example: 'complaint',
-    enum: RatingType,
-    description: 'Type of rating',
-    required: false,
-  })
-  type?: RatingType;
 }
 
 export function ApiRatingCreate() {

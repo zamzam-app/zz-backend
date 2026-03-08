@@ -1,7 +1,5 @@
 import {
   IsArray,
-  IsBoolean,
-  IsEnum,
   IsMongoId,
   IsNotEmpty,
   IsNumber,
@@ -11,7 +9,6 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { RatingType } from '../entities/rating.entity';
 
 export class ResponseDto {
   @IsMongoId()
@@ -20,10 +17,6 @@ export class ResponseDto {
 
   @IsNotEmpty()
   answer: string | string[] | number;
-
-  @IsOptional()
-  @IsBoolean()
-  isComplaint?: boolean;
 }
 
 export class CreateRatingDto {
@@ -49,14 +42,9 @@ export class CreateRatingDto {
   @IsOptional()
   totalRatings?: number;
 
-  /** Overall rating 1–5. If omitted, derived from star-rating question or totalRatings. */
   @IsNumber()
   @Min(1)
   @Max(5)
   @IsOptional()
   overallRating?: number;
-
-  @IsEnum(RatingType)
-  @IsOptional()
-  type?: RatingType;
 }

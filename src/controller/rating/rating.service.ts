@@ -32,7 +32,6 @@ export class RatingService {
       const userResponses = createRatingDto.response.map((r) => ({
         questionId: new Types.ObjectId(r.questionId),
         answer: r.answer,
-        ...(r.isComplaint !== undefined && { isComplaint: r.isComplaint }),
       }));
 
       const doc = {
@@ -41,7 +40,6 @@ export class RatingService {
         userResponses,
         overallRating: createRatingDto.overallRating ?? 1,
         formId: createRatingDto.formId,
-        ...(createRatingDto.type && { type: createRatingDto.type }),
         ...(createRatingDto.overallRating != null && {
           overallRating: createRatingDto.overallRating,
         }),
@@ -302,7 +300,6 @@ export class RatingService {
         updateData.userResponses = updateRatingDto.response.map((r) => ({
           questionId: new Types.ObjectId(r.questionId),
           answer: r.answer,
-          ...(r.isComplaint !== undefined && { isComplaint: r.isComplaint }),
         }));
         delete updateData.response;
       }
@@ -417,44 +414,33 @@ export class RatingService {
       if (!Types.ObjectId.isValid(ratingId)) {
         throw new BadRequestException('Invalid rating ID');
       }
-      if (!Types.ObjectId.isValid(dto.questionId)) {
-        throw new BadRequestException('Invalid question ID');
-      }
 
-      const questionIdObj = new Types.ObjectId(dto.questionId);
       const resolvedByObj = new Types.ObjectId(dto.resolvedBy);
       const now = new Date();
 
       const $set: Record<string, unknown> = {
-        'userResponses.$.isComplaint': false,
-        'userResponses.$.complaintStatus': dto.complaintStatus,
-        'userResponses.$.resolvedAt': now,
-        'userResponses.$.resolutionBy': resolvedByObj,
+        complaintStatus: dto.complaintStatus,
+        resolvedAt: now,
+        resolvedBy: resolvedByObj,
       };
       if (dto.resolutionNotes !== undefined) {
-        $set['userResponses.$.resolutionNotes'] = dto.resolutionNotes;
-      }
-      if (dto.answer !== undefined) {
-        $set['userResponses.$.answer'] = dto.answer;
+        $set.resolutionNotes = dto.resolutionNotes;
       }
 
-      const filter = {
-        _id: new Types.ObjectId(ratingId),
-        isDeleted: false,
-        'userResponses.questionId': questionIdObj,
-      };
       const updated = await this.ratingModel
         .findOneAndUpdate(
-          filter as Record<string, unknown>,
+          {
+            _id: new Types.ObjectId(ratingId),
+            isDeleted: false,
+            isComplaint: true,
+          },
           { $set },
           { new: true },
         )
         .exec();
 
       if (!updated) {
-        throw new NotFoundException(
-          'Rating not found or question not found in rating',
-        );
+        throw new NotFoundException('Rating not found or not a complaint');
       }
 
       return this.findOne(ratingId);
