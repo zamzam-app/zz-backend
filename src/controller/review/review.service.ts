@@ -410,6 +410,30 @@ export class ReviewService {
     }
   }
 
+  async remove(id: string): Promise<Review> {
+    try {
+      if (!Types.ObjectId.isValid(id)) {
+        throw new BadRequestException('Invalid review ID');
+      }
+
+      const review = await this.reviewModel.findById(id);
+      if (!review || review.isDeleted) {
+        throw new NotFoundException('Review not found');
+      }
+
+      review.isDeleted = true;
+      await review.save();
+
+      return review;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to delete review',
+      );
+    }
+  }
+
   // to compute overall rating from user responses
   private async computeOverallRatingFromResponses(
     response: { questionId: string; answer: string | string[] | number }[],
@@ -518,30 +542,6 @@ export class ReviewService {
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to resolve complaint',
-      );
-    }
-  }
-
-  async remove(id: string): Promise<Review> {
-    try {
-      if (!Types.ObjectId.isValid(id)) {
-        throw new BadRequestException('Invalid review ID');
-      }
-
-      const review = await this.reviewModel.findById(id);
-      if (!review || review.isDeleted) {
-        throw new NotFoundException('Review not found');
-      }
-
-      review.isDeleted = true;
-      await review.save();
-
-      return review;
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException(
-        (error instanceof Error ? error.message : undefined) ??
-          'Failed to delete review',
       );
     }
   }
