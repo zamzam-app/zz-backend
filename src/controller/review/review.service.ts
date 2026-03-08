@@ -7,56 +7,56 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { CreateRatingDto } from './dto/create-rating.dto';
-import { QueryRatingDto } from './dto/query-rating.dto';
+import { CreateReviewDto } from './dto/create-review.dto';
+import { QueryReviewDto } from './dto/query-review.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
-import { UpdateRatingDto } from './dto/update-rating.dto';
-import { Rating, RatingDocument } from './entities/rating.entity';
+import { UpdateReviewDto } from './dto/update-review.dto';
+import { Review, ReviewDocument } from './entities/review.entity';
 import { Form, FormDocument } from '../forms/entities/form.entity';
-import { FindAllRatingsResult } from './interfaces/query-rating.interface';
+import { FindAllReviewsResult } from './interfaces/query-review.interface';
 
 @Injectable()
-export class RatingService {
+export class ReviewService {
   constructor(
-    @InjectModel(Rating.name) private ratingModel: Model<RatingDocument>,
+    @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     @InjectModel(Form.name) private formModel: Model<FormDocument>,
   ) {}
 
-  async create(createRatingDto: CreateRatingDto): Promise<Rating> {
+  async create(createReviewDto: CreateReviewDto): Promise<Review> {
     try {
-      const form = await this.formModel.findById(createRatingDto.formId);
+      const form = await this.formModel.findById(createReviewDto.formId);
       if (!form) {
         throw new NotFoundException('Form not found');
       }
 
-      const userResponses = createRatingDto.response.map((r) => ({
+      const userResponses = createReviewDto.response.map((r) => ({
         questionId: new Types.ObjectId(r.questionId),
         answer: r.answer,
       }));
 
       const doc = {
-        userId: createRatingDto.userId,
-        outletId: createRatingDto.outletId,
+        userId: createReviewDto.userId,
+        outletId: createReviewDto.outletId,
         userResponses,
-        overallRating: createRatingDto.overallRating ?? 1,
-        formId: createRatingDto.formId,
-        ...(createRatingDto.overallRating != null && {
-          overallRating: createRatingDto.overallRating,
+        overallRating: createReviewDto.overallRating ?? 1,
+        formId: createReviewDto.formId,
+        ...(createReviewDto.overallRating != null && {
+          overallRating: createReviewDto.overallRating,
         }),
       };
 
-      const createdRating = new this.ratingModel(doc);
-      return await createdRating.save();
+      const createdReview = new this.reviewModel(doc);
+      return await createdReview.save();
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
-          'Failed to create rating',
+          'Failed to create review',
       );
     }
   }
 
-  async findAll(query: QueryRatingDto): Promise<FindAllRatingsResult> {
+  async findAll(query: QueryReviewDto): Promise<FindAllReviewsResult> {
     try {
       const page = query.page ?? 1;
       const limit = query.limit;
@@ -158,9 +158,9 @@ export class RatingService {
         ...lookupStages,
       ];
 
-      const [result] = await this.ratingModel
+      const [result] = await this.reviewModel
         .aggregate<{
-          data: Rating[];
+          data: Review[];
           totalCount: [{ count: number }];
         }>([
           { $match: matchStage },
@@ -190,19 +190,19 @@ export class RatingService {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
-          'Failed to fetch ratings',
+          'Failed to fetch reviews',
       );
     }
   }
 
-  async findOne(id: string): Promise<Rating> {
+  async findOne(id: string): Promise<Review> {
     try {
       if (!Types.ObjectId.isValid(id)) {
-        throw new BadRequestException('Invalid rating ID');
+        throw new BadRequestException('Invalid review ID');
       }
 
-      const [rating] = await this.ratingModel
-        .aggregate<Rating>([
+      const [review] = await this.reviewModel
+        .aggregate<Review>([
           {
             $match: {
               _id: new Types.ObjectId(id),
@@ -269,64 +269,64 @@ export class RatingService {
         ])
         .exec();
 
-      if (!rating) {
-        throw new NotFoundException('Rating not found');
+      if (!review) {
+        throw new NotFoundException('Review not found');
       }
 
-      return rating;
+      return review;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
-          'Failed to fetch rating',
+          'Failed to fetch review',
       );
     }
   }
 
-  async update(id: string, updateRatingDto: UpdateRatingDto): Promise<Rating> {
+  async update(id: string, updateReviewDto: UpdateReviewDto): Promise<Review> {
     try {
       if (!Types.ObjectId.isValid(id)) {
-        throw new BadRequestException('Invalid rating ID');
+        throw new BadRequestException('Invalid review ID');
       }
 
-      const existingRating = await this.ratingModel.findById(id);
-      if (!existingRating || existingRating.isDeleted) {
-        throw new NotFoundException('Rating not found');
+      const existingReview = await this.reviewModel.findById(id);
+      if (!existingReview || existingReview.isDeleted) {
+        throw new NotFoundException('Review not found');
       }
 
-      const updateData: Record<string, unknown> = { ...updateRatingDto };
+      const updateData: Record<string, unknown> = { ...updateReviewDto };
 
-      if (updateRatingDto.response) {
-        updateData.userResponses = updateRatingDto.response.map((r) => ({
+      if (updateReviewDto.response) {
+        updateData.userResponses = updateReviewDto.response.map((r) => ({
           questionId: new Types.ObjectId(r.questionId),
           answer: r.answer,
         }));
         delete updateData.response;
       }
-      if (updateRatingDto.overallRating != null) {
-        updateData.overallRating = updateRatingDto.overallRating;
+      if (updateReviewDto.overallRating != null) {
+        updateData.overallRating = updateReviewDto.overallRating;
       }
       if (
-        updateRatingDto.totalRatings != null &&
+        updateReviewDto.totalRatings != null &&
         updateData.overallRating === undefined
       ) {
         updateData.overallRating = Math.min(
           5,
-          Math.max(1, Math.round(updateRatingDto.totalRatings)),
+          Math.max(1, Math.round(updateReviewDto.totalRatings)),
         );
       }
       delete updateData.totalRatings;
 
-      const updated = await this.ratingModel
+      const updated = await this.reviewModel
         .findByIdAndUpdate(id, updateData, { new: true })
         .exec();
 
       if (!updated) {
-        throw new NotFoundException('Rating not found');
+        throw new NotFoundException('Review not found');
       }
 
-      const [updatedRating] = await this.ratingModel
-        .aggregate<Rating>([
+      const [updatedReview] = await this.reviewModel
+        .aggregate<Review>([
           {
             $match: {
               _id: new Types.ObjectId(id),
@@ -393,26 +393,26 @@ export class RatingService {
         ])
         .exec();
 
-      if (!updatedRating) {
-        throw new NotFoundException('Rating not found');
+      if (!updatedReview) {
+        throw new NotFoundException('Review not found');
       }
-      return updatedRating;
+      return updatedReview;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
-          'Failed to update rating',
+          'Failed to update review',
       );
     }
   }
 
   async resolveComplaint(
-    ratingId: string,
+    reviewId: string,
     dto: ResolveComplaintDto,
-  ): Promise<Rating> {
+  ): Promise<Review> {
     try {
-      if (!Types.ObjectId.isValid(ratingId)) {
-        throw new BadRequestException('Invalid rating ID');
+      if (!Types.ObjectId.isValid(reviewId)) {
+        throw new BadRequestException('Invalid review ID');
       }
 
       const resolvedByObj = new Types.ObjectId(dto.resolvedBy);
@@ -427,10 +427,10 @@ export class RatingService {
         $set.resolutionNotes = dto.resolutionNotes;
       }
 
-      const updated = await this.ratingModel
+      const updated = await this.reviewModel
         .findOneAndUpdate(
           {
-            _id: new Types.ObjectId(ratingId),
+            _id: new Types.ObjectId(reviewId),
             isDeleted: false,
             isComplaint: true,
           },
@@ -440,10 +440,10 @@ export class RatingService {
         .exec();
 
       if (!updated) {
-        throw new NotFoundException('Rating not found or not a complaint');
+        throw new NotFoundException('Review not found or not a complaint');
       }
 
-      return this.findOne(ratingId);
+      return this.findOne(reviewId);
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
@@ -453,26 +453,26 @@ export class RatingService {
     }
   }
 
-  async remove(id: string): Promise<Rating> {
+  async remove(id: string): Promise<Review> {
     try {
       if (!Types.ObjectId.isValid(id)) {
-        throw new BadRequestException('Invalid rating ID');
+        throw new BadRequestException('Invalid review ID');
       }
 
-      const rating = await this.ratingModel.findById(id);
-      if (!rating || rating.isDeleted) {
-        throw new NotFoundException('Rating not found');
+      const review = await this.reviewModel.findById(id);
+      if (!review || review.isDeleted) {
+        throw new NotFoundException('Review not found');
       }
 
-      rating.isDeleted = true;
-      await rating.save();
+      review.isDeleted = true;
+      await review.save();
 
-      return rating;
+      return review;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
-          'Failed to delete rating',
+          'Failed to delete review',
       );
     }
   }

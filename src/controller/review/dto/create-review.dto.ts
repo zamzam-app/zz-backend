@@ -19,7 +19,7 @@ export class ResponseDto {
   answer: string | string[] | number;
 }
 
-export class CreateRatingDto {
+export class CreateReviewDto {
   @IsMongoId()
   @IsNotEmpty()
   formId: string;

@@ -12,7 +12,7 @@ import { OutletModule } from './controller/outlet/outlet.module';
 import { OutletTypeModule } from './controller/outlet-type/outlet-type.module';
 import { FormModule } from './controller/forms/form.module';
 import { QuestionModule } from './controller/question/question.module';
-import { RatingModule } from './controller/rating/rating.module';
+import { ReviewModule } from './controller/review/review.module';
 import { UploadModule } from './controller/upload/upload.module';
 import { OutletTableModule } from './controller/outlet-table/outlet-table.module';
 
@@ -39,7 +39,7 @@ import { OutletTableModule } from './controller/outlet-table/outlet-table.module
     OutletTypeModule,
     FormModule,
     QuestionModule,
-    RatingModule,
+    ReviewModule,
     UploadModule,
     OutletTableModule,
   ],

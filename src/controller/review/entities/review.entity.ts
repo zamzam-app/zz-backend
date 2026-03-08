@@ -6,7 +6,7 @@ import {
 } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
-export type RatingDocument = HydratedDocument<Rating>;
+export type ReviewDocument = HydratedDocument<Review>;
 
 export enum ComplaintStatus {
   PENDING = 'pending',
@@ -14,7 +14,6 @@ export enum ComplaintStatus {
   DISMISSED = 'dismissed',
 }
 
-// User response schema for rating
 @Schema()
 export class UserResponse {
   @Prop({
@@ -30,9 +29,8 @@ export class UserResponse {
 
 export const UserResponseSchema = SchemaFactory.createForClass(UserResponse);
 
-// Rating schema
 @Schema({ timestamps: true })
-export class Rating extends BaseEntity {
+export class Review extends BaseEntity {
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'User',
@@ -89,4 +87,4 @@ export class Rating extends BaseEntity {
   resolutionNotes?: string;
 }
 
-export const RatingSchema = SchemaFactory.createForClass(Rating);
+export const ReviewSchema = SchemaFactory.createForClass(Review);
