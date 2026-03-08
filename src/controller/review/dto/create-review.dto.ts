@@ -4,8 +4,6 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
-  Max,
-  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -43,8 +41,6 @@ export class CreateReviewDto {
   totalRatings?: number;
 
   @IsNumber()
-  @Min(1)
-  @Max(5)
   @IsOptional()
   overallRating?: number;
 }

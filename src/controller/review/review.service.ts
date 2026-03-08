@@ -13,13 +13,22 @@ import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { Review, ReviewDocument } from './entities/review.entity';
 import { Form, FormDocument } from '../forms/entities/form.entity';
+import {
+  Question,
+  QuestionDocument,
+  QuestionType,
+} from '../question/entities/question.entity';
 import { FindAllReviewsResult } from './interfaces/query-review.interface';
+
+const VALID_MAX_RATINGS = new Set([3, 5, 10]);
+const OVERALL_RATING_SCALE = { min: 1, max: 5 };
 
 @Injectable()
 export class ReviewService {
   constructor(
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     @InjectModel(Form.name) private formModel: Model<FormDocument>,
+    @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
   ) {}
 
   async create(createReviewDto: CreateReviewDto): Promise<Review> {
@@ -34,15 +43,16 @@ export class ReviewService {
         answer: r.answer,
       }));
 
+      const overallRating = await this.computeOverallRatingFromResponses(
+        createReviewDto.response,
+      );
+
       const doc = {
         userId: createReviewDto.userId,
         outletId: createReviewDto.outletId,
         userResponses,
-        overallRating: createReviewDto.overallRating ?? 1,
+        overallRating,
         formId: createReviewDto.formId,
-        ...(createReviewDto.overallRating != null && {
-          overallRating: createReviewDto.overallRating,
-        }),
       };
 
       const createdReview = new this.reviewModel(doc);
@@ -302,20 +312,14 @@ export class ReviewService {
           answer: r.answer,
         }));
         delete updateData.response;
-      }
-      if (updateReviewDto.overallRating != null) {
-        updateData.overallRating = updateReviewDto.overallRating;
-      }
-      if (
-        updateReviewDto.totalRatings != null &&
-        updateData.overallRating === undefined
-      ) {
-        updateData.overallRating = Math.min(
-          5,
-          Math.max(1, Math.round(updateReviewDto.totalRatings)),
+        updateData.overallRating = await this.computeOverallRatingFromResponses(
+          updateReviewDto.response,
         );
       }
       delete updateData.totalRatings;
+      if (!updateReviewDto.response) {
+        delete updateData.overallRating;
+      }
 
       const updated = await this.reviewModel
         .findByIdAndUpdate(id, updateData, { new: true })
@@ -404,6 +408,71 @@ export class ReviewService {
           'Failed to update review',
       );
     }
+  }
+
+  // to compute overall rating from user responses
+  private async computeOverallRatingFromResponses(
+    response: { questionId: string; answer: string | string[] | number }[],
+  ): Promise<number> {
+    if (!response?.length) return OVERALL_RATING_SCALE.min;
+
+    const questionIds = response.map((r) => r.questionId);
+    const questions = await this.questionModel
+      .find({ _id: { $in: questionIds.map((id) => new Types.ObjectId(id)) } })
+      .lean()
+      .exec();
+
+    const questionMap = new Map(
+      questions.map((q) => [
+        (q as { _id: Types.ObjectId })._id.toString(),
+        q as { type: string; maxRatings?: number },
+      ]),
+    );
+
+    const normalizedValues: number[] = [];
+
+    for (const r of response) {
+      const question = questionMap.get(r.questionId);
+      if (
+        !question ||
+        (question.type as QuestionType) !== QuestionType.StarRating
+      )
+        continue;
+
+      let maxRatings = question.maxRatings;
+      if (maxRatings == null || !VALID_MAX_RATINGS.has(maxRatings)) {
+        maxRatings = 5;
+      }
+
+      let num: number;
+      if (typeof r.answer === 'number') {
+        num = r.answer;
+      } else if (Array.isArray(r.answer)) {
+        num = Number(r.answer[0]);
+      } else {
+        num = Number(r.answer);
+      }
+      if (Number.isNaN(num)) {
+        throw new BadRequestException('Star rating answer must be a number');
+      }
+
+      num = Math.min(maxRatings, Math.max(1, num));
+      const normalized =
+        1 +
+        ((num - 1) / (maxRatings - 1)) *
+          (OVERALL_RATING_SCALE.max - OVERALL_RATING_SCALE.min);
+      normalizedValues.push(normalized);
+    }
+
+    if (normalizedValues.length === 0) return OVERALL_RATING_SCALE.min;
+
+    const sum = normalizedValues.reduce((a, b) => a + b, 0);
+    const average = sum / normalizedValues.length;
+    const rounded = Math.round(average * 10) / 10;
+    return Math.min(
+      OVERALL_RATING_SCALE.max,
+      Math.max(OVERALL_RATING_SCALE.min, rounded),
+    );
   }
 
   async resolveComplaint(
