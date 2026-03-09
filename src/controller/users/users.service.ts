@@ -21,6 +21,39 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto) {
     try {
+      const takenFields: string[] = [];
+
+      if (createUserDto.email != null && createUserDto.email !== '') {
+        const existingByEmail = await this.userModel
+          .findOne({ email: createUserDto.email, isDeleted: false })
+          .exec();
+        if (existingByEmail) takenFields.push('email');
+      }
+      if (createUserDto.userName != null && createUserDto.userName !== '') {
+        const existingByUserName = await this.userModel
+          .findOne({ userName: createUserDto.userName, isDeleted: false })
+          .exec();
+        if (existingByUserName) takenFields.push('userName');
+      }
+      if (
+        createUserDto.phoneNumber != null &&
+        createUserDto.phoneNumber !== ''
+      ) {
+        const existingByPhone = await this.userModel
+          .findOne({
+            phoneNumber: createUserDto.phoneNumber,
+            isDeleted: false,
+          })
+          .exec();
+        if (existingByPhone) takenFields.push('phoneNumber');
+      }
+
+      if (takenFields.length > 0) {
+        throw new BadRequestException(
+          `${takenFields.join(', ')} ${takenFields.length === 1 ? 'is' : 'are'} already taken`,
+        );
+      }
+
       if (createUserDto.password) {
         createUserDto.password = await hashPassword(createUserDto.password);
       }
@@ -98,6 +131,44 @@ export class UsersService {
     }
   }
 
+  async update(id: string, updateUserDto: UpdateUserDto) {
+    try {
+      const updatedUser = await this.userModel
+        .findByIdAndUpdate(id, updateUserDto, { new: true })
+        .exec();
+      if (!updatedUser) {
+        throw new NotFoundException(`User with ID ${id} not found`);
+      }
+      return updatedUser;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to update user',
+      );
+    }
+  }
+
+  async remove(id: string) {
+    try {
+      const deletedUser = await this.userModel
+        .findOneAndUpdate(
+          { _id: id, isDeleted: false },
+          { isDeleted: true },
+          { new: true },
+        )
+        .exec();
+      if (!deletedUser) {
+        throw new NotFoundException(`User with ID ${id} not found`);
+      }
+      return deletedUser;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to delete user',
+      );
+    }
+  }
+
   async findOneByName(name: string, includePassword = false) {
     try {
       const query = this.userModel.findOne({ name });
@@ -135,23 +206,6 @@ export class UsersService {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error as Error)?.message ?? 'Failed to retrieve user by phone number',
-      );
-    }
-  }
-
-  async update(id: string, updateUserDto: UpdateUserDto) {
-    try {
-      const updatedUser = await this.userModel
-        .findByIdAndUpdate(id, updateUserDto, { new: true })
-        .exec();
-      if (!updatedUser) {
-        throw new NotFoundException(`User with ID ${id} not found`);
-      }
-      return updatedUser;
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException(
-        (error as Error)?.message ?? 'Failed to update user',
       );
     }
   }
@@ -196,27 +250,6 @@ export class UsersService {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error as Error)?.message ?? 'Failed to change password',
-      );
-    }
-  }
-
-  async remove(id: string) {
-    try {
-      const deletedUser = await this.userModel
-        .findOneAndUpdate(
-          { _id: id, isDeleted: false },
-          { isDeleted: true },
-          { new: true },
-        )
-        .exec();
-      if (!deletedUser) {
-        throw new NotFoundException(`User with ID ${id} not found`);
-      }
-      return deletedUser;
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException(
-        (error as Error)?.message ?? 'Failed to delete user',
       );
     }
   }
