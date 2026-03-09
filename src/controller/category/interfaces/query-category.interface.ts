@@ -1,7 +1,7 @@
-import { Rating } from '../entities/rating.entity';
+import { Category } from '../entities/category.entity';
 
-export interface FindAllRatingsResult {
-  data: Rating[];
+export interface FindAllCategoriesResult {
+  data: Category[];
   meta: {
     total: number;
     currentPage: number;

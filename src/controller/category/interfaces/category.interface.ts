@@ -1,10 +1,7 @@
-export interface ProductDb {
+export interface CategoryDb {
   _id: string;
   name: string;
-  price: number;
-  description: string;
-  images: string[];
-  categoryList: string[];
+  description?: string;
   isActive: boolean;
   isDeleted: boolean;
   createdAt?: Date;

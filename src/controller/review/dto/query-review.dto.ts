@@ -2,7 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsMongoId, IsOptional, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class QueryRatingDto {
+export class QueryReviewDto {
   @ApiPropertyOptional({
     description: 'Page number',
     default: 1,

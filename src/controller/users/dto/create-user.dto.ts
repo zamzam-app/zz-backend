@@ -14,6 +14,16 @@ import { UserRole } from '../interfaces/user.interface';
 
 export class CreateUserDto {
   @ApiProperty({
+    example: '60d5ecb86217152c9043e02d',
+    description:
+      'Optional MongoDB _id for the user (used for minimal/find-or-create flows)',
+    required: false,
+  })
+  @IsMongoId()
+  @IsOptional()
+  _id?: string;
+
+  @ApiProperty({
     example: 'johndoe',
     description: 'The unique name of the user',
   })

@@ -7,58 +7,90 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { CreateRatingDto } from './dto/create-rating.dto';
-import { QueryRatingDto } from './dto/query-rating.dto';
+import { CreateReviewDto } from './dto/create-review.dto';
+import { QueryReviewDto } from './dto/query-review.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
-import { UpdateRatingDto } from './dto/update-rating.dto';
-import { Rating, RatingDocument } from './entities/rating.entity';
+import { UpdateReviewDto } from './dto/update-review.dto';
+import { Review, ReviewDocument } from './entities/review.entity';
 import { Form, FormDocument } from '../forms/entities/form.entity';
-import { FindAllRatingsResult } from './interfaces/query-rating.interface';
+import {
+  Question,
+  QuestionDocument,
+  QuestionType,
+} from '../question/entities/question.entity';
+import { FindAllReviewsResult } from './interfaces/query-review.interface';
+import { UsersService } from '../users/users.service';
+
+const VALID_MAX_RATINGS = new Set([3, 5, 10]);
+const OVERALL_RATING_SCALE = { min: 1, max: 5 };
 
 @Injectable()
-export class RatingService {
+export class ReviewService {
   constructor(
-    @InjectModel(Rating.name) private ratingModel: Model<RatingDocument>,
+    @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     @InjectModel(Form.name) private formModel: Model<FormDocument>,
+    @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
+    private usersService: UsersService,
   ) {}
 
-  async create(createRatingDto: CreateRatingDto): Promise<Rating> {
+  async create(createReviewDto: CreateReviewDto): Promise<Review> {
     try {
-      const form = await this.formModel.findById(createRatingDto.formId);
+      // DTO fields are validated at runtime; types may be widened by decorators
+      const userId: string | undefined = createReviewDto.userId as
+        | string
+        | undefined;
+      const phoneNumber: string | undefined = createReviewDto.phoneNumber;
+      const resolvedUser: { _id: Types.ObjectId } | null =
+        userId || phoneNumber
+          ? await this.usersService.findOneOrCreateForReview({
+              userId,
+              phoneNumber,
+            })
+          : null;
+
+      const form = await this.formModel.findById(createReviewDto.formId);
       if (!form) {
         throw new NotFoundException('Form not found');
       }
 
-      const userResponses = createRatingDto.response.map((r) => ({
+      const userResponses = createReviewDto.response.map((r) => ({
         questionId: new Types.ObjectId(r.questionId),
         answer: r.answer,
-        ...(r.isComplaint !== undefined && { isComplaint: r.isComplaint }),
       }));
 
+      const overallRating = await this.computeOverallRatingFromResponses(
+        createReviewDto.response,
+      );
+
       const doc = {
-        userId: createRatingDto.userId,
-        outletId: createRatingDto.outletId,
+        userId: resolvedUser?._id?.toString() ?? createReviewDto.userId,
+        outletId: createReviewDto.outletId,
         userResponses,
-        overallRating: createRatingDto.overallRating ?? 1,
-        formId: createRatingDto.formId,
-        ...(createRatingDto.type && { type: createRatingDto.type }),
-        ...(createRatingDto.overallRating != null && {
-          overallRating: createRatingDto.overallRating,
-        }),
+        overallRating,
+        formId: createReviewDto.formId,
       };
 
-      const createdRating = new this.ratingModel(doc);
-      return await createdRating.save();
+      const createdReview = new this.reviewModel(doc);
+      const savedReview = await createdReview.save();
+
+      if (resolvedUser) {
+        await this.usersService.addUserReview(
+          resolvedUser._id.toString(),
+          savedReview._id.toString(),
+        );
+      }
+
+      return savedReview;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
-          'Failed to create rating',
+          'Failed to create review',
       );
     }
   }
 
-  async findAll(query: QueryRatingDto): Promise<FindAllRatingsResult> {
+  async findAll(query: QueryReviewDto): Promise<FindAllReviewsResult> {
     try {
       const page = query.page ?? 1;
       const limit = query.limit;
@@ -160,9 +192,9 @@ export class RatingService {
         ...lookupStages,
       ];
 
-      const [result] = await this.ratingModel
+      const [result] = await this.reviewModel
         .aggregate<{
-          data: Rating[];
+          data: Review[];
           totalCount: [{ count: number }];
         }>([
           { $match: matchStage },
@@ -192,19 +224,19 @@ export class RatingService {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
-          'Failed to fetch ratings',
+          'Failed to fetch reviews',
       );
     }
   }
 
-  async findOne(id: string): Promise<Rating> {
+  async findOne(id: string): Promise<Review> {
     try {
       if (!Types.ObjectId.isValid(id)) {
-        throw new BadRequestException('Invalid rating ID');
+        throw new BadRequestException('Invalid review ID');
       }
 
-      const [rating] = await this.ratingModel
-        .aggregate<Rating>([
+      const [review] = await this.reviewModel
+        .aggregate<Review>([
           {
             $match: {
               _id: new Types.ObjectId(id),
@@ -271,65 +303,58 @@ export class RatingService {
         ])
         .exec();
 
-      if (!rating) {
-        throw new NotFoundException('Rating not found');
+      if (!review) {
+        throw new NotFoundException('Review not found');
       }
 
-      return rating;
+      return review;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
-          'Failed to fetch rating',
+          'Failed to fetch review',
       );
     }
   }
 
-  async update(id: string, updateRatingDto: UpdateRatingDto): Promise<Rating> {
+  async update(id: string, updateReviewDto: UpdateReviewDto): Promise<Review> {
     try {
       if (!Types.ObjectId.isValid(id)) {
-        throw new BadRequestException('Invalid rating ID');
+        throw new BadRequestException('Invalid review ID');
       }
 
-      const existingRating = await this.ratingModel.findById(id);
-      if (!existingRating || existingRating.isDeleted) {
-        throw new NotFoundException('Rating not found');
+      const existingReview = await this.reviewModel.findById(id);
+      if (!existingReview || existingReview.isDeleted) {
+        throw new NotFoundException('Review not found');
       }
 
-      const updateData: Record<string, unknown> = { ...updateRatingDto };
+      const updateData: Record<string, unknown> = { ...updateReviewDto };
 
-      if (updateRatingDto.response) {
-        updateData.userResponses = updateRatingDto.response.map((r) => ({
+      if (updateReviewDto.response) {
+        updateData.userResponses = updateReviewDto.response.map((r) => ({
           questionId: new Types.ObjectId(r.questionId),
           answer: r.answer,
-          ...(r.isComplaint !== undefined && { isComplaint: r.isComplaint }),
         }));
         delete updateData.response;
-      }
-      if (updateRatingDto.overallRating != null) {
-        updateData.overallRating = updateRatingDto.overallRating;
-      }
-      if (
-        updateRatingDto.totalRatings != null &&
-        updateData.overallRating === undefined
-      ) {
-        updateData.overallRating = Math.min(
-          5,
-          Math.max(1, Math.round(updateRatingDto.totalRatings)),
+        updateData.overallRating = await this.computeOverallRatingFromResponses(
+          updateReviewDto.response,
         );
       }
       delete updateData.totalRatings;
+      if (!updateReviewDto.response) {
+        delete updateData.overallRating;
+      }
 
-      const updated = await this.ratingModel
+      const updated = await this.reviewModel
         .findByIdAndUpdate(id, updateData, { new: true })
         .exec();
 
       if (!updated) {
-        throw new NotFoundException('Rating not found');
+        throw new NotFoundException('Review not found');
       }
 
-      const [updatedRating] = await this.ratingModel
-        .aggregate<Rating>([
+      const [updatedReview] = await this.reviewModel
+        .aggregate<Review>([
           {
             $match: {
               _id: new Types.ObjectId(id),
@@ -396,97 +421,151 @@ export class RatingService {
         ])
         .exec();
 
-      if (!updatedRating) {
-        throw new NotFoundException('Rating not found');
+      if (!updatedReview) {
+        throw new NotFoundException('Review not found');
       }
-      return updatedRating;
+      return updatedReview;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
-          'Failed to update rating',
+          'Failed to update review',
       );
     }
   }
 
-  async resolveComplaint(
-    ratingId: string,
-    dto: ResolveComplaintDto,
-  ): Promise<Rating> {
+  async remove(id: string): Promise<Review> {
     try {
-      if (!Types.ObjectId.isValid(ratingId)) {
-        throw new BadRequestException('Invalid rating ID');
-      }
-      if (!Types.ObjectId.isValid(dto.questionId)) {
-        throw new BadRequestException('Invalid question ID');
+      if (!Types.ObjectId.isValid(id)) {
+        throw new BadRequestException('Invalid review ID');
       }
 
-      const questionIdObj = new Types.ObjectId(dto.questionId);
+      const review = await this.reviewModel.findById(id);
+      if (!review || review.isDeleted) {
+        throw new NotFoundException('Review not found');
+      }
+
+      review.isDeleted = true;
+      await review.save();
+
+      return review;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to delete review',
+      );
+    }
+  }
+
+  // to compute overall rating from user responses
+  private async computeOverallRatingFromResponses(
+    response: { questionId: string; answer: string | string[] | number }[],
+  ): Promise<number> {
+    if (!response?.length) return OVERALL_RATING_SCALE.min;
+
+    const questionIds = response.map((r) => r.questionId);
+    const questions = await this.questionModel
+      .find({ _id: { $in: questionIds.map((id) => new Types.ObjectId(id)) } })
+      .lean()
+      .exec();
+
+    const questionMap = new Map(
+      questions.map((q) => [
+        (q as { _id: Types.ObjectId })._id.toString(),
+        q as { type: string; maxRatings?: number },
+      ]),
+    );
+
+    const normalizedValues: number[] = [];
+
+    for (const r of response) {
+      const question = questionMap.get(r.questionId);
+      if (
+        !question ||
+        (question.type as QuestionType) !== QuestionType.StarRating
+      )
+        continue;
+
+      let maxRatings = question.maxRatings;
+      if (maxRatings == null || !VALID_MAX_RATINGS.has(maxRatings)) {
+        maxRatings = 5;
+      }
+
+      let num: number;
+      if (typeof r.answer === 'number') {
+        num = r.answer;
+      } else if (Array.isArray(r.answer)) {
+        num = Number(r.answer[0]);
+      } else {
+        num = Number(r.answer);
+      }
+      if (Number.isNaN(num)) {
+        throw new BadRequestException('Star rating answer must be a number');
+      }
+
+      num = Math.min(maxRatings, Math.max(1, num));
+      const normalized =
+        1 +
+        ((num - 1) / (maxRatings - 1)) *
+          (OVERALL_RATING_SCALE.max - OVERALL_RATING_SCALE.min);
+      normalizedValues.push(normalized);
+    }
+
+    if (normalizedValues.length === 0) return OVERALL_RATING_SCALE.min;
+
+    const sum = normalizedValues.reduce((a, b) => a + b, 0);
+    const average = sum / normalizedValues.length;
+    const rounded = Math.round(average * 10) / 10;
+    return Math.min(
+      OVERALL_RATING_SCALE.max,
+      Math.max(OVERALL_RATING_SCALE.min, rounded),
+    );
+  }
+
+  async resolveComplaint(
+    reviewId: string,
+    dto: ResolveComplaintDto,
+  ): Promise<Review> {
+    try {
+      if (!Types.ObjectId.isValid(reviewId)) {
+        throw new BadRequestException('Invalid review ID');
+      }
+
       const resolvedByObj = new Types.ObjectId(dto.resolvedBy);
       const now = new Date();
 
       const $set: Record<string, unknown> = {
-        'userResponses.$.isComplaint': false,
-        'userResponses.$.complaintStatus': dto.complaintStatus,
-        'userResponses.$.resolvedAt': now,
-        'userResponses.$.resolutionBy': resolvedByObj,
+        complaintStatus: dto.complaintStatus,
+        resolvedAt: now,
+        resolvedBy: resolvedByObj,
       };
       if (dto.resolutionNotes !== undefined) {
-        $set['userResponses.$.resolutionNotes'] = dto.resolutionNotes;
-      }
-      if (dto.answer !== undefined) {
-        $set['userResponses.$.answer'] = dto.answer;
+        $set.resolutionNotes = dto.resolutionNotes;
       }
 
-      const filter = {
-        _id: new Types.ObjectId(ratingId),
-        isDeleted: false,
-        'userResponses.questionId': questionIdObj,
-      };
-      const updated = await this.ratingModel
+      const updated = await this.reviewModel
         .findOneAndUpdate(
-          filter as Record<string, unknown>,
+          {
+            _id: new Types.ObjectId(reviewId),
+            isDeleted: false,
+            isComplaint: true,
+          },
           { $set },
           { new: true },
         )
         .exec();
 
       if (!updated) {
-        throw new NotFoundException(
-          'Rating not found or question not found in rating',
-        );
+        throw new NotFoundException('Review not found or not a complaint');
       }
 
-      return this.findOne(ratingId);
+      return this.findOne(reviewId);
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to resolve complaint',
-      );
-    }
-  }
-
-  async remove(id: string): Promise<Rating> {
-    try {
-      if (!Types.ObjectId.isValid(id)) {
-        throw new BadRequestException('Invalid rating ID');
-      }
-
-      const rating = await this.ratingModel.findById(id);
-      if (!rating || rating.isDeleted) {
-        throw new NotFoundException('Rating not found');
-      }
-
-      rating.isDeleted = true;
-      await rating.save();
-
-      return rating;
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException(
-        (error instanceof Error ? error.message : undefined) ??
-          'Failed to delete rating',
       );
     }
   }

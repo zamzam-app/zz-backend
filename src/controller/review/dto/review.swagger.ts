@@ -9,7 +9,7 @@ import {
   ApiBadRequestResponse,
   ApiBody,
 } from '@nestjs/swagger';
-import { Rating, RatingType, ComplaintStatus } from '../entities/rating.entity';
+import { Review, ComplaintStatus } from '../entities/review.entity';
 
 export class ResponseDtoSwagger {
   @ApiProperty({
@@ -25,7 +25,7 @@ export class ResponseDtoSwagger {
   answer: string | string[] | number;
 }
 
-export class CreateRatingDtoSwagger {
+export class CreateReviewDtoSwagger {
   @ApiProperty({
     example: '60d5ecb86217152c9043e02d',
     description: 'MongoDB ObjectId of the form',
@@ -59,17 +59,9 @@ export class CreateRatingDtoSwagger {
     type: [ResponseDtoSwagger],
   })
   response: ResponseDtoSwagger[];
-
-  @ApiProperty({
-    example: 'review',
-    enum: RatingType,
-    description: 'Type of rating (complaint or review)',
-    required: false,
-  })
-  type?: RatingType;
 }
 
-export class UpdateRatingDtoSwagger {
+export class UpdateReviewDtoSwagger {
   @ApiProperty({
     example: [
       {
@@ -82,93 +74,73 @@ export class UpdateRatingDtoSwagger {
     required: false,
   })
   response?: ResponseDtoSwagger[];
-
-  @ApiProperty({
-    example: 'complaint',
-    enum: RatingType,
-    description: 'Type of rating',
-    required: false,
-  })
-  type?: RatingType;
 }
 
-export function ApiRatingCreate() {
+export function ApiReviewCreate() {
   return applyDecorators(
-    ApiOperation({ summary: 'Create a new rating' }),
+    ApiOperation({ summary: 'Create a new review' }),
     ApiCreatedResponse({
-      description: 'Rating created successfully.',
-      type: Rating,
+      description: 'Review created successfully.',
+      type: Review,
     }),
-    ApiBadRequestResponse({ description: 'Invalid form ID or rating data.' }),
+    ApiBadRequestResponse({ description: 'Invalid form ID or review data.' }),
     ApiNotFoundResponse({ description: 'Form not found.' }),
   );
 }
 
-export function ApiRatingFindAll() {
+export function ApiReviewFindAll() {
   return applyDecorators(
-    ApiOperation({ summary: 'Get all active ratings' }),
+    ApiOperation({ summary: 'Get all active reviews' }),
     ApiOkResponse({
-      description: 'Return all active ratings.',
-      type: [Rating],
+      description: 'Return all active reviews.',
+      type: [Review],
     }),
   );
 }
 
-export function ApiRatingFindOne() {
+export function ApiReviewFindOne() {
   return applyDecorators(
-    ApiOperation({ summary: 'Get a specific rating by ID' }),
+    ApiOperation({ summary: 'Get a specific review by ID' }),
     ApiOkResponse({
-      description: 'Return the rating details.',
-      type: Rating,
+      description: 'Return the review details.',
+      type: Review,
     }),
-    ApiBadRequestResponse({ description: 'Invalid rating ID format.' }),
-    ApiNotFoundResponse({ description: 'Rating not found.' }),
+    ApiBadRequestResponse({ description: 'Invalid review ID format.' }),
+    ApiNotFoundResponse({ description: 'Review not found.' }),
   );
 }
 
-export function ApiRatingUpdate() {
+export function ApiReviewUpdate() {
   return applyDecorators(
-    ApiOperation({ summary: 'Update an existing rating' }),
+    ApiOperation({ summary: 'Update an existing review' }),
     ApiOkResponse({
-      description: 'Rating updated successfully.',
-      type: Rating,
+      description: 'Review updated successfully.',
+      type: Review,
     }),
-    ApiBadRequestResponse({ description: 'Invalid rating ID format.' }),
-    ApiNotFoundResponse({ description: 'Rating not found.' }),
+    ApiBadRequestResponse({ description: 'Invalid review ID format.' }),
+    ApiNotFoundResponse({ description: 'Review not found.' }),
   );
 }
 
-export function ApiRatingRemove() {
+export function ApiReviewRemove() {
   return applyDecorators(
-    ApiOperation({ summary: 'Soft delete a rating' }),
+    ApiOperation({ summary: 'Soft delete a review' }),
     ApiOkResponse({
-      description: 'Rating deleted successfully.',
-      type: Rating,
+      description: 'Review deleted successfully.',
+      type: Review,
     }),
-    ApiBadRequestResponse({ description: 'Invalid rating ID format.' }),
-    ApiNotFoundResponse({ description: 'Rating not found.' }),
+    ApiBadRequestResponse({ description: 'Invalid review ID format.' }),
+    ApiNotFoundResponse({ description: 'Review not found.' }),
   );
 }
 
 export class ResolveComplaintDtoSwagger {
-  @ApiProperty({
-    example: '60d5ecb86217152c9043e02d',
-    description: 'MongoDB ObjectId of the question (userResponse) to resolve',
-  })
-  questionId: string;
-
   @ApiProperty({
     example: 'resolved',
     enum: ComplaintStatus,
     description: 'New complaint status (resolved or dismissed)',
   })
   complaintStatus: ComplaintStatus;
-
-  @ApiPropertyOptional({
-    example: 'Updated answer after review',
-    description: 'Optional updated answer for the question',
-  })
-  answer?: string;
 
   @ApiPropertyOptional({
     example: 'Issue addressed with the customer.',
@@ -183,23 +155,23 @@ export class ResolveComplaintDtoSwagger {
   resolvedBy: string;
 }
 
-export function ApiRatingResolveComplaint() {
+export function ApiReviewResolveComplaint() {
   return applyDecorators(
     ApiOperation({
       summary: 'Resolve or reject a complaint',
       description:
-        'Updates the complaint status, resolution notes, resolvedBy, and sets resolvedAt to current date/time for the given question (userResponse) in the rating.',
+        'Updates the complaint status, resolution notes, resolvedBy, and sets resolvedAt on the review.',
     }),
     ApiBody({ type: ResolveComplaintDtoSwagger }),
     ApiOkResponse({
-      description: 'Rating updated with resolved complaint.',
-      type: Rating,
+      description: 'Review updated with resolved complaint.',
+      type: Review,
     }),
     ApiBadRequestResponse({
-      description: 'Invalid rating ID, question ID, or body.',
+      description: 'Invalid review ID or body.',
     }),
     ApiNotFoundResponse({
-      description: 'Rating not found or question not found in rating.',
+      description: 'Review not found or not a complaint.',
     }),
   );
 }

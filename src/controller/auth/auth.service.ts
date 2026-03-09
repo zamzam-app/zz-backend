@@ -48,7 +48,10 @@ export class AuthService {
 
   /** Request OTP: find user by phone or create new user, store OTP, return success. */
   async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {
-    let userDoc = await this.usersService.findOneByPhoneNumber(dto.phoneNumber);
+    let userDoc: UserDocument | null =
+      (await this.usersService.findOneByPhoneNumber(
+        dto.phoneNumber,
+      )) as UserDocument | null;
 
     if (userDoc) {
       const otp = createOtp();
@@ -76,11 +79,11 @@ export class AuthService {
     }
 
     // 2. Find or Create User (by userId if provided, else by phoneNumber)
-    let userDoc: UserDocument | (Record<string, unknown> & { _id: unknown });
+    let userDoc: UserDocument;
     const requestUserId = verifyOtpDto.userId;
     if (requestUserId) {
       const found = await this.usersService.findOne(requestUserId);
-      userDoc = found as unknown as Record<string, unknown> & { _id: unknown };
+      userDoc = found as unknown as UserDocument;
     } else {
       let byPhone = await this.usersService.findOneByPhoneNumber(
         verifyOtpDto.phoneNumber,
@@ -91,7 +94,7 @@ export class AuthService {
           role: UserRole.USER,
         });
       }
-      userDoc = byPhone;
+      userDoc = byPhone as UserDocument;
     }
 
     // 3. Clear OTP from DB after successful verification
