@@ -1,9 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import {
-  HydratedDocument,
-  Schema as MongooseSchema,
-  type ObjectId,
-} from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
 export type ReviewDocument = HydratedDocument<Review>;
@@ -21,7 +17,7 @@ export class UserResponse {
     required: true,
     ref: 'Question',
   })
-  questionId: ObjectId;
+  questionId: Types.ObjectId;
 
   @Prop({ type: MongooseSchema.Types.Mixed, required: true })
   answer: string | string[] | number;
@@ -51,7 +47,7 @@ export class Review extends BaseEntity {
     required: false,
     default: null,
   })
-  outletTableId?: ObjectId | null;
+  outletTableId?: Types.ObjectId | null;
 
   @Prop({ required: true, type: [UserResponseSchema] })
   userResponses: UserResponse[];
@@ -65,7 +61,7 @@ export class Review extends BaseEntity {
     required: false,
     default: null,
   })
-  formId?: ObjectId;
+  formId?: string;
 
   @Prop({ required: false, default: false })
   isComplaint?: boolean;
@@ -77,11 +73,11 @@ export class Review extends BaseEntity {
   })
   complaintStatus?: ComplaintStatus;
 
-  @Prop({ required: false })
-  complaintReason?: string;
+  @Prop({ required: false, default: null })
+  complaintReason?: string | null;
 
-  @Prop({ required: false })
-  resolvedAt?: Date;
+  @Prop({ required: false, default: null })
+  resolvedAt?: Date | null;
 
   @Prop({
     type: MongooseSchema.Types.ObjectId,
@@ -89,10 +85,10 @@ export class Review extends BaseEntity {
     required: false,
     default: null,
   })
-  resolvedBy?: ObjectId;
+  resolvedBy?: Types.ObjectId | null;
 
-  @Prop({ required: false })
-  resolutionNotes?: string;
+  @Prop({ required: false, default: null })
+  resolutionNotes?: string | null;
 }
 
 export const ReviewSchema = SchemaFactory.createForClass(Review);

@@ -11,7 +11,12 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
-import { Review, ReviewDocument } from './entities/review.entity';
+import {
+  ComplaintStatus,
+  Review,
+  ReviewDocument,
+  UserResponse,
+} from './entities/review.entity';
 import { Form, FormDocument } from '../forms/entities/form.entity';
 import {
   Question,
@@ -59,10 +64,12 @@ export class ReviewService {
         throw new NotFoundException('Form not found');
       }
 
-      const userResponses = createReviewDto.response.map((r) => ({
-        questionId: new Types.ObjectId(r.questionId),
-        answer: r.answer,
-      }));
+      const userResponses: UserResponse[] = createReviewDto.response.map(
+        (r) => ({
+          questionId: new Types.ObjectId(r.questionId),
+          answer: r.answer,
+        }),
+      );
 
       const overallRating = await this.computeOverallRatingFromResponses(
         createReviewDto.response,
@@ -71,7 +78,7 @@ export class ReviewService {
       const doc: Partial<Review> & {
         userId: string;
         outletId: string;
-        userResponses: any[];
+        userResponses: UserResponse[];
         overallRating: number;
         formId: string;
         outletTableId: Types.ObjectId | null;
@@ -82,6 +89,18 @@ export class ReviewService {
         overallRating,
         formId: createReviewDto.formId,
         outletTableId: null,
+        // Complaint fields: optional in DTO, explicit defaults so they are never empty
+        isComplaint: createReviewDto.isComplaint ?? false,
+        complaintStatus:
+          createReviewDto.complaintStatus ?? ComplaintStatus.PENDING,
+        complaintReason: createReviewDto.complaintReason ?? null,
+        resolvedAt: createReviewDto.resolvedAt
+          ? new Date(createReviewDto.resolvedAt)
+          : null,
+        resolvedBy: createReviewDto.resolvedBy
+          ? new Types.ObjectId(createReviewDto.resolvedBy)
+          : null,
+        resolutionNotes: createReviewDto.resolutionNotes ?? null,
       };
 
       if (createReviewDto.outletTableId) {
