@@ -5,6 +5,7 @@ import { ReviewController } from './review.controller';
 import { Review, ReviewSchema } from './entities/review.entity';
 import { Form, FormSchema } from '../forms/entities/form.entity';
 import { Question, QuestionSchema } from '../question/entities/question.entity';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { Question, QuestionSchema } from '../question/entities/question.entity';
       { name: Form.name, schema: FormSchema },
       { name: Question.name, schema: QuestionSchema },
     ]),
+    UsersModule,
   ],
   controllers: [ReviewController],
   providers: [ReviewService],

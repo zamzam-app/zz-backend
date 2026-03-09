@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsString,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -25,6 +26,10 @@ export class CreateReviewDto {
   @IsMongoId()
   @IsOptional()
   userId: string;
+
+  @IsString()
+  @IsOptional()
+  phoneNumber?: string;
 
   @IsMongoId()
   @IsNotEmpty()

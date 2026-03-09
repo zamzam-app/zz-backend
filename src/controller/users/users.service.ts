@@ -10,8 +10,9 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { User } from './entities/user.entity';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { FindAllUsersResult } from './interfaces/query-user.interface';
+import { UserRole } from './interfaces/user.interface';
 import * as bcrypt from 'bcrypt';
 import { hashPassword } from '../../util/password.util';
 
@@ -21,43 +22,45 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto) {
     try {
-      const takenFields: string[] = [];
+      const { data: existingUser, userPresent } =
+        await this.findUserByIdentifiers({
+          userName: createUserDto.userName,
+          phoneNumber: createUserDto.phoneNumber,
+          email: createUserDto.email,
+        });
 
-      if (createUserDto.email != null && createUserDto.email !== '') {
-        const existingByEmail = await this.userModel
-          .findOne({ email: createUserDto.email, isDeleted: false })
-          .exec();
-        if (existingByEmail) takenFields.push('email');
-      }
-      if (createUserDto.userName != null && createUserDto.userName !== '') {
-        const existingByUserName = await this.userModel
-          .findOne({ userName: createUserDto.userName, isDeleted: false })
-          .exec();
-        if (existingByUserName) takenFields.push('userName');
-      }
-      if (
-        createUserDto.phoneNumber != null &&
-        createUserDto.phoneNumber !== ''
-      ) {
-        const existingByPhone = await this.userModel
-          .findOne({
-            phoneNumber: createUserDto.phoneNumber,
-            isDeleted: false,
-          })
-          .exec();
-        if (existingByPhone) takenFields.push('phoneNumber');
-      }
-
-      if (takenFields.length > 0) {
-        throw new BadRequestException(
-          `${takenFields.join(', ')} ${takenFields.length === 1 ? 'is' : 'are'} already taken`,
-        );
+      if (userPresent && existingUser) {
+        const takenFields: string[] = [];
+        if (createUserDto.email && existingUser.email === createUserDto.email) {
+          takenFields.push('email');
+        }
+        if (
+          createUserDto.userName &&
+          existingUser.userName === createUserDto.userName
+        ) {
+          takenFields.push('userName');
+        }
+        if (
+          createUserDto.phoneNumber &&
+          existingUser.phoneNumber === createUserDto.phoneNumber
+        ) {
+          takenFields.push('phoneNumber');
+        }
+        if (takenFields.length > 0) {
+          throw new BadRequestException(
+            `${takenFields.join(', ')} ${takenFields.length === 1 ? 'is' : 'are'} already taken`,
+          );
+        }
       }
 
       if (createUserDto.password) {
         createUserDto.password = await hashPassword(createUserDto.password);
       }
-      const createdUser = new this.userModel(createUserDto);
+      const doc = { ...createUserDto } as Record<string, unknown>;
+      if (doc._id) {
+        doc._id = new Types.ObjectId(doc._id as string);
+      }
+      const createdUser = new this.userModel(doc);
       return createdUser.save();
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -200,14 +203,38 @@ export class UsersService {
   }
 
   async findOneByPhoneNumber(phoneNumber: string) {
-    try {
-      return this.userModel.findOne({ phoneNumber }).exec();
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException(
-        (error as Error)?.message ?? 'Failed to retrieve user by phone number',
-      );
-    }
+    const { data } = await this.findUserByIdentifiers({ phoneNumber });
+    return data;
+  }
+
+  async addUserReview(userId: string, reviewId: string): Promise<void> {
+    await this.userModel
+      .findByIdAndUpdate(userId, {
+        $push: { userReviews: new Types.ObjectId(reviewId) },
+      })
+      .exec();
+  }
+
+  /**
+   * Finds a user by userId or phoneNumber. If not found, creates a minimal user
+   * via create() and returns it. Used when creating reviews so the author exists.
+   */
+  async findOneOrCreateForReview(params: {
+    userId?: string;
+    phoneNumber?: string;
+  }): Promise<{ _id: Types.ObjectId } | null> {
+    if (!params.userId && !params.phoneNumber) return null;
+    const { data, userPresent } = await this.findUserByIdentifiers({
+      userId: params.userId,
+      phoneNumber: params.phoneNumber,
+    });
+    if (userPresent && data) return data as User & { _id: Types.ObjectId };
+    const created = await this.create({
+      _id: params.userId,
+      phoneNumber: params.phoneNumber?.trim() || undefined,
+      role: UserRole.USER,
+    } as CreateUserDto);
+    return created as User & { _id: Types.ObjectId };
   }
 
   async setOtp(userId: string, otp: string): Promise<void> {
@@ -250,6 +277,44 @@ export class UsersService {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         (error as Error)?.message ?? 'Failed to change password',
+      );
+    }
+  }
+  /**
+   * Finds a user by any of the provided identifiers (userId, userName, phoneNumber, email).
+   * Uses $or so the first match wins. Returns the user and whether one was found.
+   */
+  async findUserByIdentifiers(params: {
+    userId?: string;
+    userName?: string;
+    phoneNumber?: string;
+    email?: string;
+  }): Promise<{ data: User | null; userPresent: boolean }> {
+    try {
+      const orClauses: Record<string, unknown>[] = [];
+      if (params.userId?.trim()) {
+        orClauses.push({ _id: new Types.ObjectId(params.userId) });
+      }
+      if (params.phoneNumber?.trim()) {
+        orClauses.push({ phoneNumber: params.phoneNumber });
+      }
+      if (params.email?.trim()) {
+        orClauses.push({ email: params.email });
+      }
+      if (params.userName?.trim()) {
+        orClauses.push({ userName: params.userName });
+      }
+      if (orClauses.length === 0) {
+        return { data: null, userPresent: false };
+      }
+      const user = await this.userModel
+        .findOne({ $or: orClauses, isDeleted: false })
+        .exec();
+      return { data: user ?? null, userPresent: !!user };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to find user by identifiers',
       );
     }
   }

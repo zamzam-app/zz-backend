@@ -33,13 +33,6 @@ export class User extends BaseEntity {
   @Prop({ type: [{ type: MongooseSchema.Types.ObjectId }], required: false })
   outlets?: string[];
 
-  @Prop({
-    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Review' }],
-    required: false,
-    default: [],
-  })
-  userReviews?: string[];
-
   // User specific fields
   @Prop({ required: false, unique: true, sparse: true })
   phoneNumber?: string;
@@ -52,6 +45,13 @@ export class User extends BaseEntity {
 
   @Prop({ required: false, type: Date, default: null })
   lastLoginAt?: Date;
+
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Review' }],
+    required: false,
+    default: [],
+  })
+  userReviews?: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -19,6 +19,7 @@ import {
   QuestionType,
 } from '../question/entities/question.entity';
 import { FindAllReviewsResult } from './interfaces/query-review.interface';
+import { UsersService } from '../users/users.service';
 
 const VALID_MAX_RATINGS = new Set([3, 5, 10]);
 const OVERALL_RATING_SCALE = { min: 1, max: 5 };
@@ -29,10 +30,24 @@ export class ReviewService {
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     @InjectModel(Form.name) private formModel: Model<FormDocument>,
     @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
+    private usersService: UsersService,
   ) {}
 
   async create(createReviewDto: CreateReviewDto): Promise<Review> {
     try {
+      // DTO fields are validated at runtime; types may be widened by decorators
+      const userId: string | undefined = createReviewDto.userId as
+        | string
+        | undefined;
+      const phoneNumber: string | undefined = createReviewDto.phoneNumber;
+      const resolvedUser: { _id: Types.ObjectId } | null =
+        userId || phoneNumber
+          ? await this.usersService.findOneOrCreateForReview({
+              userId,
+              phoneNumber,
+            })
+          : null;
+
       const form = await this.formModel.findById(createReviewDto.formId);
       if (!form) {
         throw new NotFoundException('Form not found');
@@ -48,7 +63,7 @@ export class ReviewService {
       );
 
       const doc = {
-        userId: createReviewDto.userId,
+        userId: resolvedUser?._id?.toString() ?? createReviewDto.userId,
         outletId: createReviewDto.outletId,
         userResponses,
         overallRating,
@@ -56,7 +71,16 @@ export class ReviewService {
       };
 
       const createdReview = new this.reviewModel(doc);
-      return await createdReview.save();
+      const savedReview = await createdReview.save();
+
+      if (resolvedUser) {
+        await this.usersService.addUserReview(
+          resolvedUser._id.toString(),
+          savedReview._id.toString(),
+        );
+      }
+
+      return savedReview;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
