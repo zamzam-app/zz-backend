@@ -15,6 +15,7 @@ import { QuestionModule } from './controller/question/question.module';
 import { ReviewModule } from './controller/review/review.module';
 import { UploadModule } from './controller/upload/upload.module';
 import { OutletTableModule } from './controller/outlet-table/outlet-table.module';
+import { CategoryModule } from './controller/category/category.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { OutletTableModule } from './controller/outlet-table/outlet-table.module
     ReviewModule,
     UploadModule,
     OutletTableModule,
+    CategoryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
