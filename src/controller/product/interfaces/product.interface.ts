@@ -4,6 +4,7 @@ export interface ProductDb {
   price: number;
   description: string;
   images: string[];
+  categoryList: string[];
   isActive: boolean;
   isDeleted: boolean;
   createdAt?: Date;

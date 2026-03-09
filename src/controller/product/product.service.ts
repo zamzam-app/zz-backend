@@ -36,6 +36,11 @@ export class ProductService {
       const limit = query.limit;
       const skip = limit ? (page - 1) * limit : 0;
 
+      const matchStage: Record<string, unknown> = { isDeleted: false };
+      if (query.categoryId) {
+        matchStage.categoryList = query.categoryId;
+      }
+
       const dataPipeline = limit ? [{ $skip: skip }, { $limit: limit }] : [];
 
       const [result] = await this.productModel
@@ -43,7 +48,7 @@ export class ProductService {
           data: Product[];
           totalCount: [{ count: number }];
         }>([
-          { $match: { isDeleted: false } },
+          { $match: matchStage },
           {
             $facet: {
               data: dataPipeline,
