@@ -171,7 +171,13 @@ export class ReviewService {
             from: 'outlets',
             let: { oid: '$outletId' },
             pipeline: [
-              { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
+              {
+                $match: {
+                  $expr: {
+                    $eq: [{ $toString: '$_id' }, { $toString: '$$oid' }],
+                  },
+                },
+              },
               { $project: { _id: 1, name: 1 } },
             ],
             as: 'outletIdLookup',
@@ -191,21 +197,13 @@ export class ReviewService {
         {
           $addFields: {
             userId: { $arrayElemAt: ['$userIdLookup', 0] },
-            outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
-            outletTableId: {
-              $cond: [
-                { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
-                { $arrayElemAt: ['$outletTableIdLookup', 0] },
-                null,
-              ],
+            outletId: {
+              $cond: {
+                if: { $gt: [{ $size: '$outletIdLookup' }, 0] },
+                then: { $arrayElemAt: ['$outletIdLookup', 0] },
+                else: '$outletId',
+              },
             },
-          },
-        },
-        {
-          $project: {
-            userIdLookup: 0,
-            outletIdLookup: 0,
-            outletTableIdLookup: 0,
           },
         },
         {
@@ -334,7 +332,13 @@ export class ReviewService {
               from: 'outlets',
               let: { oid: '$outletId' },
               pipeline: [
-                { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
+                {
+                  $match: {
+                    $expr: {
+                      $eq: [{ $toString: '$_id' }, { $toString: '$$oid' }],
+                    },
+                  },
+                },
                 {
                   $lookup: {
                     from: 'outlettypes',
@@ -381,21 +385,13 @@ export class ReviewService {
           {
             $addFields: {
               userId: { $arrayElemAt: ['$userIdLookup', 0] },
-              outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
-              outletTableId: {
-                $cond: [
-                  { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
-                  { $arrayElemAt: ['$outletTableIdLookup', 0] },
-                  null,
-                ],
+              outletId: {
+                $cond: {
+                  if: { $gt: [{ $size: '$outletIdLookup' }, 0] },
+                  then: { $arrayElemAt: ['$outletIdLookup', 0] },
+                  else: '$outletId',
+                },
               },
-            },
-          },
-          {
-            $project: {
-              userIdLookup: 0,
-              outletIdLookup: 0,
-              outletTableIdLookup: 0,
             },
           },
         ])
@@ -476,7 +472,13 @@ export class ReviewService {
               from: 'outlets',
               let: { oid: '$outletId' },
               pipeline: [
-                { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
+                {
+                  $match: {
+                    $expr: {
+                      $eq: [{ $toString: '$_id' }, { $toString: '$$oid' }],
+                    },
+                  },
+                },
                 {
                   $lookup: {
                     from: 'outlettypes',
@@ -523,21 +525,13 @@ export class ReviewService {
           {
             $addFields: {
               userId: { $arrayElemAt: ['$userIdLookup', 0] },
-              outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
-              outletTableId: {
-                $cond: [
-                  { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
-                  { $arrayElemAt: ['$outletTableIdLookup', 0] },
-                  null,
-                ],
+              outletId: {
+                $cond: {
+                  if: { $gt: [{ $size: '$outletIdLookup' }, 0] },
+                  then: { $arrayElemAt: ['$outletIdLookup', 0] },
+                  else: '$outletId',
+                },
               },
-            },
-          },
-          {
-            $project: {
-              userIdLookup: 0,
-              outletIdLookup: 0,
-              outletTableIdLookup: 0,
             },
           },
         ])
