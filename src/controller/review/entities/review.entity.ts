@@ -73,10 +73,10 @@ export class Review extends BaseEntity {
   })
   complaintStatus?: ComplaintStatus;
 
-  @Prop({ required: false, default: null })
+  @Prop({ type: String, required: false, default: null })
   complaintReason?: string | null;
 
-  @Prop({ required: false, default: null })
+  @Prop({ type: Date, required: false, default: null })
   resolvedAt?: Date | null;
 
   @Prop({
@@ -87,7 +87,7 @@ export class Review extends BaseEntity {
   })
   resolvedBy?: Types.ObjectId | null;
 
-  @Prop({ required: false, default: null })
+  @Prop({ type: String, required: false, default: null })
   resolutionNotes?: string | null;
 }
 
