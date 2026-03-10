@@ -11,7 +11,12 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
-import { Review, ReviewDocument } from './entities/review.entity';
+import {
+  ComplaintStatus,
+  Review,
+  ReviewDocument,
+  UserResponse,
+} from './entities/review.entity';
 import { Form, FormDocument } from '../forms/entities/form.entity';
 import {
   Question,
@@ -59,10 +64,12 @@ export class ReviewService {
         throw new NotFoundException('Form not found');
       }
 
-      const userResponses = createReviewDto.response.map((r) => ({
-        questionId: new Types.ObjectId(r.questionId),
-        answer: r.answer,
-      }));
+      const userResponses: UserResponse[] = createReviewDto.response.map(
+        (r) => ({
+          questionId: new Types.ObjectId(r.questionId),
+          answer: r.answer,
+        }),
+      );
 
       const overallRating = await this.computeOverallRatingFromResponses(
         createReviewDto.response,
@@ -71,7 +78,7 @@ export class ReviewService {
       const doc: Partial<Review> & {
         userId: string;
         outletId: string;
-        userResponses: any[];
+        userResponses: UserResponse[];
         overallRating: number;
         formId: string;
         outletTableId: Types.ObjectId | null;
@@ -82,6 +89,18 @@ export class ReviewService {
         overallRating,
         formId: createReviewDto.formId,
         outletTableId: null,
+        // Complaint fields: optional in DTO, explicit defaults so they are never empty
+        isComplaint: createReviewDto.isComplaint ?? false,
+        complaintStatus:
+          createReviewDto.complaintStatus ?? ComplaintStatus.PENDING,
+        complaintReason: createReviewDto.complaintReason ?? null,
+        resolvedAt: createReviewDto.resolvedAt
+          ? new Date(createReviewDto.resolvedAt)
+          : null,
+        resolvedBy: createReviewDto.resolvedBy
+          ? new Types.ObjectId(createReviewDto.resolvedBy)
+          : null,
+        resolutionNotes: createReviewDto.resolutionNotes ?? null,
       };
 
       if (createReviewDto.outletTableId) {
@@ -150,9 +169,9 @@ export class ReviewService {
         {
           $lookup: {
             from: 'outlets',
-            let: { oid: '$outletId' },
+            let: { oid: { $toObjectId: { $toString: '$outletId' } } },
             pipeline: [
-              { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
+              { $match: { $expr: { $eq: ['$_id', '$oid'] } } },
               { $project: { _id: 1, name: 1 } },
             ],
             as: 'outletIdLookup',
@@ -173,22 +192,9 @@ export class ReviewService {
           $addFields: {
             userId: { $arrayElemAt: ['$userIdLookup', 0] },
             outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
-            outletTableId: {
-              $cond: [
-                { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
-                { $arrayElemAt: ['$outletTableIdLookup', 0] },
-                null,
-              ],
-            },
           },
         },
-        {
-          $project: {
-            userIdLookup: 0,
-            outletIdLookup: 0,
-            outletTableIdLookup: 0,
-          },
-        },
+        { $project: { userIdLookup: 0, outletIdLookup: 0, outletIdObj: 0 } },
         {
           $lookup: {
             from: 'questions',
@@ -224,9 +230,7 @@ export class ReviewService {
                             $filter: {
                               input: '$questionsLookup',
                               as: 'q',
-                              cond: {
-                                $eq: ['$$q._id', '$$ur.questionId'],
-                              },
+                              cond: { $eq: ['$$q._id', '$$ur.questionId'] },
                             },
                           },
                           0,
@@ -315,7 +319,13 @@ export class ReviewService {
               from: 'outlets',
               let: { oid: '$outletId' },
               pipeline: [
-                { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
+                {
+                  $match: {
+                    $expr: {
+                      $eq: [{ $toString: '$_id' }, { $toString: '$$oid' }],
+                    },
+                  },
+                },
                 {
                   $lookup: {
                     from: 'outlettypes',
@@ -362,21 +372,13 @@ export class ReviewService {
           {
             $addFields: {
               userId: { $arrayElemAt: ['$userIdLookup', 0] },
-              outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
-              outletTableId: {
-                $cond: [
-                  { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
-                  { $arrayElemAt: ['$outletTableIdLookup', 0] },
-                  null,
-                ],
+              outletId: {
+                $cond: {
+                  if: { $gt: [{ $size: '$outletIdLookup' }, 0] },
+                  then: { $arrayElemAt: ['$outletIdLookup', 0] },
+                  else: '$outletId',
+                },
               },
-            },
-          },
-          {
-            $project: {
-              userIdLookup: 0,
-              outletIdLookup: 0,
-              outletTableIdLookup: 0,
             },
           },
         ])
@@ -457,7 +459,13 @@ export class ReviewService {
               from: 'outlets',
               let: { oid: '$outletId' },
               pipeline: [
-                { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
+                {
+                  $match: {
+                    $expr: {
+                      $eq: [{ $toString: '$_id' }, { $toString: '$$oid' }],
+                    },
+                  },
+                },
                 {
                   $lookup: {
                     from: 'outlettypes',
@@ -504,21 +512,13 @@ export class ReviewService {
           {
             $addFields: {
               userId: { $arrayElemAt: ['$userIdLookup', 0] },
-              outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
-              outletTableId: {
-                $cond: [
-                  { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
-                  { $arrayElemAt: ['$outletTableIdLookup', 0] },
-                  null,
-                ],
+              outletId: {
+                $cond: {
+                  if: { $gt: [{ $size: '$outletIdLookup' }, 0] },
+                  then: { $arrayElemAt: ['$outletIdLookup', 0] },
+                  else: '$outletId',
+                },
               },
-            },
-          },
-          {
-            $project: {
-              userIdLookup: 0,
-              outletIdLookup: 0,
-              outletTableIdLookup: 0,
             },
           },
         ])

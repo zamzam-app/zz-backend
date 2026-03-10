@@ -1,5 +1,8 @@
 import {
   IsArray,
+  IsBoolean,
+  IsDateString,
+  IsEnum,
   IsMongoId,
   IsNotEmpty,
   IsNumber,
@@ -8,6 +11,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ComplaintStatus } from '../entities/review.entity';
 
 export class ResponseDto {
   @IsMongoId()
@@ -52,4 +56,28 @@ export class CreateReviewDto {
   @IsNumber()
   @IsOptional()
   overallRating?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  isComplaint?: boolean;
+
+  @IsEnum(ComplaintStatus)
+  @IsOptional()
+  complaintStatus?: ComplaintStatus;
+
+  @IsString()
+  @IsOptional()
+  complaintReason?: string;
+
+  @IsDateString()
+  @IsOptional()
+  resolvedAt?: string;
+
+  @IsMongoId()
+  @IsOptional()
+  resolvedBy?: string;
+
+  @IsString()
+  @IsOptional()
+  resolutionNotes?: string;
 }

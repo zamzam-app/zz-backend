@@ -1,3 +1,5 @@
+import { IForm } from 'src/controller/forms/interfaces/form.interface';
+
 export interface IOutletMenuItem {
   productId: string;
   isAvailable: boolean;
@@ -22,4 +24,12 @@ export interface IOutlet {
   tables?: string[];
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+export interface OutletByQrTokenResult {
+  _id: string;
+  name: string;
+  form: IForm | null;
+  /** Present when the token was a tableToken (table QR). */
+  table?: { _id: string; name: string } | null;
 }
