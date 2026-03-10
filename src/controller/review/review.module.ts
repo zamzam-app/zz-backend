@@ -1,26 +1,27 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { OutletService } from './outlet.service';
-import { OutletController } from './outlet.controller';
-import { Outlet, OutletSchema } from './entities/outlet.entity';
+import { ReviewService } from './review.service';
+import { ReviewController } from './review.controller';
+import { Review, ReviewSchema } from './entities/review.entity';
 import { Form, FormSchema } from '../forms/entities/form.entity';
 import { Question, QuestionSchema } from '../question/entities/question.entity';
 import {
   OutletTable,
   OutletTableSchema,
 } from '../outlet-table/entities/outlet-table.entity';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
-      { name: Outlet.name, schema: OutletSchema },
+      { name: Review.name, schema: ReviewSchema },
       { name: Form.name, schema: FormSchema },
       { name: Question.name, schema: QuestionSchema },
       { name: OutletTable.name, schema: OutletTableSchema },
     ]),
+    UsersModule,
   ],
-  controllers: [OutletController],
-  providers: [OutletService],
-  exports: [OutletService],
+  controllers: [ReviewController],
+  providers: [ReviewService],
 })
-export class OutletModule {}
+export class ReviewModule {}

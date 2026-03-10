@@ -11,12 +11,21 @@ import { UpdateOutletDto } from './dto/update-outlet.dto';
 import { Outlet, OutletDocument } from './entities/outlet.entity';
 import { QueryOutletDto } from './dto/query-outlet.dto';
 import { FindAllOutletsResult } from './interface/query-outlet.interface';
+import { OutletByQrTokenResult } from './interface/outlet.interface';
 import { generateOutletQrToken } from '../../util/outlet-qr-token.util';
+import { Form, FormDocument } from '../forms/entities/form.entity';
+import {
+  OutletTable,
+  OutletTableDocument,
+} from '../outlet-table/entities/outlet-table.entity';
 
 @Injectable()
 export class OutletService {
   constructor(
     @InjectModel(Outlet.name) private outletModel: Model<OutletDocument>,
+    @InjectModel(Form.name) private formModel: Model<FormDocument>,
+    @InjectModel(OutletTable.name)
+    private outletTableModel: Model<OutletTableDocument>,
   ) {}
 
   async create(createOutletDto: CreateOutletDto): Promise<Outlet> {
@@ -175,6 +184,68 @@ export class OutletService {
       throw new NotFoundException(`Outlet with ID ${id} not found`);
     }
     return outlet;
+  }
+
+  async findByQrToken(qrToken: string): Promise<OutletByQrTokenResult> {
+    const token = qrToken?.trim() ?? '';
+    if (!token) {
+      throw new NotFoundException('Outlet not found');
+    }
+
+    let outlet = await this.outletModel
+      .findOne({ qrToken: token, isDeleted: false })
+      .exec();
+
+    let table: { _id: string; name: string } | null = null;
+
+    if (!outlet) {
+      const outletTable = await this.outletTableModel
+        .findOne({ tableToken: token, isDeleted: false })
+        .exec();
+      if (!outletTable) {
+        throw new NotFoundException('Outlet not found');
+      }
+      table = {
+        _id: outletTable._id.toString(),
+        name: outletTable.name,
+      };
+      const outletId = new Types.ObjectId(String(outletTable.outletId));
+      outlet = await this.outletModel
+        .findOne({ _id: outletId, isDeleted: false })
+        .exec();
+      if (!outlet) {
+        throw new NotFoundException('Outlet not found');
+      }
+    }
+
+    let form: FormDocument | null = null;
+    if (outlet.formId) {
+      const forms = await this.formModel
+        .aggregate<FormDocument>([
+          {
+            $match: {
+              _id: new Types.ObjectId(outlet.formId),
+              isDeleted: false,
+            },
+          },
+          {
+            $lookup: {
+              from: 'questions',
+              localField: 'questions',
+              foreignField: '_id',
+              as: 'questions',
+            },
+          },
+        ])
+        .exec();
+      form = (forms[0] as unknown as FormDocument) ?? null;
+    }
+    return {
+      _id: outlet._id.toString(),
+      name: outlet.name,
+      form: form ? (form as unknown as OutletByQrTokenResult['form']) : null,
+      ...(table && { table }),
+    };
   }
 
   async update(id: string, updateOutletDto: UpdateOutletDto): Promise<Outlet> {

@@ -43,12 +43,18 @@ export class AuthService {
       );
     }
 
+    await this.usersService.update(user._id.toString(), {
+      lastLoginAt: new Date().toISOString(),
+    });
     return this.login(user);
   }
 
   /** Request OTP: find user by phone or create new user, store OTP, return success. */
   async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {
-    let userDoc = await this.usersService.findOneByPhoneNumber(dto.phoneNumber);
+    let userDoc: UserDocument | null =
+      (await this.usersService.findOneByPhoneNumber(
+        dto.phoneNumber,
+      )) as UserDocument | null;
 
     if (userDoc) {
       const otp = createOtp();
@@ -76,29 +82,54 @@ export class AuthService {
     }
 
     // 2. Find or Create User (by userId if provided, else by phoneNumber)
-    let userDoc: UserDocument | (Record<string, unknown> & { _id: unknown });
+    let userDoc: UserDocument;
     const requestUserId = verifyOtpDto.userId;
     if (requestUserId) {
       const found = await this.usersService.findOne(requestUserId);
-      userDoc = found as unknown as Record<string, unknown> & { _id: unknown };
+      userDoc = found as unknown as UserDocument;
     } else {
       let byPhone = await this.usersService.findOneByPhoneNumber(
         verifyOtpDto.phoneNumber,
       );
+      if (!byPhone && verifyOtpDto.email) {
+        const { data: byEmail, userPresent } =
+          await this.usersService.findUserByIdentifiers({
+            email: verifyOtpDto.email,
+          });
+        if (userPresent && byEmail) byPhone = byEmail;
+      }
       if (!byPhone) {
         byPhone = await this.usersService.create({
           phoneNumber: verifyOtpDto.phoneNumber,
           role: UserRole.USER,
+          ...(verifyOtpDto.name && { name: verifyOtpDto.name }),
+          ...(verifyOtpDto.email && { email: verifyOtpDto.email }),
+          ...(verifyOtpDto.dob && { dob: verifyOtpDto.dob }),
         });
       }
-      userDoc = byPhone;
+      userDoc = byPhone as UserDocument;
     }
 
-    // 3. Clear OTP from DB after successful verification
     const userId = String(userDoc._id);
+
+    // 3. Update user: lastLoginAt on every OTP login, plus name/email/dob if provided
+    const profileUpdate: {
+      name?: string;
+      email?: string;
+      dob?: string;
+      lastLoginAt: string;
+    } = { lastLoginAt: new Date().toISOString() };
+    if (verifyOtpDto.name !== undefined) profileUpdate.name = verifyOtpDto.name;
+    if (verifyOtpDto.email !== undefined)
+      profileUpdate.email = verifyOtpDto.email;
+    if (verifyOtpDto.dob !== undefined) profileUpdate.dob = verifyOtpDto.dob;
+    const updated = await this.usersService.update(userId, profileUpdate);
+    userDoc = updated as unknown as UserDocument;
+
+    // 4. Clear OTP from DB after successful verification
     await this.usersService.clearOtp(userId);
 
-    // 4. Sanitize and Login (ensure otp/password never in response)
+    // 5. Sanitize and Login (ensure otp/password never in response)
     const raw =
       typeof (userDoc as { toObject?: () => unknown }).toObject === 'function'
         ? (userDoc as { toObject: () => unknown }).toObject()

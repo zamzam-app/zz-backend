@@ -10,7 +10,12 @@ export class User extends BaseEntity {
   @Prop({ required: false })
   name: string;
 
-  @Prop({ required: true, enum: UserRole, default: UserRole.USER })
+  @Prop({
+    required: true,
+    enum: UserRole,
+    default: UserRole.USER,
+    type: String,
+  })
   role: UserRole;
 
   @Prop({
@@ -21,7 +26,7 @@ export class User extends BaseEntity {
   addressId?: string;
 
   // Admin and Manager specific fields
-  @Prop({ required: false })
+  @Prop({ required: false, unique: true, sparse: true })
   email?: string;
 
   @Prop({ required: false, select: false })
@@ -34,7 +39,7 @@ export class User extends BaseEntity {
   outlets?: string[];
 
   // User specific fields
-  @Prop({ required: false })
+  @Prop({ required: false, unique: true, sparse: true })
   phoneNumber?: string;
 
   @Prop({ required: false, select: false })
@@ -45,6 +50,13 @@ export class User extends BaseEntity {
 
   @Prop({ required: false, type: Date, default: null })
   lastLoginAt?: Date;
+
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Review' }],
+    required: false,
+    default: [],
+  })
+  userReviews?: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

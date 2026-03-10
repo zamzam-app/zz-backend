@@ -1,8 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsInt, IsMongoId, IsOptional, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class QueryProductDto {
+export class QueryReviewDto {
   @ApiPropertyOptional({
     description: 'Page number',
     default: 1,
@@ -27,11 +27,13 @@ export class QueryProductDto {
   @Max(100)
   limit?: number;
 
-  @ApiPropertyOptional({
-    description:
-      'Filter products by category ID (products whose categoryList contains this ID)',
-  })
+  @ApiPropertyOptional({ description: 'Filter by outlet ID' })
   @IsOptional()
-  @IsString()
-  categoryId?: string;
+  @IsMongoId()
+  outletId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by user ID' })
+  @IsOptional()
+  @IsMongoId()
+  userId?: string;
 }
