@@ -30,4 +30,6 @@ export interface OutletByQrTokenResult {
   _id: string;
   name: string;
   form: IForm | null;
+  /** Present when the token was a tableToken (table QR). */
+  table?: { _id: string; name: string } | null;
 }

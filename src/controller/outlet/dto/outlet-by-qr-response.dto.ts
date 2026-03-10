@@ -14,4 +14,11 @@ export class OutletByQrTokenResponseDto {
     nullable: true,
   })
   form: IForm | null;
+
+  @ApiProperty({
+    description: 'Present when token was a table QR code: table _id and name',
+    required: false,
+    nullable: true,
+  })
+  table?: { _id: string; name: string } | null;
 }

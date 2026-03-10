@@ -59,7 +59,8 @@ export function ApiOutletFindByQrToken() {
   return applyDecorators(
     ApiOperation({ summary: 'Get outlet and form by QR token' }),
     ApiOkResponse({
-      description: 'Successfully retrieved outlet with populated form.',
+      description:
+        'Successfully retrieved outlet with populated form. When token is a table QR, includes table { _id, name }.',
       schema: {
         type: 'object',
         properties: {
@@ -69,6 +70,16 @@ export function ApiOutletFindByQrToken() {
             nullable: true,
             description:
               'Populated form document with questions, or null if outlet has no form',
+          },
+          table: {
+            nullable: true,
+            description:
+              'Present when token was a table QR code: { _id, name } of the table',
+            type: 'object',
+            properties: {
+              _id: { type: 'string', description: 'Table ID' },
+              name: { type: 'string', description: 'Table name' },
+            },
           },
         },
       },

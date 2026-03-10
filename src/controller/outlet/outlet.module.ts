@@ -5,6 +5,10 @@ import { OutletController } from './outlet.controller';
 import { Outlet, OutletSchema } from './entities/outlet.entity';
 import { Form, FormSchema } from '../forms/entities/form.entity';
 import { Question, QuestionSchema } from '../question/entities/question.entity';
+import {
+  OutletTable,
+  OutletTableSchema,
+} from '../outlet-table/entities/outlet-table.entity';
 
 @Module({
   imports: [
@@ -12,6 +16,7 @@ import { Question, QuestionSchema } from '../question/entities/question.entity';
       { name: Outlet.name, schema: OutletSchema },
       { name: Form.name, schema: FormSchema },
       { name: Question.name, schema: QuestionSchema },
+      { name: OutletTable.name, schema: OutletTableSchema },
     ]),
   ],
   controllers: [OutletController],
