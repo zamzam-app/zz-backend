@@ -169,15 +169,9 @@ export class ReviewService {
         {
           $lookup: {
             from: 'outlets',
-            let: { oid: '$outletId' },
+            let: { oid: { $toObjectId: { $toString: '$outletId' } } },
             pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $eq: [{ $toString: '$_id' }, { $toString: '$$oid' }],
-                  },
-                },
-              },
+              { $match: { $expr: { $eq: ['$_id', '$oid'] } } },
               { $project: { _id: 1, name: 1 } },
             ],
             as: 'outletIdLookup',
@@ -197,15 +191,10 @@ export class ReviewService {
         {
           $addFields: {
             userId: { $arrayElemAt: ['$userIdLookup', 0] },
-            outletId: {
-              $cond: {
-                if: { $gt: [{ $size: '$outletIdLookup' }, 0] },
-                then: { $arrayElemAt: ['$outletIdLookup', 0] },
-                else: '$outletId',
-              },
-            },
+            outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
           },
         },
+        { $project: { userIdLookup: 0, outletIdLookup: 0, outletIdObj: 0 } },
         {
           $lookup: {
             from: 'questions',
@@ -241,9 +230,7 @@ export class ReviewService {
                             $filter: {
                               input: '$questionsLookup',
                               as: 'q',
-                              cond: {
-                                $eq: ['$$q._id', '$$ur.questionId'],
-                              },
+                              cond: { $eq: ['$$q._id', '$$ur.questionId'] },
                             },
                           },
                           0,
