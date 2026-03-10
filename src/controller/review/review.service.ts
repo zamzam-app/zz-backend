@@ -68,7 +68,14 @@ export class ReviewService {
         createReviewDto.response,
       );
 
-      const doc: any = {
+      const doc: Partial<Review> & {
+        userId: string;
+        outletId: string;
+        userResponses: any[];
+        overallRating: number;
+        formId: string;
+        outletTableId: Types.ObjectId | null;
+      } = {
         userId: resolvedUser?._id?.toString() ?? createReviewDto.userId,
         outletId: createReviewDto.outletId,
         userResponses,
