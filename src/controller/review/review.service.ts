@@ -18,6 +18,10 @@ import {
   QuestionDocument,
   QuestionType,
 } from '../question/entities/question.entity';
+import {
+  OutletTable,
+  OutletTableDocument,
+} from '../outlet-table/entities/outlet-table.entity';
 import { FindAllReviewsResult } from './interfaces/query-review.interface';
 import { UsersService } from '../users/users.service';
 
@@ -30,6 +34,8 @@ export class ReviewService {
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     @InjectModel(Form.name) private formModel: Model<FormDocument>,
     @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
+    @InjectModel(OutletTable.name)
+    private outletTableModel: Model<OutletTableDocument>,
     private usersService: UsersService,
   ) {}
 
@@ -62,13 +68,31 @@ export class ReviewService {
         createReviewDto.response,
       );
 
-      const doc = {
+      const doc: any = {
         userId: resolvedUser?._id?.toString() ?? createReviewDto.userId,
         outletId: createReviewDto.outletId,
         userResponses,
         overallRating,
         formId: createReviewDto.formId,
+        outletTableId: null,
       };
+
+      if (createReviewDto.outletTableId) {
+        const table = await this.outletTableModel.findOne({
+          _id: createReviewDto.outletTableId,
+          isDeleted: false,
+        });
+
+        if (!table) {
+          throw new NotFoundException('Outlet table not found');
+        }
+
+        if (table.outletId.toString() !== createReviewDto.outletId) {
+          throw new BadRequestException('Table does not belong to this outlet');
+        }
+
+        doc.outletTableId = new Types.ObjectId(createReviewDto.outletTableId);
+      }
 
       const createdReview = new this.reviewModel(doc);
       const savedReview = await createdReview.save();
@@ -128,12 +152,36 @@ export class ReviewService {
           },
         },
         {
+          $lookup: {
+            from: 'outlettables',
+            let: { tid: '$outletTableId' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$_id', '$$tid'] } } },
+              { $project: { id: '$_id', name: 1, tableToken: 1, _id: 0 } },
+            ],
+            as: 'outletTableIdLookup',
+          },
+        },
+        {
           $addFields: {
             userId: { $arrayElemAt: ['$userIdLookup', 0] },
             outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
+            outletTableId: {
+              $cond: [
+                { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
+                { $arrayElemAt: ['$outletTableIdLookup', 0] },
+                null,
+              ],
+            },
           },
         },
-        { $project: { userIdLookup: 0, outletIdLookup: 0 } },
+        {
+          $project: {
+            userIdLookup: 0,
+            outletIdLookup: 0,
+            outletTableIdLookup: 0,
+          },
+        },
         {
           $lookup: {
             from: 'questions',
@@ -294,12 +342,36 @@ export class ReviewService {
             },
           },
           {
+            $lookup: {
+              from: 'outlettables',
+              let: { tid: '$outletTableId' },
+              pipeline: [
+                { $match: { $expr: { $eq: ['$_id', '$$tid'] } } },
+                { $project: { id: '$_id', name: 1, tableToken: 1, _id: 0 } },
+              ],
+              as: 'outletTableIdLookup',
+            },
+          },
+          {
             $addFields: {
               userId: { $arrayElemAt: ['$userIdLookup', 0] },
               outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
+              outletTableId: {
+                $cond: [
+                  { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
+                  { $arrayElemAt: ['$outletTableIdLookup', 0] },
+                  null,
+                ],
+              },
             },
           },
-          { $project: { userIdLookup: 0, outletIdLookup: 0 } },
+          {
+            $project: {
+              userIdLookup: 0,
+              outletIdLookup: 0,
+              outletTableIdLookup: 0,
+            },
+          },
         ])
         .exec();
 
@@ -412,12 +484,36 @@ export class ReviewService {
             },
           },
           {
+            $lookup: {
+              from: 'outlettables',
+              let: { tid: '$outletTableId' },
+              pipeline: [
+                { $match: { $expr: { $eq: ['$_id', '$$tid'] } } },
+                { $project: { id: '$_id', name: 1, tableToken: 1, _id: 0 } },
+              ],
+              as: 'outletTableIdLookup',
+            },
+          },
+          {
             $addFields: {
               userId: { $arrayElemAt: ['$userIdLookup', 0] },
               outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
+              outletTableId: {
+                $cond: [
+                  { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
+                  { $arrayElemAt: ['$outletTableIdLookup', 0] },
+                  null,
+                ],
+              },
             },
           },
-          { $project: { userIdLookup: 0, outletIdLookup: 0 } },
+          {
+            $project: {
+              userIdLookup: 0,
+              outletIdLookup: 0,
+              outletTableIdLookup: 0,
+            },
+          },
         ])
         .exec();
 

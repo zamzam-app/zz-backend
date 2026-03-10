@@ -35,6 +35,10 @@ export class CreateReviewDto {
   @IsNotEmpty()
   outletId: string;
 
+  @IsMongoId()
+  @IsOptional()
+  outletTableId?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ResponseDto)
