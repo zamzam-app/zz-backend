@@ -11,12 +11,15 @@ import { UpdateOutletDto } from './dto/update-outlet.dto';
 import { Outlet, OutletDocument } from './entities/outlet.entity';
 import { QueryOutletDto } from './dto/query-outlet.dto';
 import { FindAllOutletsResult } from './interface/query-outlet.interface';
+import { OutletByQrTokenResult } from './interface/outlet.interface';
 import { generateOutletQrToken } from '../../util/outlet-qr-token.util';
+import { Form, FormDocument } from '../forms/entities/form.entity';
 
 @Injectable()
 export class OutletService {
   constructor(
     @InjectModel(Outlet.name) private outletModel: Model<OutletDocument>,
+    @InjectModel(Form.name) private formModel: Model<FormDocument>,
   ) {}
 
   async create(createOutletDto: CreateOutletDto): Promise<Outlet> {
@@ -175,6 +178,31 @@ export class OutletService {
       throw new NotFoundException(`Outlet with ID ${id} not found`);
     }
     return outlet;
+  }
+
+  async findByQrToken(qrToken: string): Promise<OutletByQrTokenResult> {
+    const outlet = await this.outletModel
+      .findOne({ qrToken, isDeleted: false })
+      .exec();
+    if (!outlet) {
+      throw new NotFoundException('Outlet not found');
+    }
+    let form: FormDocument | null = null;
+    if (outlet.formId) {
+      const formDoc = await this.formModel
+        .findById(outlet.formId)
+        .populate('questions')
+        .exec();
+      form = formDoc ?? null;
+    }
+    return {
+      _id: outlet._id.toString(),
+      name: outlet.name,
+      // Cast to the shared IForm interface; toObject() gives us a plain object.
+      form: form
+        ? (form.toObject() as unknown as OutletByQrTokenResult['form'])
+        : null,
+    };
   }
 
   async update(id: string, updateOutletDto: UpdateOutletDto): Promise<Outlet> {

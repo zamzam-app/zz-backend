@@ -55,6 +55,28 @@ export function ApiOutletFindOne() {
   );
 }
 
+export function ApiOutletFindByQrToken() {
+  return applyDecorators(
+    ApiOperation({ summary: 'Get outlet and form by QR token' }),
+    ApiOkResponse({
+      description: 'Successfully retrieved outlet with populated form.',
+      schema: {
+        type: 'object',
+        properties: {
+          _id: { type: 'string', description: 'Outlet ID' },
+          name: { type: 'string', description: 'Outlet name' },
+          form: {
+            nullable: true,
+            description:
+              'Populated form document with questions, or null if outlet has no form',
+          },
+        },
+      },
+    }),
+    ApiNotFoundResponse({ description: 'Outlet not found.' }),
+  );
+}
+
 export function ApiOutletUpdate() {
   return applyDecorators(
     ApiOperation({ summary: 'Update an outlet by ID' }),
