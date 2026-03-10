@@ -11,6 +11,10 @@ export interface IReview {
   isDeleted: boolean;
   userId: string;
   outletId: string;
+  outletTableId?:
+    | string
+    | { id: string; name: string; tableToken: string }
+    | null;
   userResponses: IUserResponse[];
   overallRating: number;
   formId?: string;

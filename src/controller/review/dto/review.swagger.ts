@@ -44,6 +44,12 @@ export class CreateReviewDtoSwagger {
   })
   outletId: string;
 
+  @ApiPropertyOptional({
+    example: '60d5ecb86217152c9043e02d',
+    description: 'MongoDB ObjectId of the outlet table',
+  })
+  outletTableId?: string;
+
   @ApiProperty({
     example: [
       {

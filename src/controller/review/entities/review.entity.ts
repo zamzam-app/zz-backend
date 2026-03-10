@@ -45,6 +45,14 @@ export class Review extends BaseEntity {
   })
   outletId: string;
 
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'OutletTable',
+    required: false,
+    default: null,
+  })
+  outletTableId?: ObjectId | null;
+
   @Prop({ required: true, type: [UserResponseSchema] })
   userResponses: UserResponse[];
 
