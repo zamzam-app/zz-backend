@@ -17,6 +17,9 @@ export class Product extends BaseEntity {
 
   @Prop({ type: [String], required: true })
   images: string[];
+
+  @Prop({ type: [String], required: false, default: [] })
+  categoryList: string[];
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);

@@ -6,49 +6,44 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { CreateProductDto } from './dto/create-product.dto';
-import { QueryProductDto } from './dto/query-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
-import { Product, ProductDocument } from './entities/product.entity';
-import { FindAllProductsResult } from './interfaces/query-product.interface';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { QueryCategoryDto } from './dto/query-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
+import { Category, CategoryDocument } from './entities/category.entity';
+import { FindAllCategoriesResult } from './interfaces/query-category.interface';
 
 @Injectable()
-export class ProductService {
+export class CategoryService {
   constructor(
-    @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+    @InjectModel(Category.name) private categoryModel: Model<CategoryDocument>,
   ) {}
 
-  async create(createProductDto: CreateProductDto): Promise<Product> {
+  async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
     try {
-      const createdProduct = new this.productModel(createProductDto);
-      return await createdProduct.save();
+      const createdCategory = new this.categoryModel(createCategoryDto);
+      return await createdCategory.save();
     } catch (err) {
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(
-        err instanceof Error ? err.message : 'Failed to create product',
+        err instanceof Error ? err.message : 'Failed to create category',
       );
     }
   }
 
-  async findAll(query: QueryProductDto): Promise<FindAllProductsResult> {
+  async findAll(query: QueryCategoryDto): Promise<FindAllCategoriesResult> {
     try {
       const page = query.page ?? 1;
       const limit = query.limit;
       const skip = limit ? (page - 1) * limit : 0;
 
-      const matchStage: Record<string, unknown> = { isDeleted: false };
-      if (query.categoryId) {
-        matchStage.categoryList = query.categoryId;
-      }
-
       const dataPipeline = limit ? [{ $skip: skip }, { $limit: limit }] : [];
 
-      const [result] = await this.productModel
+      const [result] = await this.categoryModel
         .aggregate<{
-          data: Product[];
+          data: Category[];
           totalCount: [{ count: number }];
         }>([
-          { $match: matchStage },
+          { $match: { isDeleted: false } },
           {
             $facet: {
               data: dataPipeline,
@@ -74,59 +69,59 @@ export class ProductService {
     } catch (err) {
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(
-        err instanceof Error ? err.message : 'Failed to fetch products',
+        err instanceof Error ? err.message : 'Failed to fetch categories',
       );
     }
   }
 
-  async findOne(id: string): Promise<Product> {
+  async findOne(id: string): Promise<Category> {
     try {
-      const [product] = await this.productModel
-        .aggregate<Product>([
+      const [category] = await this.categoryModel
+        .aggregate<Category>([
           { $match: { _id: new Types.ObjectId(id), isDeleted: false } },
           { $limit: 1 },
         ])
         .exec();
-      if (!product) {
-        throw new NotFoundException(`Product with ID ${id} not found`);
+      if (!category) {
+        throw new NotFoundException(`Category with ID ${id} not found`);
       }
-      return product;
+      return category;
     } catch (err) {
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(
-        err instanceof Error ? err.message : 'Failed to fetch product',
+        err instanceof Error ? err.message : 'Failed to fetch category',
       );
     }
   }
 
   async update(
     id: string,
-    updateProductDto: UpdateProductDto,
-  ): Promise<Product> {
+    updateCategoryDto: UpdateCategoryDto,
+  ): Promise<Category> {
     try {
-      const existingProduct = await this.productModel
+      const existingCategory = await this.categoryModel
         .findOneAndUpdate(
           { _id: new Types.ObjectId(id), isDeleted: false },
-          [{ $set: updateProductDto as Record<string, unknown> }],
+          [{ $set: updateCategoryDto as Record<string, unknown> }],
           { new: true, updatePipeline: true },
         )
         .exec();
 
-      if (!existingProduct) {
-        throw new NotFoundException(`Product with ID ${id} not found`);
+      if (!existingCategory) {
+        throw new NotFoundException(`Category with ID ${id} not found`);
       }
-      return existingProduct;
+      return existingCategory;
     } catch (err) {
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(
-        err instanceof Error ? err.message : 'Failed to update product',
+        err instanceof Error ? err.message : 'Failed to update category',
       );
     }
   }
 
-  async remove(id: string): Promise<Product> {
+  async remove(id: string): Promise<Category> {
     try {
-      const deletedProduct = await this.productModel
+      const deletedCategory = await this.categoryModel
         .findOneAndUpdate(
           { _id: id, isDeleted: false },
           { isDeleted: true },
@@ -134,14 +129,14 @@ export class ProductService {
         )
         .exec();
 
-      if (!deletedProduct) {
-        throw new NotFoundException(`Product with ID ${id} not found`);
+      if (!deletedCategory) {
+        throw new NotFoundException(`Category with ID ${id} not found`);
       }
-      return deletedProduct;
+      return deletedCategory;
     } catch (err) {
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(
-        err instanceof Error ? err.message : 'Failed to remove product',
+        err instanceof Error ? err.message : 'Failed to remove category',
       );
     }
   }

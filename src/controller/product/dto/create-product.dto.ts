@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateProductDto {
   @ApiProperty({ example: 'Wireless Headphones', description: 'Product name' })
@@ -40,4 +41,14 @@ export class CreateProductDto {
   @IsBoolean()
   @IsOptional()
   isActive: boolean;
+
+  @ApiPropertyOptional({
+    example: ['60d5ecb86217152c9043e02d'],
+    description: 'Array of category IDs this product belongs to',
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  categoryList?: string[];
 }

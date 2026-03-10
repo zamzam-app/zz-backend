@@ -16,15 +16,18 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   ApiOutletCreate,
   ApiOutletFindAll,
+  ApiOutletFindByQrToken,
   ApiOutletFindOne,
   ApiOutletRemove,
   ApiOutletUpdate,
 } from './dto/outlet.swagger';
+import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/interfaces/user.interface';
 import { QueryOutletDto } from './dto/query-outlet.dto';
+import { OutletByQrTokenResult } from './interface/outlet.interface';
 
 @ApiTags('outlet')
 @ApiBearerAuth('JWT-auth')
@@ -45,6 +48,15 @@ export class OutletController {
   @ApiOutletFindAll()
   findAll(@Query() query: QueryOutletDto) {
     return this.outletService.findAll(query);
+  }
+
+  @Get('by-qr/:qrToken')
+  @Public()
+  @ApiOutletFindByQrToken()
+  findByQrToken(
+    @Param('qrToken') qrToken: string,
+  ): Promise<OutletByQrTokenResult> {
+    return this.outletService.findByQrToken(qrToken);
   }
 
   @Get(':id')
