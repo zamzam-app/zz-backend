@@ -8,6 +8,12 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { QueryCsatTrendlineDto } from './dto/query-csat-trendline.dto';
+import {
+  AnalyticsPeriod,
+  QueryGlobalCsatDto,
+} from './dto/query-global-csat.dto';
+import { QueryIncidentsOverviewDto } from './dto/query-incidents-overview.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
@@ -32,6 +38,51 @@ import { UsersService } from '../users/users.service';
 
 const VALID_MAX_RATINGS = new Set([3, 5, 10]);
 const OVERALL_RATING_SCALE = { min: 1, max: 5 };
+const PERIOD_DAYS_MAP: Record<AnalyticsPeriod, number> = {
+  [AnalyticsPeriod.DAILY]: 1,
+  [AnalyticsPeriod.WEEKLY]: 7,
+  [AnalyticsPeriod.MONTHLY]: 30,
+};
+
+type GlobalCsatResult = {
+  globalCsatScore: number;
+  averageOverallRating: number;
+  totalRatings: number;
+  totalScore: number;
+  period?: AnalyticsPeriod;
+  startDate?: string;
+  endDate?: string;
+};
+
+type CsatTrendlinePeriodResult = {
+  startDate: string;
+  endDate: string;
+  labels: string[];
+  values: number[];
+  totalRatings: number;
+};
+
+type CsatTrendlineResult = {
+  period: AnalyticsPeriod;
+  currentPeriod: CsatTrendlinePeriodResult;
+  previousPeriod: CsatTrendlinePeriodResult;
+};
+
+type IncidentsOverviewResult = {
+  totalOpenIncidents: number;
+  criticalIssues: number;
+  incidentsResolvedToday: number;
+  resolvedTodayDate: string;
+  period?: AnalyticsPeriod;
+  startDate?: string;
+  endDate?: string;
+};
+
+type AnalyticsRangeQuery = {
+  period?: AnalyticsPeriod;
+  startDate?: string;
+  endDate?: string;
+};
 
 @Injectable()
 export class ReviewService {
@@ -372,13 +423,21 @@ export class ReviewService {
           {
             $addFields: {
               userId: { $arrayElemAt: ['$userIdLookup', 0] },
-              outletId: {
-                $cond: {
-                  if: { $gt: [{ $size: '$outletIdLookup' }, 0] },
-                  then: { $arrayElemAt: ['$outletIdLookup', 0] },
-                  else: '$outletId',
-                },
+              outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
+              outletTableId: {
+                $cond: [
+                  { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
+                  { $arrayElemAt: ['$outletTableIdLookup', 0] },
+                  null,
+                ],
               },
+            },
+          },
+          {
+            $project: {
+              userIdLookup: 0,
+              outletIdLookup: 0,
+              outletTableIdLookup: 0,
             },
           },
         ])
@@ -512,13 +571,21 @@ export class ReviewService {
           {
             $addFields: {
               userId: { $arrayElemAt: ['$userIdLookup', 0] },
-              outletId: {
-                $cond: {
-                  if: { $gt: [{ $size: '$outletIdLookup' }, 0] },
-                  then: { $arrayElemAt: ['$outletIdLookup', 0] },
-                  else: '$outletId',
-                },
+              outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
+              outletTableId: {
+                $cond: [
+                  { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
+                  { $arrayElemAt: ['$outletTableIdLookup', 0] },
+                  null,
+                ],
               },
+            },
+          },
+          {
+            $project: {
+              userIdLookup: 0,
+              outletIdLookup: 0,
+              outletTableIdLookup: 0,
             },
           },
         ])
@@ -671,5 +738,469 @@ export class ReviewService {
           'Failed to resolve complaint',
       );
     }
+  }
+
+  async getGlobalCsat(query: QueryGlobalCsatDto): Promise<GlobalCsatResult> {
+    try {
+      const { period, appliedStartDate, appliedEndDate } =
+        this.resolveAnalyticsRange(query);
+      const matchStage: Record<string, unknown> = { isDeleted: false };
+
+      if (appliedStartDate && appliedEndDate) {
+        matchStage.createdAt = {
+          $gte: appliedStartDate,
+          $lte: appliedEndDate,
+        };
+      }
+
+      const [summary] = await this.reviewModel
+        .aggregate<{
+          totalRatings: number;
+          totalScore: number;
+          averageOverallRating: number;
+        }>([
+          { $match: matchStage },
+          {
+            $group: {
+              _id: null,
+              totalRatings: { $sum: 1 },
+              totalScore: { $sum: '$overallRating' },
+              averageOverallRating: { $avg: '$overallRating' },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              totalRatings: 1,
+              totalScore: 1,
+              averageOverallRating: 1,
+            },
+          },
+        ])
+        .exec();
+
+      const totalRatings = summary?.totalRatings ?? 0;
+      const totalScore = summary?.totalScore ?? 0;
+      const averageOverallRatingRaw = summary?.averageOverallRating ?? 0;
+      const averageOverallRating =
+        Math.round(averageOverallRatingRaw * 10) / 10;
+
+      return {
+        globalCsatScore: averageOverallRating,
+        averageOverallRating,
+        totalRatings,
+        totalScore: Math.round(totalScore * 10) / 10,
+        ...(period ? { period } : {}),
+        ...(appliedStartDate
+          ? { startDate: appliedStartDate.toISOString() }
+          : {}),
+        ...(appliedEndDate ? { endDate: appliedEndDate.toISOString() } : {}),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch global CSAT',
+      );
+    }
+  }
+
+  async getIncidentsOverview(
+    query: QueryIncidentsOverviewDto,
+  ): Promise<IncidentsOverviewResult> {
+    try {
+      const { period, appliedStartDate, appliedEndDate } =
+        this.resolveAnalyticsRange(query);
+
+      const selectedRangeMatch: Record<string, unknown> = {
+        isDeleted: false,
+        isComplaint: true,
+      };
+
+      if (appliedStartDate && appliedEndDate) {
+        selectedRangeMatch.createdAt = {
+          $gte: appliedStartDate,
+          $lte: appliedEndDate,
+        };
+      }
+
+      const now = new Date();
+      const todayStart = new Date(now);
+      todayStart.setUTCHours(0, 0, 0, 0);
+      const todayEnd = new Date(todayStart);
+      todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+      todayEnd.setMilliseconds(todayEnd.getMilliseconds() - 1);
+
+      const [result] = await this.reviewModel
+        .aggregate<{
+          totalOpenIncidents: { count: number }[];
+          criticalIssues: { count: number }[];
+          incidentsResolvedToday: { count: number }[];
+        }>([
+          {
+            $facet: {
+              totalOpenIncidents: [
+                {
+                  $match: {
+                    ...selectedRangeMatch,
+                    complaintStatus: ComplaintStatus.PENDING,
+                  },
+                },
+                { $count: 'count' },
+              ],
+              criticalIssues: [
+                {
+                  $match: {
+                    ...selectedRangeMatch,
+                    complaintStatus: ComplaintStatus.PENDING,
+                    overallRating: { $lt: 2 },
+                  },
+                },
+                { $count: 'count' },
+              ],
+              incidentsResolvedToday: [
+                {
+                  $match: {
+                    isDeleted: false,
+                    isComplaint: true,
+                    complaintStatus: ComplaintStatus.RESOLVED,
+                    resolvedAt: {
+                      $gte: todayStart,
+                      $lte: todayEnd,
+                    },
+                  },
+                },
+                { $count: 'count' },
+              ],
+            },
+          },
+        ])
+        .exec();
+
+      return {
+        totalOpenIncidents: result?.totalOpenIncidents?.[0]?.count ?? 0,
+        criticalIssues: result?.criticalIssues?.[0]?.count ?? 0,
+        incidentsResolvedToday: result?.incidentsResolvedToday?.[0]?.count ?? 0,
+        resolvedTodayDate: todayStart.toISOString().slice(0, 10),
+        ...(period ? { period } : {}),
+        ...(appliedStartDate
+          ? { startDate: appliedStartDate.toISOString() }
+          : {}),
+        ...(appliedEndDate ? { endDate: appliedEndDate.toISOString() } : {}),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch incidents overview',
+      );
+    }
+  }
+
+  private resolveAnalyticsRange(query: AnalyticsRangeQuery): {
+    period?: AnalyticsPeriod;
+    appliedStartDate?: Date;
+    appliedEndDate?: Date;
+  } {
+    const { period, startDate, endDate } = query;
+    let appliedStartDate: Date | undefined;
+    let appliedEndDate: Date | undefined;
+
+    if ((startDate && !endDate) || (!startDate && endDate)) {
+      throw new BadRequestException(
+        'startDate and endDate must be provided together',
+      );
+    }
+
+    if (startDate && endDate) {
+      appliedStartDate = new Date(startDate);
+      appliedEndDate = new Date(endDate);
+    } else if (period) {
+      const days = PERIOD_DAYS_MAP[period];
+      appliedEndDate = new Date();
+      appliedStartDate = new Date(appliedEndDate);
+      appliedStartDate.setUTCDate(appliedStartDate.getUTCDate() - (days - 1));
+      appliedStartDate.setUTCHours(0, 0, 0, 0);
+    }
+
+    if (
+      (appliedStartDate && Number.isNaN(appliedStartDate.getTime())) ||
+      (appliedEndDate && Number.isNaN(appliedEndDate.getTime()))
+    ) {
+      throw new BadRequestException('Invalid date range');
+    }
+
+    if (
+      appliedStartDate &&
+      appliedEndDate &&
+      appliedStartDate > appliedEndDate
+    ) {
+      throw new BadRequestException('startDate must be before endDate');
+    }
+
+    return { period, appliedStartDate, appliedEndDate };
+  }
+
+  async getCsatTrendline(
+    query: QueryCsatTrendlineDto,
+  ): Promise<CsatTrendlineResult> {
+    try {
+      const period = query.period ?? AnalyticsPeriod.MONTHLY;
+      const now = new Date();
+
+      const {
+        currentStart,
+        currentEnd,
+        previousStart,
+        previousEnd,
+        bucketCount,
+        labels,
+      } = this.getTrendlineConfig(period, now);
+
+      const currentPeriod = await this.aggregateTrendlineWindow(
+        currentStart,
+        currentEnd,
+        bucketCount,
+        labels,
+      );
+
+      const previousPeriod = await this.aggregateTrendlineWindow(
+        previousStart,
+        previousEnd,
+        bucketCount,
+        labels,
+      );
+
+      return {
+        period,
+        currentPeriod,
+        previousPeriod,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch CSAT trendline',
+      );
+    }
+  }
+
+  private getTrendlineConfig(
+    period: AnalyticsPeriod,
+    now: Date,
+  ): {
+    currentStart: Date;
+    currentEnd: Date;
+    previousStart: Date;
+    previousEnd: Date;
+    bucketCount: number;
+    labels: string[];
+  } {
+    if (period === AnalyticsPeriod.DAILY) {
+      const currentStart = new Date(now);
+      currentStart.setUTCHours(0, 0, 0, 0);
+
+      const currentEnd = now;
+      const previousStart = new Date(currentStart);
+      previousStart.setUTCDate(previousStart.getUTCDate() - 1);
+      const previousEnd = new Date(currentEnd);
+      previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
+
+      const bucketCount = 6;
+      const labels = this.buildTimeLabels(
+        currentStart,
+        currentEnd,
+        bucketCount,
+      );
+      return {
+        currentStart,
+        currentEnd,
+        previousStart,
+        previousEnd,
+        bucketCount,
+        labels,
+      };
+    }
+
+    if (period === AnalyticsPeriod.WEEKLY) {
+      const currentEnd = now;
+      const currentStart = new Date(currentEnd);
+      currentStart.setUTCDate(currentStart.getUTCDate() - 6);
+      currentStart.setUTCHours(0, 0, 0, 0);
+
+      const previousEnd = new Date(currentStart);
+      previousEnd.setMilliseconds(previousEnd.getMilliseconds() - 1);
+      const previousStart = new Date(previousEnd);
+      previousStart.setUTCDate(previousStart.getUTCDate() - 6);
+      previousStart.setUTCHours(0, 0, 0, 0);
+
+      const bucketCount = 7;
+      const labels = this.buildDateLabels(
+        currentStart,
+        currentEnd,
+        bucketCount,
+      );
+      return {
+        currentStart,
+        currentEnd,
+        previousStart,
+        previousEnd,
+        bucketCount,
+        labels,
+      };
+    }
+
+    const currentEnd = now;
+    const currentStart = new Date(currentEnd);
+    currentStart.setUTCDate(currentStart.getUTCDate() - 29);
+    currentStart.setUTCHours(0, 0, 0, 0);
+
+    const previousEnd = new Date(currentStart);
+    previousEnd.setMilliseconds(previousEnd.getMilliseconds() - 1);
+    const previousStart = new Date(previousEnd);
+    previousStart.setUTCDate(previousStart.getUTCDate() - 29);
+    previousStart.setUTCHours(0, 0, 0, 0);
+
+    const bucketCount = 6;
+    const labels = this.buildDateLabels(currentStart, currentEnd, bucketCount);
+    return {
+      currentStart,
+      currentEnd,
+      previousStart,
+      previousEnd,
+      bucketCount,
+      labels,
+    };
+  }
+
+  private buildDateLabels(
+    start: Date,
+    end: Date,
+    bucketCount: number,
+  ): string[] {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: '2-digit',
+      timeZone: 'UTC',
+    });
+    const labels: string[] = [];
+    const span = end.getTime() - start.getTime();
+    const denominator = Math.max(1, bucketCount - 1);
+    const stepMs = Math.max(1, span / denominator);
+
+    for (let i = 0; i < bucketCount; i += 1) {
+      const point = new Date(start.getTime() + stepMs * i);
+      labels.push(formatter.format(point));
+    }
+    return labels;
+  }
+
+  private buildTimeLabels(
+    start: Date,
+    end: Date,
+    bucketCount: number,
+  ): string[] {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'UTC',
+    });
+    const labels: string[] = [];
+    const span = end.getTime() - start.getTime();
+    const denominator = Math.max(1, bucketCount - 1);
+    const stepMs = Math.max(1, span / denominator);
+
+    for (let i = 0; i < bucketCount; i += 1) {
+      const point = new Date(start.getTime() + stepMs * i);
+      labels.push(formatter.format(point));
+    }
+    return labels;
+  }
+
+  private async aggregateTrendlineWindow(
+    start: Date,
+    end: Date,
+    bucketCount: number,
+    labels: string[],
+  ): Promise<CsatTrendlinePeriodResult> {
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+    const bucketMs = Math.max(1, (endMs - startMs) / bucketCount);
+
+    const rows = await this.reviewModel
+      .aggregate<{
+        bucketIndex: number;
+        avgCsat: number;
+        totalRatings: number;
+      }>([
+        {
+          $match: {
+            isDeleted: false,
+            createdAt: {
+              $gte: start,
+              $lte: end,
+            },
+          },
+        },
+        {
+          $addFields: {
+            bucketIndex: {
+              $min: [
+                bucketCount - 1,
+                {
+                  $floor: {
+                    $divide: [
+                      {
+                        $subtract: [{ $toLong: '$createdAt' }, startMs],
+                      },
+                      bucketMs,
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {
+          $group: {
+            _id: '$bucketIndex',
+            avgCsat: { $avg: '$overallRating' },
+            totalRatings: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            bucketIndex: '$_id',
+            avgCsat: 1,
+            totalRatings: 1,
+          },
+        },
+      ])
+      .exec();
+
+    const values = Array.from({ length: bucketCount }, () => 0);
+    const ratingsPerBucket = Array.from({ length: bucketCount }, () => 0);
+
+    for (const row of rows) {
+      if (row.bucketIndex < 0 || row.bucketIndex >= bucketCount) continue;
+      const rounded = Math.round((row.avgCsat ?? 0) * 10) / 10;
+      values[row.bucketIndex] = rounded;
+      ratingsPerBucket[row.bucketIndex] = row.totalRatings ?? 0;
+    }
+
+    const totalRatings = ratingsPerBucket.reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+
+    return {
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+      labels,
+      values,
+      totalRatings,
+    };
   }
 }
