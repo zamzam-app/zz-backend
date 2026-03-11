@@ -45,3 +45,9 @@ export class OutletTable extends BaseEntity {
 
 export const OutletTableSchema = SchemaFactory.createForClass(OutletTable);
 OutletTableSchema.index({ outletId: 1, name: 1 }, { unique: true });
+OutletTableSchema.index({
+  isDeleted: 1,
+  outletId: 1,
+  status: 1,
+  createdAt: -1,
+});

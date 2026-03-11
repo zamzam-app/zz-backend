@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "mongodb-indexing-optimization": {
+      "source": "pluginagentmarketplace/custom-plugin-mongodb",
+      "sourceType": "github",
+      "computedHash": "985ef23229f689ca2429f03c097951e89291441c6a2b231122739ec6e25ecc5e"
+    },
+    "mongodb-security-admin": {
+      "source": "pluginagentmarketplace/custom-plugin-mongodb",
+      "sourceType": "github",
+      "computedHash": "f9a3b5bc80a3ce02e61ef40ff6065b1aca91821a755a9b94529293b0f5cc1d7f"
+    }
+  }
+}
