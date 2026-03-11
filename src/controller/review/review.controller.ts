@@ -19,6 +19,7 @@ import { QueryIncidentsOverviewDto } from './dto/query-incidents-overview.dto';
 import { QueryOutletFeedbackDto } from './dto/query-outlet-feedback.dto';
 import {
   ApiReviewCsatTrendline,
+  ApiReviewFranchiseAnalytics,
   ApiReviewGlobalCsat,
   ApiReviewIncidentsOverview,
   ApiReviewOutletFeedbackSummary,
@@ -65,6 +66,12 @@ export class ReviewController {
   @ApiReviewOutletFeedbackSummary()
   getOutletFeedbackSummary(@Query() query: QueryOutletFeedbackDto) {
     return this.reviewService.getOutletFeedbackSummary(query);
+  }
+
+  @Get('analytics/franchise')
+  @ApiReviewFranchiseAnalytics()
+  getFranchiseAnalytics(@Query() query: QueryGlobalCsatDto) {
+    return this.reviewService.getFranchiseAnalytics(query);
   }
 
   @Post('resolve-complaint/:reviewId')

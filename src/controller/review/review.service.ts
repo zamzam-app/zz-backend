@@ -37,6 +37,7 @@ import { Outlet, OutletDocument } from '../outlet/entities/outlet.entity';
 import { FindAllReviewsResult } from './interfaces/query-review.interface';
 import { UsersService } from '../users/users.service';
 import { QueryOutletFeedbackDto } from './dto/query-outlet-feedback.dto';
+import { FranchiseAnalyticsResponseDto } from './dto/franchise-analytics-response.dto';
 
 const VALID_MAX_RATINGS = new Set([3, 5, 10]);
 const OVERALL_RATING_SCALE = { min: 1, max: 5 };
@@ -1044,6 +1045,232 @@ export class ReviewService {
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch outlet feedback summary',
+      );
+    }
+  }
+
+  async getFranchiseAnalytics(
+    query: QueryGlobalCsatDto,
+  ): Promise<FranchiseAnalyticsResponseDto> {
+    try {
+      const { appliedStartDate, appliedEndDate } =
+        this.resolveAnalyticsRange(query);
+
+      const matchStage: Record<string, any> = { isDeleted: false };
+      if (appliedStartDate && appliedEndDate) {
+        matchStage.createdAt = {
+          $gte: appliedStartDate,
+          $lte: appliedEndDate,
+        };
+      }
+
+      const results = await this.reviewModel
+        .aggregate([
+          { $match: matchStage },
+          {
+            $lookup: {
+              from: 'questions',
+              localField: 'userResponses.questionId',
+              foreignField: '_id',
+              as: 'questions',
+            },
+          },
+          {
+            $addFields: {
+              userResponses: {
+                $map: {
+                  input: '$userResponses',
+                  as: 'ur',
+                  in: {
+                    $mergeObjects: [
+                      '$$ur',
+                      {
+                        questionTitle: {
+                          $arrayElemAt: [
+                            {
+                              $filter: {
+                                input: '$questions',
+                                as: 'q',
+                                cond: { $eq: ['$$q._id', '$$ur.questionId'] },
+                              },
+                            },
+                            0,
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+          {
+            $addFields: {
+              userResponses: {
+                $map: {
+                  input: '$userResponses',
+                  as: 'ur',
+                  in: {
+                    $mergeObjects: [
+                      '$$ur',
+                      { questionTitle: '$$ur.questionTitle.title' },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+          {
+            $group: {
+              _id: '$outletId',
+              overall: { $avg: '$overallRating' },
+              staff: {
+                $avg: {
+                  $reduce: {
+                    input: '$userResponses',
+                    initialValue: null,
+                    in: {
+                      $cond: [
+                        {
+                          $regexMatch: {
+                            input: '$$this.questionTitle',
+                            regex: /staff/i,
+                          },
+                        },
+                        { $toDouble: '$$this.answer' },
+                        '$$value',
+                      ],
+                    },
+                  },
+                },
+              },
+              speed: {
+                $avg: {
+                  $reduce: {
+                    input: '$userResponses',
+                    initialValue: null,
+                    in: {
+                      $cond: [
+                        {
+                          $regexMatch: {
+                            input: '$$this.questionTitle',
+                            regex: /speed/i,
+                          },
+                        },
+                        { $toDouble: '$$this.answer' },
+                        '$$value',
+                      ],
+                    },
+                  },
+                },
+              },
+              clean: {
+                $avg: {
+                  $reduce: {
+                    input: '$userResponses',
+                    initialValue: null,
+                    in: {
+                      $cond: [
+                        {
+                          $regexMatch: {
+                            input: '$$this.questionTitle',
+                            regex: /clean/i,
+                          },
+                        },
+                        { $toDouble: '$$this.answer' },
+                        '$$value',
+                      ],
+                    },
+                  },
+                },
+              },
+              quality: {
+                $avg: {
+                  $reduce: {
+                    input: '$userResponses',
+                    initialValue: null,
+                    in: {
+                      $cond: [
+                        {
+                          $regexMatch: {
+                            input: '$$this.questionTitle',
+                            regex: /quality/i,
+                          },
+                        },
+                        { $toDouble: '$$this.answer' },
+                        '$$value',
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: 'outlets',
+              localField: '_id',
+              foreignField: '_id',
+              as: 'outlet',
+            },
+          },
+          { $unwind: '$outlet' },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'outlet.managerId',
+              foreignField: '_id',
+              as: 'manager',
+            },
+          },
+          {
+            $unwind: {
+              path: '$manager',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          {
+            $project: {
+              outletId: { $toString: '$_id' },
+              outletName: '$outlet.name',
+              managerName: { $ifNull: ['$manager.name', null] },
+              csatScore: { $round: ['$overall', 1] },
+              metrics: {
+                staff: { $ifNull: [{ $round: ['$staff', 1] }, 0] },
+                speed: { $ifNull: [{ $round: ['$speed', 1] }, 0] },
+                clean: { $ifNull: [{ $round: ['$clean', 1] }, 0] },
+                quality: { $ifNull: [{ $round: ['$quality', 1] }, 0] },
+                overall: { $round: ['$overall', 1] },
+              },
+            },
+          },
+          { $sort: { csatScore: -1 } },
+        ])
+        .exec();
+
+      const franchiseRanking = results.map((r, index) => ({
+        rank: index + 1,
+        outletId: r.outletId,
+        outletName: r.outletName,
+        managerName: r.managerName,
+        csatScore: r.csatScore,
+      }));
+
+      const metricsHeatmap = results.map((r) => ({
+        outletId: r.outletId,
+        outletName: r.outletName,
+        metrics: r.metrics,
+      }));
+
+      return {
+        franchiseRanking,
+        metricsHeatmap,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch franchise analytics',
       );
     }
   }

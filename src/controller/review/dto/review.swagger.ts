@@ -11,6 +11,7 @@ import {
 } from '@nestjs/swagger';
 import { Review, ComplaintStatus } from '../entities/review.entity';
 import { AnalyticsPeriod } from './query-global-csat.dto';
+import { FranchiseAnalyticsResponseDto } from './franchise-analytics-response.dto';
 
 export class ResponseDtoSwagger {
   @ApiProperty({
@@ -101,6 +102,23 @@ export function ApiReviewFindAll() {
     ApiOkResponse({
       description: 'Return all active reviews.',
       type: [Review],
+    }),
+  );
+}
+
+export function ApiReviewFranchiseAnalytics() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get franchise analytics',
+      description:
+        'Returns franchise ranking and metrics heatmap for all outlets.',
+    }),
+    ApiOkResponse({
+      description: 'Franchise analytics fetched successfully.',
+      type: FranchiseAnalyticsResponseDto,
+    }),
+    ApiBadRequestResponse({
+      description: 'Invalid date range query.',
     }),
   );
 }
