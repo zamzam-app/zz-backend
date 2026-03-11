@@ -17,12 +17,14 @@ import { QueryCsatTrendlineDto } from './dto/query-csat-trendline.dto';
 import { QueryGlobalCsatDto } from './dto/query-global-csat.dto';
 import { QueryIncidentsOverviewDto } from './dto/query-incidents-overview.dto';
 import { QueryOutletFeedbackDto } from './dto/query-outlet-feedback.dto';
+import { QueryQuickInsightsDto } from './dto/query-quick-insights.dto';
 import {
   ApiReviewCsatTrendline,
   ApiReviewFranchiseAnalytics,
   ApiReviewGlobalCsat,
   ApiReviewIncidentsOverview,
   ApiReviewOutletFeedbackSummary,
+  ApiReviewQuickInsights,
   ApiReviewResolveComplaint,
 } from './dto/review.swagger';
 
@@ -72,6 +74,12 @@ export class ReviewController {
   @ApiReviewFranchiseAnalytics()
   getFranchiseAnalytics(@Query() query: QueryGlobalCsatDto) {
     return this.reviewService.getFranchiseAnalytics(query);
+  }
+
+  @Get('analytics/quick-insights')
+  @ApiReviewQuickInsights()
+  getQuickInsights(@Query() query: QueryQuickInsightsDto) {
+    return this.reviewService.getQuickInsights(query);
   }
 
   @Post('resolve-complaint/:reviewId')
