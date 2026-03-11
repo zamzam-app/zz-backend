@@ -33,8 +33,10 @@ import {
   OutletTable,
   OutletTableDocument,
 } from '../outlet-table/entities/outlet-table.entity';
+import { Outlet, OutletDocument } from '../outlet/entities/outlet.entity';
 import { FindAllReviewsResult } from './interfaces/query-review.interface';
 import { UsersService } from '../users/users.service';
+import { QueryOutletFeedbackDto } from './dto/query-outlet-feedback.dto';
 
 const VALID_MAX_RATINGS = new Set([3, 5, 10]);
 const OVERALL_RATING_SCALE = { min: 1, max: 5 };
@@ -78,6 +80,21 @@ type IncidentsOverviewResult = {
   endDate?: string;
 };
 
+type OutletFeedbackSummaryItem = {
+  outletId: string;
+  outletName: string;
+  negativeFeedbacks: number;
+  totalFeedbacks: number;
+  resolvedFeedbacks: number;
+};
+
+type OutletFeedbackSummaryResult = {
+  items: OutletFeedbackSummaryItem[];
+  period?: AnalyticsPeriod;
+  startDate?: string;
+  endDate?: string;
+};
+
 type AnalyticsRangeQuery = {
   period?: AnalyticsPeriod;
   startDate?: string;
@@ -92,6 +109,7 @@ export class ReviewService {
     @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
     @InjectModel(OutletTable.name)
     private outletTableModel: Model<OutletTableDocument>,
+    @InjectModel(Outlet.name) private outletModel: Model<OutletDocument>,
     private usersService: UsersService,
   ) {}
 
@@ -893,6 +911,139 @@ export class ReviewService {
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch incidents overview',
+      );
+    }
+  }
+
+  async getOutletFeedbackSummary(
+    query: QueryOutletFeedbackDto,
+  ): Promise<OutletFeedbackSummaryResult> {
+    try {
+      const { period, appliedStartDate, appliedEndDate } =
+        this.resolveAnalyticsRange(query);
+
+      const createdAtMatch =
+        appliedStartDate && appliedEndDate
+          ? { $gte: appliedStartDate, $lte: appliedEndDate }
+          : null;
+      const resolvedAtMatch =
+        appliedStartDate && appliedEndDate
+          ? { $gte: appliedStartDate, $lte: appliedEndDate }
+          : null;
+
+      const outlets = await this.outletModel
+        .aggregate<OutletFeedbackSummaryItem>([
+          { $match: { isDeleted: false } },
+          { $project: { name: 1 } },
+          {
+            $lookup: {
+              from: 'reviews',
+              let: { outletId: '$_id' },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ['$outletId', '$$outletId'] },
+                    isDeleted: false,
+                  },
+                },
+                {
+                  $facet: {
+                    totalFeedbacks: [
+                      ...(createdAtMatch
+                        ? [{ $match: { createdAt: createdAtMatch } }]
+                        : []),
+                      { $count: 'count' },
+                    ],
+                    negativeFeedbacks: [
+                      {
+                        $match: {
+                          $or: [
+                            { isComplaint: true },
+                            { overallRating: { $lt: 2.5 } },
+                          ],
+                          ...(createdAtMatch
+                            ? { createdAt: createdAtMatch }
+                            : {}),
+                        },
+                      },
+                      { $count: 'count' },
+                    ],
+                    resolvedFeedbacks: [
+                      {
+                        $match: {
+                          isComplaint: true,
+                          complaintStatus: ComplaintStatus.RESOLVED,
+                          ...(resolvedAtMatch
+                            ? { resolvedAt: resolvedAtMatch }
+                            : {}),
+                        },
+                      },
+                      { $count: 'count' },
+                    ],
+                  },
+                },
+              ],
+              as: 'feedbackStats',
+            },
+          },
+          {
+            $addFields: {
+              feedbackStats: { $arrayElemAt: ['$feedbackStats', 0] },
+            },
+          },
+          {
+            $addFields: {
+              totalFeedbacks: {
+                $ifNull: [
+                  { $arrayElemAt: ['$feedbackStats.totalFeedbacks.count', 0] },
+                  0,
+                ],
+              },
+              negativeFeedbacks: {
+                $ifNull: [
+                  {
+                    $arrayElemAt: ['$feedbackStats.negativeFeedbacks.count', 0],
+                  },
+                  0,
+                ],
+              },
+              resolvedFeedbacks: {
+                $ifNull: [
+                  {
+                    $arrayElemAt: ['$feedbackStats.resolvedFeedbacks.count', 0],
+                  },
+                  0,
+                ],
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              outletId: { $toString: '$_id' },
+              outletName: '$name',
+              negativeFeedbacks: 1,
+              totalFeedbacks: 1,
+              resolvedFeedbacks: 1,
+            },
+          },
+          { $sort: { outletName: 1 } },
+        ])
+        .exec();
+
+      return {
+        items: outlets ?? [],
+        ...(period ? { period } : {}),
+        ...(appliedStartDate
+          ? { startDate: appliedStartDate.toISOString() }
+          : {}),
+        ...(appliedEndDate ? { endDate: appliedEndDate.toISOString() } : {}),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch outlet feedback summary',
       );
     }
   }

@@ -16,10 +16,12 @@ import { UpdateReviewDto } from './dto/update-review.dto';
 import { QueryCsatTrendlineDto } from './dto/query-csat-trendline.dto';
 import { QueryGlobalCsatDto } from './dto/query-global-csat.dto';
 import { QueryIncidentsOverviewDto } from './dto/query-incidents-overview.dto';
+import { QueryOutletFeedbackDto } from './dto/query-outlet-feedback.dto';
 import {
   ApiReviewCsatTrendline,
   ApiReviewGlobalCsat,
   ApiReviewIncidentsOverview,
+  ApiReviewOutletFeedbackSummary,
   ApiReviewResolveComplaint,
 } from './dto/review.swagger';
 
@@ -57,6 +59,12 @@ export class ReviewController {
   @ApiReviewIncidentsOverview()
   getIncidentsOverview(@Query() query: QueryIncidentsOverviewDto) {
     return this.reviewService.getIncidentsOverview(query);
+  }
+
+  @Get('analytics/outlet-feedback-summary')
+  @ApiReviewOutletFeedbackSummary()
+  getOutletFeedbackSummary(@Query() query: QueryOutletFeedbackDto) {
+    return this.reviewService.getOutletFeedbackSummary(query);
   }
 
   @Post('resolve-complaint/:reviewId')

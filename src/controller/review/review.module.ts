@@ -9,6 +9,7 @@ import {
   OutletTable,
   OutletTableSchema,
 } from '../outlet-table/entities/outlet-table.entity';
+import { Outlet, OutletSchema } from '../outlet/entities/outlet.entity';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { UsersModule } from '../users/users.module';
       { name: Form.name, schema: FormSchema },
       { name: Question.name, schema: QuestionSchema },
       { name: OutletTable.name, schema: OutletTableSchema },
+      { name: Outlet.name, schema: OutletSchema },
     ]),
     UsersModule,
   ],

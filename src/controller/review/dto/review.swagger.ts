@@ -346,3 +346,77 @@ export function ApiReviewIncidentsOverview() {
     }),
   );
 }
+
+export class OutletFeedbackSummaryItemSwagger {
+  @ApiProperty({
+    example: '60d5ecb86217152c9043e02d',
+    description: 'MongoDB ObjectId of the outlet',
+  })
+  outletId: string;
+
+  @ApiProperty({
+    example: 'Outlet 1',
+    description: 'Outlet name',
+  })
+  outletName: string;
+
+  @ApiProperty({
+    example: 4,
+    description:
+      'Negative feedbacks in selected period (complaints or overallRating < 2.5)',
+  })
+  negativeFeedbacks: number;
+
+  @ApiProperty({
+    example: 12,
+    description: 'Total feedback received in selected period',
+  })
+  totalFeedbacks: number;
+
+  @ApiProperty({
+    example: 3,
+    description: 'Resolved complaints in selected period',
+  })
+  resolvedFeedbacks: number;
+}
+
+export class OutletFeedbackSummaryResponseSwagger {
+  @ApiProperty({ type: [OutletFeedbackSummaryItemSwagger] })
+  items: OutletFeedbackSummaryItemSwagger[];
+
+  @ApiPropertyOptional({
+    example: AnalyticsPeriod.WEEKLY,
+    enum: AnalyticsPeriod,
+    description: 'Applied preset period when provided',
+  })
+  period?: AnalyticsPeriod;
+
+  @ApiPropertyOptional({
+    example: '2026-02-10T00:00:00.000Z',
+    description: 'Applied date range start',
+  })
+  startDate?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-03-10T23:59:59.999Z',
+    description: 'Applied date range end',
+  })
+  endDate?: string;
+}
+
+export function ApiReviewOutletFeedbackSummary() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get outlet feedback summary',
+      description:
+        'Returns per-outlet counts for negative feedbacks, total feedback received, and resolved feedbacks.',
+    }),
+    ApiOkResponse({
+      description: 'Outlet feedback summary fetched successfully.',
+      type: OutletFeedbackSummaryResponseSwagger,
+    }),
+    ApiBadRequestResponse({
+      description: 'Invalid date range query.',
+    }),
+  );
+}
