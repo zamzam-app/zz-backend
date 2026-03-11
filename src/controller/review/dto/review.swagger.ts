@@ -384,6 +384,24 @@ export class OutletFeedbackSummaryResponseSwagger {
   @ApiProperty({ type: [OutletFeedbackSummaryItemSwagger] })
   items: OutletFeedbackSummaryItemSwagger[];
 
+  @ApiProperty({
+    type: [OutletFeedbackSummaryItemSwagger],
+    description: 'Items sorted by negativeFeedbacks (desc)',
+  })
+  negativeFeedbacksRanked: OutletFeedbackSummaryItemSwagger[];
+
+  @ApiProperty({
+    type: [OutletFeedbackSummaryItemSwagger],
+    description: 'Items sorted by totalFeedbacks (desc)',
+  })
+  totalFeedbacksRanked: OutletFeedbackSummaryItemSwagger[];
+
+  @ApiProperty({
+    type: [OutletFeedbackSummaryItemSwagger],
+    description: 'Items sorted by resolvedFeedbacks (desc)',
+  })
+  resolvedFeedbacksRanked: OutletFeedbackSummaryItemSwagger[];
+
   @ApiPropertyOptional({
     example: AnalyticsPeriod.WEEKLY,
     enum: AnalyticsPeriod,
@@ -414,6 +432,107 @@ export function ApiReviewOutletFeedbackSummary() {
     ApiOkResponse({
       description: 'Outlet feedback summary fetched successfully.',
       type: OutletFeedbackSummaryResponseSwagger,
+    }),
+    ApiBadRequestResponse({
+      description: 'Invalid date range query.',
+    }),
+  );
+}
+
+export class PeakIncidentTimeSwagger {
+  @ApiProperty({
+    example: '03:00 PM - 06:00 PM (Afternoon Window)',
+    description: 'Peak incident time window in IST (12-hour format)',
+  })
+  label: string;
+
+  @ApiProperty({ example: '03:00 PM' })
+  startTime: string;
+
+  @ApiProperty({ example: '06:00 PM' })
+  endTime: string;
+
+  @ApiProperty({ example: 'IST' })
+  timeZone: string;
+
+  @ApiProperty({ example: 8 })
+  totalIncidents: number;
+}
+
+export class MostImprovedOutletSwagger {
+  @ApiPropertyOptional({
+    example: '60d5ecb86217152c9043e02d',
+    description: 'MongoDB ObjectId of the outlet',
+  })
+  outletId?: string | null;
+
+  @ApiProperty({ example: 'Outlet 1' })
+  outletName: string;
+
+  @ApiProperty({ example: 0.6 })
+  improvement: number;
+
+  @ApiProperty({ example: 3.4 })
+  currentAverage: number;
+
+  @ApiProperty({ example: 2.8 })
+  previousAverage: number;
+}
+
+export class CriticalFocusAreaSwagger {
+  @ApiPropertyOptional({
+    example: '60d5ecb86217152c9043e02d',
+    description: 'MongoDB ObjectId of the outlet',
+  })
+  outletId?: string | null;
+
+  @ApiProperty({ example: 'Outlet 2' })
+  outletName: string;
+
+  @ApiProperty({ example: 2 })
+  criticalIssues: number;
+}
+
+export class QuickInsightsResponseSwagger {
+  @ApiProperty({ type: PeakIncidentTimeSwagger })
+  peakIncidentTime: PeakIncidentTimeSwagger;
+
+  @ApiProperty({ type: MostImprovedOutletSwagger })
+  mostImprovedOutlet: MostImprovedOutletSwagger;
+
+  @ApiProperty({ type: CriticalFocusAreaSwagger })
+  criticalFocusArea: CriticalFocusAreaSwagger;
+
+  @ApiPropertyOptional({
+    example: AnalyticsPeriod.WEEKLY,
+    enum: AnalyticsPeriod,
+    description: 'Applied preset period when provided',
+  })
+  period?: AnalyticsPeriod;
+
+  @ApiPropertyOptional({
+    example: '2026-02-10T00:00:00.000Z',
+    description: 'Applied date range start',
+  })
+  startDate?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-03-10T23:59:59.999Z',
+    description: 'Applied date range end',
+  })
+  endDate?: string;
+}
+
+export function ApiReviewQuickInsights() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get quick insights',
+      description:
+        'Returns peak incident time (IST), most improved outlet, and critical focus area.',
+    }),
+    ApiOkResponse({
+      description: 'Quick insights fetched successfully.',
+      type: QuickInsightsResponseSwagger,
     }),
     ApiBadRequestResponse({
       description: 'Invalid date range query.',

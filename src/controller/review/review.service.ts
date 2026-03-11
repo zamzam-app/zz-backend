@@ -37,6 +37,7 @@ import { Outlet, OutletDocument } from '../outlet/entities/outlet.entity';
 import { FindAllReviewsResult } from './interfaces/query-review.interface';
 import { UsersService } from '../users/users.service';
 import { QueryOutletFeedbackDto } from './dto/query-outlet-feedback.dto';
+import { QueryQuickInsightsDto } from './dto/query-quick-insights.dto';
 
 const VALID_MAX_RATINGS = new Set([3, 5, 10]);
 const OVERALL_RATING_SCALE = { min: 1, max: 5 };
@@ -45,6 +46,7 @@ const PERIOD_DAYS_MAP: Record<AnalyticsPeriod, number> = {
   [AnalyticsPeriod.WEEKLY]: 7,
   [AnalyticsPeriod.MONTHLY]: 30,
 };
+const PEAK_WINDOW_HOURS = 3;
 
 type GlobalCsatResult = {
   globalCsatScore: number;
@@ -90,6 +92,40 @@ type OutletFeedbackSummaryItem = {
 
 type OutletFeedbackSummaryResult = {
   items: OutletFeedbackSummaryItem[];
+  negativeFeedbacksRanked: OutletFeedbackSummaryItem[];
+  totalFeedbacksRanked: OutletFeedbackSummaryItem[];
+  resolvedFeedbacksRanked: OutletFeedbackSummaryItem[];
+  period?: AnalyticsPeriod;
+  startDate?: string;
+  endDate?: string;
+};
+
+type PeakIncidentTimeResult = {
+  label: string;
+  startTime: string;
+  endTime: string;
+  timeZone: 'IST';
+  totalIncidents: number;
+};
+
+type MostImprovedOutletResult = {
+  outletId: string | null;
+  outletName: string;
+  improvement: number;
+  currentAverage: number;
+  previousAverage: number;
+};
+
+type CriticalFocusAreaResult = {
+  outletId: string | null;
+  outletName: string;
+  criticalIssues: number;
+};
+
+type QuickInsightsResult = {
+  peakIncidentTime: PeakIncidentTimeResult;
+  mostImprovedOutlet: MostImprovedOutletResult;
+  criticalFocusArea: CriticalFocusAreaResult;
   period?: AnalyticsPeriod;
   startDate?: string;
   endDate?: string;
@@ -1031,8 +1067,41 @@ export class ReviewService {
         ])
         .exec();
 
+      const items = outlets ?? [];
+      const sortByOutletName = (
+        a: OutletFeedbackSummaryItem,
+        b: OutletFeedbackSummaryItem,
+      ) => a.outletName.localeCompare(b.outletName);
+      const itemsByTotalReviews = [...items].sort((a, b) => {
+        if (b.totalFeedbacks !== a.totalFeedbacks) {
+          return b.totalFeedbacks - a.totalFeedbacks;
+        }
+        return sortByOutletName(a, b);
+      });
+      const negativeFeedbacksRanked = [...items].sort((a, b) => {
+        if (b.negativeFeedbacks !== a.negativeFeedbacks) {
+          return b.negativeFeedbacks - a.negativeFeedbacks;
+        }
+        return sortByOutletName(a, b);
+      });
+      const totalFeedbacksRanked = [...items].sort((a, b) => {
+        if (b.totalFeedbacks !== a.totalFeedbacks) {
+          return b.totalFeedbacks - a.totalFeedbacks;
+        }
+        return sortByOutletName(a, b);
+      });
+      const resolvedFeedbacksRanked = [...items].sort((a, b) => {
+        if (b.resolvedFeedbacks !== a.resolvedFeedbacks) {
+          return b.resolvedFeedbacks - a.resolvedFeedbacks;
+        }
+        return sortByOutletName(a, b);
+      });
+
       return {
-        items: outlets ?? [],
+        items: itemsByTotalReviews,
+        negativeFeedbacksRanked,
+        totalFeedbacksRanked,
+        resolvedFeedbacksRanked,
         ...(period ? { period } : {}),
         ...(appliedStartDate
           ? { startDate: appliedStartDate.toISOString() }
@@ -1046,6 +1115,375 @@ export class ReviewService {
           'Failed to fetch outlet feedback summary',
       );
     }
+  }
+
+  async getQuickInsights(
+    query: QueryQuickInsightsDto,
+  ): Promise<QuickInsightsResult> {
+    try {
+      let { period, appliedStartDate, appliedEndDate } =
+        this.resolveAnalyticsRange(query);
+
+      if (!appliedStartDate || !appliedEndDate) {
+        const fallback = this.resolveAnalyticsRange({
+          period: AnalyticsPeriod.MONTHLY,
+        });
+        period = fallback.period;
+        appliedStartDate = fallback.appliedStartDate;
+        appliedEndDate = fallback.appliedEndDate;
+      }
+
+      const rangeMatch =
+        appliedStartDate && appliedEndDate
+          ? { createdAt: { $gte: appliedStartDate, $lte: appliedEndDate } }
+          : {};
+
+      const peakIncidentTime = await this.getPeakIncidentTime(rangeMatch);
+
+      const { mostImprovedOutlet } = await this.getMostImprovedOutlet({
+        appliedStartDate,
+        appliedEndDate,
+      });
+
+      const criticalFocusArea = await this.getCriticalFocusArea(rangeMatch);
+
+      return {
+        peakIncidentTime,
+        mostImprovedOutlet,
+        criticalFocusArea,
+        ...(period ? { period } : {}),
+        ...(appliedStartDate
+          ? { startDate: appliedStartDate.toISOString() }
+          : {}),
+        ...(appliedEndDate ? { endDate: appliedEndDate.toISOString() } : {}),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch quick insights',
+      );
+    }
+  }
+
+  private async getPeakIncidentTime(
+    rangeMatch: Record<string, unknown>,
+  ): Promise<PeakIncidentTimeResult> {
+    const rows = await this.reviewModel
+      .aggregate<{ window: number; count: number }>([
+        {
+          $match: {
+            isDeleted: false,
+            $or: [{ isComplaint: true }, { overallRating: { $lt: 2.5 } }],
+            ...rangeMatch,
+          },
+        },
+        {
+          $project: {
+            hour: {
+              $hour: { date: '$createdAt', timezone: 'Asia/Kolkata' },
+            },
+          },
+        },
+        {
+          $addFields: {
+            window: { $floor: { $divide: ['$hour', PEAK_WINDOW_HOURS] } },
+          },
+        },
+        {
+          $group: {
+            _id: '$window',
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            window: '$_id',
+            count: 1,
+          },
+        },
+      ])
+      .exec();
+
+    if (!rows.length) {
+      return {
+        label: 'No incidents',
+        startTime: 'N/A',
+        endTime: 'N/A',
+        timeZone: 'IST',
+        totalIncidents: 0,
+      };
+    }
+
+    const top = rows.reduce(
+      (best, current) => {
+        if (!best) return current;
+        if (current.count > best.count) return current;
+        return best;
+      },
+      null as { window: number; count: number } | null,
+    );
+
+    const startHour = (top?.window ?? 0) * PEAK_WINDOW_HOURS;
+    const endHour = (startHour + PEAK_WINDOW_HOURS) % 24;
+    const startTime = this.formatIstHour(startHour);
+    const endTime = this.formatIstHour(endHour);
+    const windowLabel = this.getIstWindowLabel(startHour);
+
+    return {
+      label: `${startTime} - ${endTime} (${windowLabel} Window)`,
+      startTime,
+      endTime,
+      timeZone: 'IST',
+      totalIncidents: top?.count ?? 0,
+    };
+  }
+
+  private async getMostImprovedOutlet({
+    appliedStartDate,
+    appliedEndDate,
+  }: {
+    appliedStartDate?: Date;
+    appliedEndDate?: Date;
+  }): Promise<{ mostImprovedOutlet: MostImprovedOutletResult }> {
+    if (!appliedStartDate || !appliedEndDate) {
+      return {
+        mostImprovedOutlet: {
+          outletId: null,
+          outletName: 'Unknown Outlet',
+          improvement: 0,
+          currentAverage: 0,
+          previousAverage: 0,
+        },
+      };
+    }
+
+    const durationMs = appliedEndDate.getTime() - appliedStartDate.getTime();
+    const previousEnd = new Date(appliedStartDate.getTime() - 1);
+    const previousStart = new Date(previousEnd.getTime() - durationMs);
+
+    const currentRows = await this.reviewModel
+      .aggregate<{
+        outletId: string;
+        outletName: string;
+        avgRating: number;
+      }>([
+        {
+          $match: {
+            isDeleted: false,
+            createdAt: { $gte: appliedStartDate, $lte: appliedEndDate },
+          },
+        },
+        {
+          $group: {
+            _id: '$outletId',
+            avgRating: { $avg: '$overallRating' },
+          },
+        },
+        {
+          $lookup: {
+            from: 'outlets',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'outlet',
+          },
+        },
+        {
+          $addFields: {
+            outletName: {
+              $ifNull: [
+                { $arrayElemAt: ['$outlet.name', 0] },
+                'Unknown Outlet',
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            outletId: { $toString: '$_id' },
+            outletName: 1,
+            avgRating: 1,
+          },
+        },
+      ])
+      .exec();
+
+    if (!currentRows.length) {
+      return {
+        mostImprovedOutlet: {
+          outletId: null,
+          outletName: 'Unknown Outlet',
+          improvement: 0,
+          currentAverage: 0,
+          previousAverage: 0,
+        },
+      };
+    }
+
+    const previousRows = await this.reviewModel
+      .aggregate<{
+        outletId: string;
+        avgRating: number;
+      }>([
+        {
+          $match: {
+            isDeleted: false,
+            createdAt: { $gte: previousStart, $lte: previousEnd },
+          },
+        },
+        {
+          $group: {
+            _id: '$outletId',
+            avgRating: { $avg: '$overallRating' },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            outletId: { $toString: '$_id' },
+            avgRating: 1,
+          },
+        },
+      ])
+      .exec();
+
+    const previousMap = new Map(
+      previousRows.map((row) => [row.outletId, row.avgRating ?? 0]),
+    );
+
+    let best: MostImprovedOutletResult | null = null;
+
+    for (const row of currentRows) {
+      const previousAvg = previousMap.get(row.outletId) ?? 0;
+      const currentAvg = row.avgRating ?? 0;
+      const improvement = currentAvg - previousAvg;
+      const candidate: MostImprovedOutletResult = {
+        outletId: row.outletId ?? null,
+        outletName: row.outletName ?? 'Unknown Outlet',
+        improvement: this.round1(improvement),
+        currentAverage: this.round1(currentAvg),
+        previousAverage: this.round1(previousAvg),
+      };
+
+      if (!best) {
+        best = candidate;
+        continue;
+      }
+      if (candidate.improvement > best.improvement) {
+        best = candidate;
+        continue;
+      }
+      if (
+        candidate.improvement === best.improvement &&
+        candidate.currentAverage > best.currentAverage
+      ) {
+        best = candidate;
+      }
+    }
+
+    return {
+      mostImprovedOutlet:
+        best ??
+        ({
+          outletId: null,
+          outletName: 'Unknown Outlet',
+          improvement: 0,
+          currentAverage: 0,
+          previousAverage: 0,
+        } as MostImprovedOutletResult),
+    };
+  }
+
+  private async getCriticalFocusArea(
+    rangeMatch: Record<string, unknown>,
+  ): Promise<CriticalFocusAreaResult> {
+    const rows = await this.reviewModel
+      .aggregate<{
+        outletId: string;
+        outletName: string;
+        criticalIssues: number;
+      }>([
+        {
+          $match: {
+            isDeleted: false,
+            isComplaint: true,
+            overallRating: { $lt: 2 },
+            ...rangeMatch,
+          },
+        },
+        {
+          $group: {
+            _id: '$outletId',
+            criticalIssues: { $sum: 1 },
+          },
+        },
+        {
+          $lookup: {
+            from: 'outlets',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'outlet',
+          },
+        },
+        {
+          $addFields: {
+            outletName: {
+              $ifNull: [
+                { $arrayElemAt: ['$outlet.name', 0] },
+                'Unknown Outlet',
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            outletId: { $toString: '$_id' },
+            outletName: 1,
+            criticalIssues: 1,
+          },
+        },
+        { $sort: { criticalIssues: -1, outletName: 1 } },
+        { $limit: 1 },
+      ])
+      .exec();
+
+    if (!rows.length) {
+      return {
+        outletId: null,
+        outletName: 'Unknown Outlet',
+        criticalIssues: 0,
+      };
+    }
+
+    const top = rows[0];
+    return {
+      outletId: top.outletId ?? null,
+      outletName: top.outletName ?? 'Unknown Outlet',
+      criticalIssues: top.criticalIssues ?? 0,
+    };
+  }
+
+  private formatIstHour(hour24: number): string {
+    const normalized = ((hour24 % 24) + 24) % 24;
+    const suffix = normalized >= 12 ? 'PM' : 'AM';
+    const hour12 = normalized % 12 || 12;
+    const padded = hour12.toString().padStart(2, '0');
+    return `${padded}:00 ${suffix}`;
+  }
+
+  private getIstWindowLabel(startHour: number): string {
+    const hour = ((startHour % 24) + 24) % 24;
+    if (hour >= 5 && hour < 12) return 'Morning';
+    if (hour >= 12 && hour < 17) return 'Afternoon';
+    if (hour >= 17 && hour < 21) return 'Evening';
+    return 'Night';
+  }
+
+  private round1(value: number): number {
+    return Math.round((value ?? 0) * 10) / 10;
   }
 
   private resolveAnalyticsRange(query: AnalyticsRangeQuery): {
