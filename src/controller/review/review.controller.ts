@@ -26,9 +26,12 @@ import {
   ApiReviewOutletFeedbackSummary,
   ApiReviewQuickInsights,
   ApiReviewResolveComplaint,
+  type ApiDecorator,
 } from './dto/review.swagger';
-
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+
+const franchiseAnalyticsDecorator =
+  ApiReviewFranchiseAnalytics as () => ApiDecorator;
 
 @ApiTags('review')
 @ApiBearerAuth('JWT-auth')
@@ -71,7 +74,7 @@ export class ReviewController {
   }
 
   @Get('analytics/franchise')
-  @ApiReviewFranchiseAnalytics()
+  @franchiseAnalyticsDecorator()
   getFranchiseAnalytics(@Query() query: QueryGlobalCsatDto) {
     return this.reviewService.getFranchiseAnalytics(query);
   }

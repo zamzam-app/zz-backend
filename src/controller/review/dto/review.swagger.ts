@@ -9,6 +9,9 @@ import {
   ApiBadRequestResponse,
   ApiBody,
 } from '@nestjs/swagger';
+
+/** Explicit return type for Swagger decorator factories so ESLint can resolve the decorator type */
+export type ApiDecorator = MethodDecorator;
 import { Review, ComplaintStatus } from '../entities/review.entity';
 import { AnalyticsPeriod } from './query-global-csat.dto';
 import { FranchiseAnalyticsResponseDto } from './franchise-analytics-response.dto';
@@ -84,7 +87,7 @@ export class UpdateReviewDtoSwagger {
   response?: ResponseDtoSwagger[];
 }
 
-export function ApiReviewCreate() {
+export function ApiReviewCreate(): ApiDecorator {
   return applyDecorators(
     ApiOperation({ summary: 'Create a new review' }),
     ApiCreatedResponse({
@@ -96,7 +99,7 @@ export function ApiReviewCreate() {
   );
 }
 
-export function ApiReviewFindAll() {
+export function ApiReviewFindAll(): ApiDecorator {
   return applyDecorators(
     ApiOperation({ summary: 'Get all active reviews' }),
     ApiOkResponse({
@@ -106,7 +109,7 @@ export function ApiReviewFindAll() {
   );
 }
 
-export function ApiReviewFranchiseAnalytics() {
+export function ApiReviewFranchiseAnalytics(): ApiDecorator {
   return applyDecorators(
     ApiOperation({
       summary: 'Get franchise analytics',
@@ -120,10 +123,10 @@ export function ApiReviewFranchiseAnalytics() {
     ApiBadRequestResponse({
       description: 'Invalid date range query.',
     }),
-  );
+  ) as ApiDecorator;
 }
 
-export function ApiReviewFindOne() {
+export function ApiReviewFindOne(): ApiDecorator {
   return applyDecorators(
     ApiOperation({ summary: 'Get a specific review by ID' }),
     ApiOkResponse({
@@ -135,7 +138,7 @@ export function ApiReviewFindOne() {
   );
 }
 
-export function ApiReviewUpdate() {
+export function ApiReviewUpdate(): ApiDecorator {
   return applyDecorators(
     ApiOperation({ summary: 'Update an existing review' }),
     ApiOkResponse({
@@ -147,7 +150,7 @@ export function ApiReviewUpdate() {
   );
 }
 
-export function ApiReviewRemove() {
+export function ApiReviewRemove(): ApiDecorator {
   return applyDecorators(
     ApiOperation({ summary: 'Soft delete a review' }),
     ApiOkResponse({
@@ -180,7 +183,7 @@ export class ResolveComplaintDtoSwagger {
   resolvedBy: string;
 }
 
-export function ApiReviewResolveComplaint() {
+export function ApiReviewResolveComplaint(): ApiDecorator {
   return applyDecorators(
     ApiOperation({
       summary: 'Resolve or reject a complaint',
@@ -237,7 +240,7 @@ export class GlobalCsatResponseSwagger {
   endDate?: string;
 }
 
-export function ApiReviewGlobalCsat() {
+export function ApiReviewGlobalCsat(): ApiDecorator {
   return applyDecorators(
     ApiOperation({
       summary: 'Get global CSAT score across all outlets',
@@ -285,7 +288,7 @@ export class CsatTrendlineResponseSwagger {
   previousPeriod: CsatTrendlinePeriodSwagger;
 }
 
-export function ApiReviewCsatTrendline() {
+export function ApiReviewCsatTrendline(): ApiDecorator {
   return applyDecorators(
     ApiOperation({
       summary: 'Get CSAT trendline data',
@@ -348,7 +351,7 @@ export class IncidentsOverviewResponseSwagger {
   resolvedTodayDate: string;
 }
 
-export function ApiReviewIncidentsOverview() {
+export function ApiReviewIncidentsOverview(): ApiDecorator {
   return applyDecorators(
     ApiOperation({
       summary: 'Get incident overview metrics',
@@ -440,7 +443,7 @@ export class OutletFeedbackSummaryResponseSwagger {
   endDate?: string;
 }
 
-export function ApiReviewOutletFeedbackSummary() {
+export function ApiReviewOutletFeedbackSummary(): ApiDecorator {
   return applyDecorators(
     ApiOperation({
       summary: 'Get outlet feedback summary',

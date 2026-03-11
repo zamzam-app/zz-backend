@@ -138,6 +138,20 @@ type AnalyticsRangeQuery = {
   endDate?: string;
 };
 
+type FranchiseAnalyticsAggregationResult = {
+  outletId: string;
+  outletName: string;
+  managerName: string | null;
+  csatScore: number;
+  metrics: {
+    staff: number;
+    speed: number;
+    clean: number;
+    quality: number;
+    overall: number;
+  };
+};
+
 @Injectable()
 export class ReviewService {
   constructor(
@@ -1134,7 +1148,7 @@ export class ReviewService {
       }
 
       const results = await this.reviewModel
-        .aggregate([
+        .aggregate<FranchiseAnalyticsAggregationResult>([
           { $match: matchStage },
           {
             $lookup: {
