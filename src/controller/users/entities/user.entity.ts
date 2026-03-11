@@ -10,7 +10,7 @@ export class User extends BaseEntity {
   @Prop({ required: false })
   name: string;
 
-  @Prop({ required: true, enum: UserRole, default: UserRole.USER })
+  @Prop({ required: true, enum: UserRole, default: UserRole.USER, type: String })
   role: UserRole;
 
   @Prop({
