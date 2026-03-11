@@ -13,7 +13,15 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
-import { ApiReviewResolveComplaint } from './dto/review.swagger';
+import { QueryCsatTrendlineDto } from './dto/query-csat-trendline.dto';
+import { QueryGlobalCsatDto } from './dto/query-global-csat.dto';
+import { QueryIncidentsOverviewDto } from './dto/query-incidents-overview.dto';
+import {
+  ApiReviewCsatTrendline,
+  ApiReviewGlobalCsat,
+  ApiReviewIncidentsOverview,
+  ApiReviewResolveComplaint,
+} from './dto/review.swagger';
 
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
@@ -31,6 +39,24 @@ export class ReviewController {
   @Get()
   findAll(@Query() query: QueryReviewDto) {
     return this.reviewService.findAll(query);
+  }
+
+  @Get('analytics/global-csat')
+  @ApiReviewGlobalCsat()
+  getGlobalCsat(@Query() query: QueryGlobalCsatDto) {
+    return this.reviewService.getGlobalCsat(query);
+  }
+
+  @Get('analytics/csat-trendline')
+  @ApiReviewCsatTrendline()
+  getCsatTrendline(@Query() query: QueryCsatTrendlineDto) {
+    return this.reviewService.getCsatTrendline(query);
+  }
+
+  @Get('analytics/incidents-overview')
+  @ApiReviewIncidentsOverview()
+  getIncidentsOverview(@Query() query: QueryIncidentsOverviewDto) {
+    return this.reviewService.getIncidentsOverview(query);
   }
 
   @Post('resolve-complaint/:reviewId')
