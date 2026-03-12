@@ -61,30 +61,29 @@ export class AuthService {
         normPhone,
       )) as UserDocument | null;
 
+    const otp = createOtp();
+
     if (userDoc) {
-      const otp = createOtp();
       await this.usersService.setOtp(userDoc._id.toString(), otp);
-      return { message: 'OTP sent successfully' };
+      return { message: 'OTP sent successfully to your phone number' };
     }
 
     userDoc = await this.usersService.create({
-      name: dto.name,
       phoneNumber: normPhone || dto.phoneNumber,
       role: UserRole.USER,
-      ...(dto.dob && { dob: dto.dob }),
+      otp,
     });
-
-    const otp = createOtp();
-    await this.usersService.setOtp(userDoc._id.toString(), otp);
-    return { message: 'OTP sent successfully' };
+    return { message: 'OTP sent successfully to your phone number' };
   }
 
   // Users OTP login (Auto-registration supported)
   async signInWithOtp(verifyOtpDto: VerifyOtpDto): Promise<LoginResponse> {
-    // 1. Initial OTP Check (hardcoded for now)
-    if (verifyOtpDto.otp !== '123456') {
-      throw new UnauthorizedException('Invalid OTP');
+    // 1. Initial OTP Check
+    const normPhone = normalizePhoneNumber(verifyOtpDto.phoneNumber);
+    if (!normPhone) {
+      throw new UnauthorizedException('Invalid phone number');
     }
+    await this.usersService.verifyOtp(normPhone, verifyOtpDto.otp);
 
     // 2. Find or Create User (by userId if provided, else by phoneNumber)
     let userDoc: UserDocument;

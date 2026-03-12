@@ -4,12 +4,13 @@ import {
   BadRequestException,
   InternalServerErrorException,
   HttpException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
 import { InjectModel } from '@nestjs/mongoose';
-import { User } from './entities/user.entity';
+import { User, UserDocument } from './entities/user.entity';
 import { Model, Types } from 'mongoose';
 import { FindAllUsersResult } from './interfaces/query-user.interface';
 import { UserRole } from './interfaces/user.interface';
@@ -297,6 +298,25 @@ export class UsersService {
     await this.userModel
       .findByIdAndUpdate(userId, { $unset: { otp: 1 } })
       .exec();
+  }
+
+  /**
+   * Verifies OTP for a user by phone number. Does not clear OTP.
+   * Throws UnauthorizedException if user not found or OTP does not match.
+   */
+  async verifyOtp(phoneNumber: string, otp: string): Promise<UserDocument> {
+    const normPhone = normalizePhoneNumber(phoneNumber);
+    if (!normPhone) {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+    const user = await this.userModel
+      .findOne({ phoneNumber: normPhone, isDeleted: false })
+      .select('+otp')
+      .exec();
+    if (!user || (user as User & { otp?: string }).otp !== otp) {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+    return user;
   }
 
   async changePassword(
