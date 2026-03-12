@@ -61,22 +61,19 @@ export class AuthService {
         normPhone,
       )) as UserDocument | null;
 
+    const otp = createOtp();
+
     if (userDoc) {
-      const otp = createOtp();
       await this.usersService.setOtp(userDoc._id.toString(), otp);
-      return { message: 'OTP sent successfully' };
+      return { message: 'OTP sent successfully to your phone number' };
     }
 
     userDoc = await this.usersService.create({
-      name: dto.name,
       phoneNumber: normPhone || dto.phoneNumber,
       role: UserRole.USER,
-      ...(dto.dob && { dob: dto.dob }),
+      otp,
     });
-
-    const otp = createOtp();
-    await this.usersService.setOtp(userDoc._id.toString(), otp);
-    return { message: 'OTP sent successfully' };
+    return { message: 'OTP sent successfully to your phone number' };
   }
 
   // Users OTP login (Auto-registration supported)

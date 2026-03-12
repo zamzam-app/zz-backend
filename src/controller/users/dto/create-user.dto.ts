@@ -132,4 +132,13 @@ export class CreateUserDto {
   @IsBoolean()
   @IsOptional()
   isDeleted?: boolean;
+
+  @ApiProperty({
+    example: '123456',
+    description: 'The OTP of the user',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  otp?: string;
 }
