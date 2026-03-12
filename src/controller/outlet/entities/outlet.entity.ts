@@ -84,3 +84,4 @@ export class Outlet extends BaseEntity {
 }
 
 export const OutletSchema = SchemaFactory.createForClass(Outlet);
+OutletSchema.index({ isDeleted: 1, outletType: 1 });

@@ -11,6 +11,10 @@ import { RequestOtpDto } from './dto/request-otp.dto';
 import { ValidateUserDto } from './dto/validate-user.dto';
 import { createOtp } from '../../util/otp.util';
 import {
+  normalizeEmail,
+  normalizePhoneNumber,
+} from '../../util/normalize.util';
+import {
   JwtPayload,
   AuthTokens,
   LoginResponse,
@@ -51,9 +55,10 @@ export class AuthService {
 
   /** Request OTP: find user by phone or create new user, store OTP, return success. */
   async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {
+    const normPhone = normalizePhoneNumber(dto.phoneNumber);
     let userDoc: UserDocument | null =
       (await this.usersService.findOneByPhoneNumber(
-        dto.phoneNumber,
+        normPhone,
       )) as UserDocument | null;
 
     if (userDoc) {
@@ -64,7 +69,7 @@ export class AuthService {
 
     userDoc = await this.usersService.create({
       name: dto.name,
-      phoneNumber: dto.phoneNumber,
+      phoneNumber: normPhone || dto.phoneNumber,
       role: UserRole.USER,
       ...(dto.dob && { dob: dto.dob }),
     });
@@ -88,22 +93,22 @@ export class AuthService {
       const found = await this.usersService.findOne(requestUserId);
       userDoc = found as unknown as UserDocument;
     } else {
-      let byPhone = await this.usersService.findOneByPhoneNumber(
-        verifyOtpDto.phoneNumber,
-      );
+      const normPhone = normalizePhoneNumber(verifyOtpDto.phoneNumber);
+      const normEmail = normalizeEmail(verifyOtpDto.email);
+      let byPhone = await this.usersService.findOneByPhoneNumber(normPhone);
       if (!byPhone && verifyOtpDto.email) {
         const { data: byEmail, userPresent } =
           await this.usersService.findUserByIdentifiers({
-            email: verifyOtpDto.email,
+            email: normEmail || verifyOtpDto.email,
           });
         if (userPresent && byEmail) byPhone = byEmail;
       }
       if (!byPhone) {
         byPhone = await this.usersService.create({
-          phoneNumber: verifyOtpDto.phoneNumber,
+          phoneNumber: normPhone || verifyOtpDto.phoneNumber,
           role: UserRole.USER,
           ...(verifyOtpDto.name && { name: verifyOtpDto.name }),
-          ...(verifyOtpDto.email && { email: verifyOtpDto.email }),
+          ...(verifyOtpDto.email && { email: normEmail || verifyOtpDto.email }),
           ...(verifyOtpDto.dob && { dob: verifyOtpDto.dob }),
         });
       }
@@ -120,11 +125,40 @@ export class AuthService {
       lastLoginAt: string;
     } = { lastLoginAt: new Date().toISOString() };
     if (verifyOtpDto.name !== undefined) profileUpdate.name = verifyOtpDto.name;
-    if (verifyOtpDto.email !== undefined)
-      profileUpdate.email = verifyOtpDto.email;
+
+    let emailUpdateSkipped = false;
+    if (verifyOtpDto.email !== undefined && verifyOtpDto.email !== null) {
+      const emailToCheck = normalizeEmail(verifyOtpDto.email);
+      if (emailToCheck) {
+        const emailTakenByAnotherUser: boolean =
+          await this.usersService.isEmailTakenByAnotherUser(
+            emailToCheck,
+            userId,
+          );
+        if (!emailTakenByAnotherUser) {
+          profileUpdate.email = emailToCheck;
+        } else {
+          emailUpdateSkipped = true;
+        }
+      }
+    }
+
     if (verifyOtpDto.dob !== undefined) profileUpdate.dob = verifyOtpDto.dob;
-    const updated = await this.usersService.update(userId, profileUpdate);
-    userDoc = updated as unknown as UserDocument;
+
+    try {
+      const updated = await this.usersService.update(userId, profileUpdate);
+      userDoc = updated as unknown as UserDocument;
+    } catch (error) {
+      const err = error as { code?: number; message?: string };
+      if (err?.code === 11000) {
+        throw new UnauthorizedException(
+          'This email is already linked to another account.',
+        );
+      }
+      throw new UnauthorizedException(
+        err?.message ?? 'Failed to complete OTP sign-in',
+      );
+    }
 
     // 4. Clear OTP from DB after successful verification
     await this.usersService.clearOtp(userId);
@@ -138,7 +172,12 @@ export class AuthService {
     delete sanitizedUser.password;
     delete sanitizedUser.otp;
 
-    return this.login(sanitizedUser as unknown as ValidatedUser);
+    const loginResponse = this.login(sanitizedUser as unknown as ValidatedUser);
+
+    return {
+      ...loginResponse,
+      ...(emailUpdateSkipped ? { emailUpdateSkipped: true } : {}),
+    };
   }
 
   async getProfile(userId: string): Promise<ValidatedUser> {

@@ -194,7 +194,7 @@ export class ReviewService {
             outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
           },
         },
-        { $project: { userIdLookup: 0, outletIdLookup: 0 } },
+        { $project: { userIdLookup: 0, outletIdLookup: 0, outletIdObj: 0 } },
         {
           $lookup: {
             from: 'questions',
@@ -372,13 +372,21 @@ export class ReviewService {
           {
             $addFields: {
               userId: { $arrayElemAt: ['$userIdLookup', 0] },
-              outletId: {
-                $cond: {
-                  if: { $gt: [{ $size: '$outletIdLookup' }, 0] },
-                  then: { $arrayElemAt: ['$outletIdLookup', 0] },
-                  else: '$outletId',
-                },
+              outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
+              outletTableId: {
+                $cond: [
+                  { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
+                  { $arrayElemAt: ['$outletTableIdLookup', 0] },
+                  null,
+                ],
               },
+            },
+          },
+          {
+            $project: {
+              userIdLookup: 0,
+              outletIdLookup: 0,
+              outletTableIdLookup: 0,
             },
           },
         ])
@@ -512,13 +520,21 @@ export class ReviewService {
           {
             $addFields: {
               userId: { $arrayElemAt: ['$userIdLookup', 0] },
-              outletId: {
-                $cond: {
-                  if: { $gt: [{ $size: '$outletIdLookup' }, 0] },
-                  then: { $arrayElemAt: ['$outletIdLookup', 0] },
-                  else: '$outletId',
-                },
+              outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
+              outletTableId: {
+                $cond: [
+                  { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
+                  { $arrayElemAt: ['$outletTableIdLookup', 0] },
+                  null,
+                ],
               },
+            },
+          },
+          {
+            $project: {
+              userIdLookup: 0,
+              outletIdLookup: 0,
+              outletTableIdLookup: 0,
             },
           },
         ])

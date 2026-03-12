@@ -15,6 +15,10 @@ import { FindAllUsersResult } from './interfaces/query-user.interface';
 import { UserRole } from './interfaces/user.interface';
 import * as bcrypt from 'bcrypt';
 import { hashPassword } from '../../util/password.util';
+import {
+  normalizeEmail,
+  normalizePhoneNumber,
+} from '../../util/normalize.util';
 
 @Injectable()
 export class UsersService {
@@ -22,16 +26,52 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto) {
     try {
+      const normEmail = normalizeEmail(createUserDto.email);
+      const normPhone = normalizePhoneNumber(createUserDto.phoneNumber);
       const { data: existingUser, userPresent } =
         await this.findUserByIdentifiers({
           userName: createUserDto.userName,
           phoneNumber: createUserDto.phoneNumber,
           email: createUserDto.email,
+          includeDeleted: true,
         });
 
       if (userPresent && existingUser) {
+        if (existingUser.isDeleted) {
+          const updateDoc: Record<string, unknown> = {
+            ...createUserDto,
+            isDeleted: false,
+            isActive: true,
+          };
+          if (updateDoc.password) {
+            updateDoc.password = await hashPassword(
+              updateDoc.password as string,
+            );
+          }
+          if (updateDoc._id) {
+            delete updateDoc._id;
+          }
+
+          const existingId = (existingUser as User & { _id: Types.ObjectId })
+            ._id;
+          const revived = await this.userModel
+            .findByIdAndUpdate(existingId, updateDoc, { new: true })
+            .exec();
+
+          if (!revived) {
+            throw new InternalServerErrorException(
+              'Failed to restore deleted user',
+            );
+          }
+
+          return revived;
+        }
+
         const takenFields: string[] = [];
-        if (createUserDto.email && existingUser.email === createUserDto.email) {
+        if (
+          createUserDto.email &&
+          normalizeEmail(existingUser.email) === normEmail
+        ) {
           takenFields.push('email');
         }
         if (
@@ -42,7 +82,7 @@ export class UsersService {
         }
         if (
           createUserDto.phoneNumber &&
-          existingUser.phoneNumber === createUserDto.phoneNumber
+          normalizePhoneNumber(existingUser.phoneNumber) === normPhone
         ) {
           takenFields.push('phoneNumber');
         }
@@ -59,6 +99,12 @@ export class UsersService {
       const doc = { ...createUserDto } as Record<string, unknown>;
       if (doc._id) {
         doc._id = new Types.ObjectId(doc._id as string);
+      }
+      if (normEmail && doc.email !== undefined) {
+        doc.email = normEmail;
+      }
+      if (normPhone && doc.phoneNumber !== undefined) {
+        doc.phoneNumber = normPhone;
       }
       const createdUser = new this.userModel(doc);
       return createdUser.save();
@@ -136,8 +182,14 @@ export class UsersService {
 
   async update(id: string, updateUserDto: UpdateUserDto) {
     try {
+      const payload = { ...updateUserDto };
+      if (payload.email != null)
+        payload.email = normalizeEmail(payload.email) || payload.email;
+      if (payload.phoneNumber != null)
+        payload.phoneNumber =
+          normalizePhoneNumber(payload.phoneNumber) || payload.phoneNumber;
       const updatedUser = await this.userModel
-        .findByIdAndUpdate(id, updateUserDto, { new: true })
+        .findByIdAndUpdate(id, payload, { new: true })
         .exec();
       if (!updatedUser) {
         throw new NotFoundException(`User with ID ${id} not found`);
@@ -280,6 +332,33 @@ export class UsersService {
       );
     }
   }
+
+  /**
+   * Returns true if there is another (non-deleted) user document with the given email,
+   * excluding the user with the provided excludeUserId.
+   */
+  async isEmailTakenByAnotherUser(
+    email: string,
+    excludeUserId: string,
+  ): Promise<boolean> {
+    try {
+      const norm = normalizeEmail(email);
+      if (!norm) return false;
+      const existing = await this.userModel
+        .exists({
+          email: norm,
+          isDeleted: false,
+          _id: { $ne: new Types.ObjectId(excludeUserId) },
+        })
+        .exec();
+      return !!existing;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to check email uniqueness',
+      );
+    }
+  }
   /**
    * Finds a user by any of the provided identifiers (userId, userName, phoneNumber, email).
    * Uses $or so the first match wins. Returns the user and whether one was found.
@@ -289,6 +368,7 @@ export class UsersService {
     userName?: string;
     phoneNumber?: string;
     email?: string;
+    includeDeleted?: boolean;
   }): Promise<{ data: User | null; userPresent: boolean }> {
     try {
       const orClauses: Record<string, unknown>[] = [];
@@ -296,10 +376,12 @@ export class UsersService {
         orClauses.push({ _id: new Types.ObjectId(params.userId) });
       }
       if (params.phoneNumber?.trim()) {
-        orClauses.push({ phoneNumber: params.phoneNumber });
+        const norm = normalizePhoneNumber(params.phoneNumber);
+        if (norm) orClauses.push({ phoneNumber: norm });
       }
       if (params.email?.trim()) {
-        orClauses.push({ email: params.email });
+        const norm = normalizeEmail(params.email);
+        if (norm) orClauses.push({ email: norm });
       }
       if (params.userName?.trim()) {
         orClauses.push({ userName: params.userName });
@@ -307,9 +389,11 @@ export class UsersService {
       if (orClauses.length === 0) {
         return { data: null, userPresent: false };
       }
-      const user = await this.userModel
-        .findOne({ $or: orClauses, isDeleted: false })
-        .exec();
+      const match: Record<string, unknown> = { $or: orClauses };
+      if (!params.includeDeleted) {
+        match.isDeleted = false;
+      }
+      const user = await this.userModel.findOne(match).exec();
       return { data: user ?? null, userPresent: !!user };
     } catch (error) {
       if (error instanceof HttpException) throw error;

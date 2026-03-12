@@ -60,3 +60,4 @@ export class User extends BaseEntity {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+UserSchema.index({ isDeleted: 1, role: 1 });
