@@ -46,8 +46,8 @@ export class UsersService {
             delete updateDoc._id;
           }
 
-          const existingId =
-            (existingUser as User & { _id: Types.ObjectId })._id;
+          const existingId = (existingUser as User & { _id: Types.ObjectId })
+            ._id;
           const revived = await this.userModel
             .findByIdAndUpdate(existingId, updateDoc, { new: true })
             .exec();
