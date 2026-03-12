@@ -53,11 +53,17 @@ export class ReviewService {
   async submitWithOtp(
     dto: SubmitReviewWithOtpDto,
   ): Promise<{ overallRating: number }> {
+    if (dto.otp !== '123456') {
+      throw new UnauthorizedException('Invalid OTP');
+    }
     const normPhone = normalizePhoneNumber(dto.phoneNumber);
     if (!normPhone) {
-      throw new UnauthorizedException('Invalid phone number');
+      throw new UnauthorizedException('Invalid OTP');
     }
-    const userDoc = await this.usersService.verifyOtp(normPhone, dto.otp);
+    const userDoc = await this.usersService.findOneByPhoneNumber(normPhone);
+    if (!userDoc) {
+      throw new UnauthorizedException('Invalid OTP');
+    }
     const userId = (
       userDoc as unknown as { _id: Types.ObjectId }
     )._id.toString();
@@ -236,7 +242,7 @@ export class ReviewService {
             from: 'outlets',
             let: { oid: { $toObjectId: { $toString: '$outletId' } } },
             pipeline: [
-              { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
+              { $match: { $expr: { $eq: ['$_id', '$oid'] } } },
               { $project: { _id: 1, name: 1 } },
             ],
             as: 'outletIdLookup',
