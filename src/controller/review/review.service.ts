@@ -4,13 +4,19 @@ import {
   InternalServerErrorException,
   NotFoundException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
+import {
+  normalizeEmail,
+  normalizePhoneNumber,
+} from '../../util/normalize.util';
 import {
   ComplaintStatus,
   Review,
@@ -43,6 +49,65 @@ export class ReviewService {
     private outletTableModel: Model<OutletTableDocument>,
     private usersService: UsersService,
   ) {}
+
+  async submitWithOtp(
+    dto: SubmitReviewWithOtpDto,
+  ): Promise<{ overallRating: number }> {
+    const normPhone = normalizePhoneNumber(dto.phoneNumber);
+    if (!normPhone) {
+      throw new UnauthorizedException('Invalid phone number');
+    }
+    const userDoc = await this.usersService.verifyOtp(normPhone, dto.otp);
+    const userId = (
+      userDoc as unknown as { _id: Types.ObjectId }
+    )._id.toString();
+
+    const profileUpdate: { name?: string; email?: string; dob?: string } = {};
+    if (dto.name !== undefined) profileUpdate.name = dto.name;
+    if (dto.dob !== undefined) profileUpdate.dob = dto.dob;
+    if (dto.email !== undefined && dto.email !== null) {
+      const emailToCheck = normalizeEmail(dto.email);
+      if (emailToCheck) {
+        const emailTaken = await this.usersService.isEmailTakenByAnotherUser(
+          emailToCheck,
+          userId,
+        );
+        if (!emailTaken) profileUpdate.email = emailToCheck;
+      }
+    }
+    if (Object.keys(profileUpdate).length > 0) {
+      try {
+        await this.usersService.update(userId, profileUpdate);
+      } catch (error) {
+        const err = error as { code?: number };
+        if (err?.code === 11000) {
+          throw new BadRequestException(
+            'This email is already linked to another account.',
+          );
+        }
+        throw error;
+      }
+    }
+
+    const createReviewDto: CreateReviewDto = {
+      formId: dto.formId,
+      outletId: dto.outletId,
+      userId,
+      response: dto.response,
+      ...(dto.outletTableId && { outletTableId: dto.outletTableId }),
+      ...(dto.isComplaint !== undefined && { isComplaint: dto.isComplaint }),
+      ...(dto.complaintReason && { complaintReason: dto.complaintReason }),
+    };
+
+    const savedReview = await this.create(createReviewDto);
+
+    await this.usersService.clearOtp(userId);
+    await this.usersService.update(userId, {
+      lastLoginAt: new Date().toISOString(),
+    });
+
+    return { overallRating: savedReview.overallRating };
+  }
 
   async create(createReviewDto: CreateReviewDto): Promise<Review> {
     try {

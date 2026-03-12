@@ -16,8 +16,9 @@ import { QueryReviewDto } from './dto/query-review.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { ApiReviewResolveComplaint } from './dto/review.swagger';
-
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Public } from '../auth/decorators/public.decorator';
+import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -29,6 +30,12 @@ import { UserRole } from '../users/interfaces/user.interface';
 @Controller('review')
 export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
+
+  @Public()
+  @Post('submit-with-otp')
+  submitWithOtp(@Body() dto: SubmitReviewWithOtpDto) {
+    return this.reviewService.submitWithOtp(dto);
+  }
 
   @Post()
   @Roles(UserRole.USER, UserRole.MANAGER, UserRole.ADMIN)
