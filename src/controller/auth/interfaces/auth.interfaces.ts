@@ -17,6 +17,7 @@ export interface AuthTokens {
 
 export interface LoginResponse extends AuthTokens {
   user: Omit<User, 'password'>;
+  emailUpdateSkipped?: boolean;
 }
 
 export interface ValidatedUser extends Omit<User, 'password'> {
