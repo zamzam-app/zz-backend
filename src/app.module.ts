@@ -16,6 +16,7 @@ import { ReviewModule } from './controller/review/review.module';
 import { UploadModule } from './controller/upload/upload.module';
 import { OutletTableModule } from './controller/outlet-table/outlet-table.module';
 import { CategoryModule } from './controller/category/category.module';
+import { AnalyticsModule } from './controller/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { CategoryModule } from './controller/category/category.module';
     UploadModule,
     OutletTableModule,
     CategoryModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

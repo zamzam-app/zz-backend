@@ -92,3 +92,14 @@ export class Review extends BaseEntity {
 }
 
 export const ReviewSchema = SchemaFactory.createForClass(Review);
+ReviewSchema.index({ isDeleted: 1, outletId: 1 });
+ReviewSchema.index({ isDeleted: 1, userId: 1 });
+ReviewSchema.index({ isDeleted: 1, createdAt: 1 });
+ReviewSchema.index(
+  { complaintStatus: 1, createdAt: 1, overallRating: 1 },
+  { partialFilterExpression: { isDeleted: false, isComplaint: true } },
+);
+ReviewSchema.index(
+  { complaintStatus: 1, resolvedAt: 1 },
+  { partialFilterExpression: { isDeleted: false, isComplaint: true } },
+);

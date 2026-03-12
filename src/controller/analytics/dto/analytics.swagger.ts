@@ -2,201 +2,12 @@ import { applyDecorators } from '@nestjs/common';
 import {
   ApiOperation,
   ApiOkResponse,
-  ApiCreatedResponse,
-  ApiNotFoundResponse,
   ApiProperty,
   ApiPropertyOptional,
   ApiBadRequestResponse,
-  ApiBody,
 } from '@nestjs/swagger';
-
-/** Explicit return type for Swagger decorator factories so ESLint can resolve the decorator type */
-export type ApiDecorator = MethodDecorator;
-import { Review, ComplaintStatus } from '../entities/review.entity';
-
-export class ResponseDtoSwagger {
-  @ApiProperty({
-    example: '60d5ecb86217152c9043e02d',
-    description: 'MongoDB ObjectId of the question',
-  })
-  questionId: string;
-
-  @ApiProperty({
-    example: 'User answer to the question',
-    description: 'Answer to the question (can be string, array, or number)',
-  })
-  answer: string | string[] | number;
-}
-
-export class CreateReviewDtoSwagger {
-  @ApiProperty({
-    example: '60d5ecb86217152c9043e02d',
-    description: 'MongoDB ObjectId of the form',
-  })
-  formId: string;
-
-  @ApiProperty({
-    example: '60d5ecb86217152c9043e02d',
-    description: 'MongoDB ObjectId of the user',
-  })
-  userId: string;
-
-  @ApiProperty({
-    example: '60d5ecb86217152c9043e02d',
-    description: 'MongoDB ObjectId of the outlet',
-  })
-  outletId: string;
-
-  @ApiPropertyOptional({
-    example: '60d5ecb86217152c9043e02d',
-    description: 'MongoDB ObjectId of the outlet table',
-  })
-  outletTableId?: string;
-
-  @ApiProperty({
-    example: [
-      {
-        questionId: '60d5ecb86217152c9043e02d',
-        answer: 4,
-      },
-      {
-        questionId: '60d5ecb86217152c9043e02e',
-        answer: 'Great service',
-      },
-    ],
-    description: 'Array of responses with questionId and answer',
-    type: [ResponseDtoSwagger],
-  })
-  response: ResponseDtoSwagger[];
-}
-
-export class UpdateReviewDtoSwagger {
-  @ApiProperty({
-    example: [
-      {
-        questionId: '60d5ecb86217152c9043e02d',
-        answer: 5,
-      },
-    ],
-    description: 'Array of responses with questionId and answer',
-    type: [ResponseDtoSwagger],
-    required: false,
-  })
-  response?: ResponseDtoSwagger[];
-}
-
-export function ApiReviewCreate(): ApiDecorator {
-  return applyDecorators(
-    ApiOperation({ summary: 'Create a new review' }),
-    ApiCreatedResponse({
-      description: 'Review created successfully.',
-      type: Review,
-    }),
-    ApiBadRequestResponse({ description: 'Invalid form ID or review data.' }),
-    ApiNotFoundResponse({ description: 'Form not found.' }),
-  );
-}
-
-export function ApiReviewFindAll(): ApiDecorator {
-  return applyDecorators(
-    ApiOperation({ summary: 'Get all active reviews' }),
-    ApiOkResponse({
-      description: 'Return all active reviews.',
-      type: [Review],
-    }),
-  );
-}
-
-export function ApiReviewFranchiseAnalytics(): ApiDecorator {
-  return applyDecorators(
-    ApiOperation({
-      summary: 'Get franchise analytics',
-      description:
-        'Returns franchise ranking and metrics heatmap for all outlets.',
-    }),
-    ApiBadRequestResponse({
-      description: 'Invalid date range query.',
-    }),
-  ) as ApiDecorator;
-}
-
-export function ApiReviewFindOne(): ApiDecorator {
-  return applyDecorators(
-    ApiOperation({ summary: 'Get a specific review by ID' }),
-    ApiOkResponse({
-      description: 'Return the review details.',
-      type: Review,
-    }),
-    ApiBadRequestResponse({ description: 'Invalid review ID format.' }),
-    ApiNotFoundResponse({ description: 'Review not found.' }),
-  );
-}
-
-export function ApiReviewUpdate(): ApiDecorator {
-  return applyDecorators(
-    ApiOperation({ summary: 'Update an existing review' }),
-    ApiOkResponse({
-      description: 'Review updated successfully.',
-      type: Review,
-    }),
-    ApiBadRequestResponse({ description: 'Invalid review ID format.' }),
-    ApiNotFoundResponse({ description: 'Review not found.' }),
-  );
-}
-
-export function ApiReviewRemove(): ApiDecorator {
-  return applyDecorators(
-    ApiOperation({ summary: 'Soft delete a review' }),
-    ApiOkResponse({
-      description: 'Review deleted successfully.',
-      type: Review,
-    }),
-    ApiBadRequestResponse({ description: 'Invalid review ID format.' }),
-    ApiNotFoundResponse({ description: 'Review not found.' }),
-  );
-}
-
-export class ResolveComplaintDtoSwagger {
-  @ApiProperty({
-    example: 'resolved',
-    enum: ComplaintStatus,
-    description: 'New complaint status (resolved or dismissed)',
-  })
-  complaintStatus: ComplaintStatus;
-
-  @ApiPropertyOptional({
-    example: 'Issue addressed with the customer.',
-    description: 'Notes describing the resolution or dismissal',
-  })
-  resolutionNotes?: string;
-
-  @ApiProperty({
-    example: '60d5ecb86217152c9043e02d',
-    description: 'MongoDB ObjectId of the user resolving the complaint',
-  })
-  resolvedBy: string;
-}
-
-export function ApiReviewResolveComplaint(): ApiDecorator {
-  return applyDecorators(
-    ApiOperation({
-      summary: 'Resolve or reject a complaint',
-      description:
-        'Updates the complaint status, resolution notes, resolvedBy, and sets resolvedAt on the review.',
-    }),
-    ApiBody({ type: ResolveComplaintDtoSwagger }),
-    ApiOkResponse({
-      description: 'Review updated with resolved complaint.',
-      type: Review,
-    }),
-    ApiBadRequestResponse({
-      description: 'Invalid review ID or body.',
-    }),
-    ApiNotFoundResponse({
-      description: 'Review not found or not a complaint.',
-    }),
-  );
-}
+import { AnalyticsPeriod } from '../../review/dto/query-global-csat.dto';
+import { FranchiseAnalyticsResponseDto } from '../../review/dto/franchise-analytics-response.dto';
 
 export class GlobalCsatResponseSwagger {
   @ApiProperty({ example: 4.2, description: 'Global CSAT score out of 5' })
@@ -213,6 +24,13 @@ export class GlobalCsatResponseSwagger {
 
   @ApiProperty({ example: 520.3, description: 'Sum of overall ratings' })
   totalScore: number;
+
+  @ApiPropertyOptional({
+    example: AnalyticsPeriod.MONTHLY,
+    enum: AnalyticsPeriod,
+    description: 'Applied preset period when provided',
+  })
+  period?: AnalyticsPeriod;
 
   @ApiPropertyOptional({
     example: '2026-02-10T00:00:00.000Z',
@@ -265,6 +83,9 @@ export class CsatTrendlinePeriodSwagger {
 }
 
 export class CsatTrendlineResponseSwagger {
+  @ApiProperty({ enum: AnalyticsPeriod, example: AnalyticsPeriod.MONTHLY })
+  period: AnalyticsPeriod;
+
   @ApiProperty({ type: CsatTrendlinePeriodSwagger })
   currentPeriod: CsatTrendlinePeriodSwagger;
 
@@ -308,6 +129,13 @@ export class IncidentsOverviewResponseSwagger {
     description: 'Incidents resolved today (UTC day)',
   })
   incidentsResolvedToday: number;
+
+  @ApiPropertyOptional({
+    example: AnalyticsPeriod.MONTHLY,
+    enum: AnalyticsPeriod,
+    description: 'Applied preset period when provided',
+  })
+  period?: AnalyticsPeriod;
 
   @ApiPropertyOptional({
     example: '2026-02-10T00:00:00.000Z',
@@ -382,6 +210,31 @@ export class OutletFeedbackSummaryResponseSwagger {
   @ApiProperty({ type: [OutletFeedbackSummaryItemSwagger] })
   items: OutletFeedbackSummaryItemSwagger[];
 
+  @ApiProperty({
+    type: [OutletFeedbackSummaryItemSwagger],
+    description: 'Items sorted by negativeFeedbacks (desc)',
+  })
+  negativeFeedbacksRanked: OutletFeedbackSummaryItemSwagger[];
+
+  @ApiProperty({
+    type: [OutletFeedbackSummaryItemSwagger],
+    description: 'Items sorted by totalFeedbacks (desc)',
+  })
+  totalFeedbacksRanked: OutletFeedbackSummaryItemSwagger[];
+
+  @ApiProperty({
+    type: [OutletFeedbackSummaryItemSwagger],
+    description: 'Items sorted by resolvedFeedbacks (desc)',
+  })
+  resolvedFeedbacksRanked: OutletFeedbackSummaryItemSwagger[];
+
+  @ApiPropertyOptional({
+    example: AnalyticsPeriod.WEEKLY,
+    enum: AnalyticsPeriod,
+    description: 'Applied preset period when provided',
+  })
+  period?: AnalyticsPeriod;
+
   @ApiPropertyOptional({
     example: '2026-02-10T00:00:00.000Z',
     description: 'Applied date range start',
@@ -405,6 +258,124 @@ export function ApiReviewOutletFeedbackSummary() {
     ApiOkResponse({
       description: 'Outlet feedback summary fetched successfully.',
       type: OutletFeedbackSummaryResponseSwagger,
+    }),
+    ApiBadRequestResponse({
+      description: 'Invalid date range query.',
+    }),
+  );
+}
+
+export class PeakIncidentTimeSwagger {
+  @ApiProperty({
+    example: '03:00 PM - 06:00 PM (Afternoon Window)',
+    description: 'Peak incident time window in IST (12-hour format)',
+  })
+  label: string;
+
+  @ApiProperty({ example: '03:00 PM' })
+  startTime: string;
+
+  @ApiProperty({ example: '06:00 PM' })
+  endTime: string;
+
+  @ApiProperty({ example: 'IST' })
+  timeZone: string;
+
+  @ApiProperty({ example: 8 })
+  totalIncidents: number;
+}
+
+export class MostImprovedOutletSwagger {
+  @ApiPropertyOptional({
+    example: '60d5ecb86217152c9043e02d',
+    description: 'MongoDB ObjectId of the outlet',
+  })
+  outletId?: string | null;
+
+  @ApiProperty({ example: 'Outlet 1' })
+  outletName: string;
+
+  @ApiProperty({ example: 0.6 })
+  improvement: number;
+
+  @ApiProperty({ example: 3.4 })
+  currentAverage: number;
+
+  @ApiProperty({ example: 2.8 })
+  previousAverage: number;
+}
+
+export class CriticalFocusAreaSwagger {
+  @ApiPropertyOptional({
+    example: '60d5ecb86217152c9043e02d',
+    description: 'MongoDB ObjectId of the outlet',
+  })
+  outletId?: string | null;
+
+  @ApiProperty({ example: 'Outlet 2' })
+  outletName: string;
+
+  @ApiProperty({ example: 2 })
+  criticalIssues: number;
+}
+
+export class QuickInsightsResponseSwagger {
+  @ApiProperty({ type: PeakIncidentTimeSwagger })
+  peakIncidentTime: PeakIncidentTimeSwagger;
+
+  @ApiProperty({ type: MostImprovedOutletSwagger })
+  mostImprovedOutlet: MostImprovedOutletSwagger;
+
+  @ApiProperty({ type: CriticalFocusAreaSwagger })
+  criticalFocusArea: CriticalFocusAreaSwagger;
+
+  @ApiPropertyOptional({
+    example: AnalyticsPeriod.WEEKLY,
+    enum: AnalyticsPeriod,
+    description: 'Applied preset period when provided',
+  })
+  period?: AnalyticsPeriod;
+
+  @ApiPropertyOptional({
+    example: '2026-02-10T00:00:00.000Z',
+    description: 'Applied date range start',
+  })
+  startDate?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-03-10T23:59:59.999Z',
+    description: 'Applied date range end',
+  })
+  endDate?: string;
+}
+
+export function ApiReviewQuickInsights() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get quick insights',
+      description:
+        'Returns peak incident time (IST), most improved outlet, and critical focus area.',
+    }),
+    ApiOkResponse({
+      description: 'Quick insights fetched successfully.',
+      type: QuickInsightsResponseSwagger,
+    }),
+    ApiBadRequestResponse({
+      description: 'Invalid date range query.',
+    }),
+  );
+}
+
+export function ApiReviewFranchiseAnalytics() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get franchise analytics',
+      description:
+        'Returns franchise ranking and metrics heatmap for all outlets.',
+    }),
+    ApiOkResponse({
+      description: 'Franchise analytics fetched successfully.',
+      type: FranchiseAnalyticsResponseDto,
     }),
     ApiBadRequestResponse({
       description: 'Invalid date range query.',
