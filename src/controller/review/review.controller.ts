@@ -15,12 +15,20 @@ import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { ApiReviewResolveComplaint } from './dto/review.swagger';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Public } from '../auth/decorators/public.decorator';
+import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
 
 @ApiTags('review')
 @ApiBearerAuth('JWT-auth')
 @Controller('review')
 export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
+
+  @Public()
+  @Post('submit-with-otp')
+  submitWithOtp(@Body() dto: SubmitReviewWithOtpDto) {
+    return this.reviewService.submitWithOtp(dto);
+  }
 
   @Post()
   create(@Body() createReviewDto: CreateReviewDto) {
