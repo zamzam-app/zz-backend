@@ -12,6 +12,7 @@ import { Form, FormDocument } from './entities/form.entity';
 import {
   Question,
   QuestionDocument,
+  QuestionType,
 } from '../question/entities/question.entity';
 import { Model, Types, UpdateQuery } from 'mongoose';
 import { FindAllFormsResult } from './interfaces/find-all-forms.interface';
@@ -25,10 +26,11 @@ export class FormService {
 
   async create(createFormDto: CreateFormDto, userId?: string): Promise<Form> {
     const { questions, ...formData } = createFormDto;
+    const mergedQuestions = this.mergeWithDefaultQuestions(questions);
 
     // Create all questions first
     const questionIds = await Promise.all(
-      (questions || []).map(async (q) => {
+      mergedQuestions.map(async (q) => {
         const newQuestion = new this.questionModel(q);
         const savedQ = await newQuestion.save();
         return savedQ._id;
@@ -129,8 +131,9 @@ export class FormService {
     const updateData: UpdateQuery<Form> = { ...formData };
 
     if (questions) {
+      const mergedQuestions = this.mergeWithDefaultQuestions(questions);
       const questionIds = await Promise.all(
-        questions.map(async (q) => {
+        mergedQuestions.map(async (q) => {
           const newQuestion = new this.questionModel(q);
           const savedQ = await newQuestion.save();
           return savedQ._id;
@@ -166,5 +169,68 @@ export class FormService {
       throw new NotFoundException(`Form with ID ${id} not found`);
     }
     return { message: 'Form deleted successfully' };
+  }
+
+  private buildDefaultQuestions(): CreateFormDto['questions'] {
+    return [
+      {
+        type: QuestionType.StarRating,
+        title: 'Overall Experience',
+        isRequired: true,
+        maxRatings: 5,
+        starStep: 1,
+        hint: 'Please rate your overall experience',
+      },
+      {
+        type: QuestionType.StarRating,
+        title: 'Staff',
+        isRequired: true,
+        maxRatings: 5,
+        starStep: 1,
+        hint: 'Please rate our staff',
+      },
+      {
+        type: QuestionType.StarRating,
+        title: 'Speed',
+        isRequired: true,
+        maxRatings: 5,
+        starStep: 1,
+        hint: 'Please rate our speed of service',
+      },
+      {
+        type: QuestionType.StarRating,
+        title: 'Cleanliness',
+        isRequired: true,
+        maxRatings: 5,
+        starStep: 1,
+        hint: 'Please rate our cleanliness',
+      },
+      {
+        type: QuestionType.StarRating,
+        title: 'Quality',
+        isRequired: true,
+        maxRatings: 5,
+        starStep: 1,
+        hint: 'Please rate our quality',
+      },
+    ];
+  }
+
+  private mergeWithDefaultQuestions(
+    questions?: CreateFormDto['questions'],
+  ): CreateFormDto['questions'] {
+    const defaultQuestions = this.buildDefaultQuestions();
+    const combined = [...defaultQuestions, ...(questions ?? [])];
+    const seen = new Set<string>();
+    const deduped: CreateFormDto['questions'] = [];
+
+    for (const q of combined) {
+      const key = `${q.type}|${q.title.trim().toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(q);
+    }
+
+    return deduped;
   }
 }
