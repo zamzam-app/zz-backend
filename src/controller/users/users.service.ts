@@ -27,9 +27,40 @@ export class UsersService {
           userName: createUserDto.userName,
           phoneNumber: createUserDto.phoneNumber,
           email: createUserDto.email,
+          includeDeleted: true,
         });
 
       if (userPresent && existingUser) {
+        if (existingUser.isDeleted) {
+          const updateDoc: Record<string, unknown> = {
+            ...createUserDto,
+            isDeleted: false,
+            isActive: true,
+          };
+          if (updateDoc.password) {
+            updateDoc.password = await hashPassword(
+              updateDoc.password as string,
+            );
+          }
+          if (updateDoc._id) {
+            delete updateDoc._id;
+          }
+
+          const existingId =
+            (existingUser as User & { _id: Types.ObjectId })._id;
+          const revived = await this.userModel
+            .findByIdAndUpdate(existingId, updateDoc, { new: true })
+            .exec();
+
+          if (!revived) {
+            throw new InternalServerErrorException(
+              'Failed to restore deleted user',
+            );
+          }
+
+          return revived;
+        }
+
         const takenFields: string[] = [];
         if (createUserDto.email && existingUser.email === createUserDto.email) {
           takenFields.push('email');
@@ -289,6 +320,7 @@ export class UsersService {
     userName?: string;
     phoneNumber?: string;
     email?: string;
+    includeDeleted?: boolean;
   }): Promise<{ data: User | null; userPresent: boolean }> {
     try {
       const orClauses: Record<string, unknown>[] = [];
@@ -307,9 +339,11 @@ export class UsersService {
       if (orClauses.length === 0) {
         return { data: null, userPresent: false };
       }
-      const user = await this.userModel
-        .findOne({ $or: orClauses, isDeleted: false })
-        .exec();
+      const match: Record<string, unknown> = { $or: orClauses };
+      if (!params.includeDeleted) {
+        match.isDeleted = false;
+      }
+      const user = await this.userModel.findOne(match).exec();
       return { data: user ?? null, userPresent: !!user };
     } catch (error) {
       if (error instanceof HttpException) throw error;
