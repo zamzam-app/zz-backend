@@ -7,8 +7,6 @@ import {
   Param,
   Delete,
   Query,
-  UseGuards,
-  Request,
 } from '@nestjs/common';
 import { ReviewService } from './review.service';
 import { CreateReviewDto } from './dto/create-review.dto';
@@ -19,14 +17,9 @@ import { ApiReviewResolveComplaint } from './dto/review.swagger';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
 import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '../users/interfaces/user.interface';
 
 @ApiTags('review')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('review')
 export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
@@ -38,10 +31,8 @@ export class ReviewController {
   }
 
   @Post()
-  @Roles(UserRole.USER, UserRole.MANAGER, UserRole.ADMIN)
-  create(@Body() createReviewDto: CreateReviewDto, @Request() req) {
-    const userId = req.user.sub;
-    return this.reviewService.create({ ...createReviewDto, userId });
+  create(@Body() createReviewDto: CreateReviewDto) {
+    return this.reviewService.create(createReviewDto);
   }
 
   @Get()
@@ -50,7 +41,6 @@ export class ReviewController {
   }
 
   @Post('resolve-complaint/:reviewId')
-  @Roles(UserRole.MANAGER, UserRole.ADMIN)
   @ApiReviewResolveComplaint()
   resolveComplaint(
     @Param('reviewId') reviewId: string,
@@ -70,7 +60,6 @@ export class ReviewController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.MANAGER, UserRole.ADMIN)
   remove(@Param('id') id: string) {
     return this.reviewService.remove(id);
   }
