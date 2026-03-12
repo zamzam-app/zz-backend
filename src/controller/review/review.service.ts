@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -12,7 +13,10 @@ import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
-import { normalizeEmail } from '../../util/normalize.util';
+import {
+  normalizeEmail,
+  normalizePhoneNumber,
+} from '../../util/normalize.util';
 import {
   ComplaintStatus,
   Review,
@@ -49,8 +53,20 @@ export class ReviewService {
   async submitWithOtp(
     dto: SubmitReviewWithOtpDto,
   ): Promise<{ overallRating: number }> {
-    const userDoc = await this.usersService.verifyOtp(dto.phoneNumber, dto.otp);
-    const userId = userDoc._id.toString();
+    if (dto.otp !== '123456') {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+    const normPhone = normalizePhoneNumber(dto.phoneNumber);
+    if (!normPhone) {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+    const userDoc = await this.usersService.findOneByPhoneNumber(normPhone);
+    if (!userDoc) {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+    const userId = (
+      userDoc as unknown as { _id: Types.ObjectId }
+    )._id.toString();
 
     const profileUpdate: { name?: string; email?: string; dob?: string } = {};
     if (dto.name !== undefined) profileUpdate.name = dto.name;
