@@ -5,7 +5,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { QueryCsatTrendlineDto } from '../review/dto/query-csat-trendline.dto';
 import {
   AnalyticsPeriod,
@@ -556,6 +556,69 @@ export class AnalyticsService {
         };
       }
 
+      // Fetch ALL outlets first (use outlet model's collection so we match Mongoose)
+      const db = this.reviewModel.db;
+      const outletCollectionName = this.outletModel.collection.name;
+      const allOutletDocs = await db
+        .collection(outletCollectionName)
+        .find({ isDeleted: false })
+        .project<{ _id: unknown; name: string; managerId?: unknown }>({
+          _id: 1,
+          name: 1,
+          managerId: 1,
+        })
+        .toArray();
+
+      const allOutlets: {
+        outletId: string;
+        outletName: string;
+        managerName: string | null;
+      }[] = allOutletDocs.map((doc) => ({
+        outletId: (doc._id as { toString(): string }).toString(),
+        outletName: doc.name ?? '',
+        managerName: null,
+      }));
+
+      if (allOutlets.length > 0) {
+        const managerIds = [
+          ...new Set(
+            allOutletDocs
+              .map((d) => d.managerId)
+              .filter((id): id is NonNullable<typeof id> => id != null)
+              .map((id) =>
+                typeof id === 'string'
+                  ? id
+                  : (id as { toString(): string }).toString(),
+              ),
+          ),
+        ];
+        if (managerIds.length > 0) {
+          const managerDocs = await db
+            .collection('users')
+            .find({
+              _id: { $in: managerIds.map((id) => new Types.ObjectId(id)) },
+            })
+            .project({ _id: 1, name: 1 })
+            .toArray();
+          const managerMap = new Map(
+            (managerDocs as { _id: unknown; name?: string }[]).map((m) => [
+              (m._id as { toString(): string }).toString(),
+              m.name ?? null,
+            ]),
+          );
+          allOutlets.forEach((outlet, i) => {
+            const mid = allOutletDocs[i].managerId;
+            if (mid != null) {
+              const idStr =
+                typeof mid === 'string'
+                  ? mid
+                  : (mid as { toString(): string }).toString();
+              outlet.managerName = managerMap.get(idStr) ?? null;
+            }
+          });
+        }
+      }
+
       const results = await this.reviewModel
         .aggregate<{
           outletId: string;
@@ -752,35 +815,6 @@ export class AnalyticsService {
         ])
         .exec();
 
-      const resultsByOutletId = new Map(results.map((r) => [r.outletId, r]));
-
-      const allOutlets = await this.outletModel
-        .aggregate<{
-          outletId: string;
-          outletName: string;
-          managerName: string | null;
-        }>([
-          { $match: { isDeleted: false } },
-          {
-            $lookup: {
-              from: 'users',
-              localField: 'managerId',
-              foreignField: '_id',
-              as: 'manager',
-            },
-          },
-          {
-            $project: {
-              outletId: { $toString: '$_id' },
-              outletName: '$name',
-              managerName: {
-                $ifNull: [{ $arrayElemAt: ['$manager.name', 0] }, null],
-              },
-            },
-          },
-        ])
-        .exec();
-
       const zeroMetrics = {
         staff: 0,
         speed: 0,
@@ -789,21 +823,28 @@ export class AnalyticsService {
         overall: 0,
       };
 
-      for (const outlet of allOutlets) {
-        if (!resultsByOutletId.has(outlet.outletId)) {
-          results.push({
-            outletId: outlet.outletId,
-            outletName: outlet.outletName,
-            managerName: outlet.managerName,
-            csatScore: 0,
-            metrics: { ...zeroMetrics },
-          });
+      const resultsByOutletId = new Map(
+        results.map((r) => [String(r.outletId), r]),
+      );
+
+      const fullResults = allOutlets.map((outlet) => {
+        const oid = String(outlet.outletId);
+        const existing = resultsByOutletId.get(oid);
+        if (existing) {
+          return existing;
         }
-      }
+        return {
+          outletId: oid,
+          outletName: outlet.outletName,
+          managerName: outlet.managerName,
+          csatScore: 0,
+          metrics: { ...zeroMetrics },
+        };
+      });
 
-      results.sort((a, b) => b.csatScore - a.csatScore);
+      fullResults.sort((a, b) => b.csatScore - a.csatScore);
 
-      const franchiseRanking = results.map((r, index) => ({
+      const franchiseRanking = fullResults.map((r, index) => ({
         rank: index + 1,
         outletId: r.outletId,
         outletName: r.outletName,
@@ -811,7 +852,7 @@ export class AnalyticsService {
         csatScore: r.csatScore,
       }));
 
-      const metricsHeatmap = results.map((r) => ({
+      const metricsHeatmap = fullResults.map((r) => ({
         outletId: r.outletId,
         outletName: r.outletName,
         metrics: r.metrics,
