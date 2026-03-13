@@ -242,7 +242,11 @@ export class ReviewService {
             from: 'outlets',
             let: { oid: { $toObjectId: { $toString: '$outletId' } } },
             pipeline: [
+<<<<<<< HEAD
               { $match: { $expr: { $eq: ['$_id', '$oid'] } } },
+=======
+              { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
+>>>>>>> dev
               { $project: { _id: 1, name: 1 } },
             ],
             as: 'outletIdLookup',
