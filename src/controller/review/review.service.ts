@@ -242,11 +242,7 @@ export class ReviewService {
             from: 'outlets',
             let: { oid: { $toObjectId: { $toString: '$outletId' } } },
             pipeline: [
-<<<<<<< HEAD
-              { $match: { $expr: { $eq: ['$_id', '$oid'] } } },
-=======
               { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
->>>>>>> dev
               { $project: { _id: 1, name: 1 } },
             ],
             as: 'outletIdLookup',
@@ -743,7 +739,6 @@ export class ReviewService {
           {
             _id: new Types.ObjectId(reviewId),
             isDeleted: false,
-            isComplaint: true,
           },
           { $set },
           { new: true },
@@ -751,7 +746,7 @@ export class ReviewService {
         .exec();
 
       if (!updated) {
-        throw new NotFoundException('Review not found or not a complaint');
+        throw new NotFoundException('Review not found');
       }
 
       return this.findOne(reviewId);
