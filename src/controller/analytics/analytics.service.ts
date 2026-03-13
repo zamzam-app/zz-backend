@@ -752,6 +752,57 @@ export class AnalyticsService {
         ])
         .exec();
 
+      const resultsByOutletId = new Map(results.map((r) => [r.outletId, r]));
+
+      const allOutlets = await this.outletModel
+        .aggregate<{
+          outletId: string;
+          outletName: string;
+          managerName: string | null;
+        }>([
+          { $match: { isDeleted: false } },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'managerId',
+              foreignField: '_id',
+              as: 'manager',
+            },
+          },
+          {
+            $project: {
+              outletId: { $toString: '$_id' },
+              outletName: '$name',
+              managerName: {
+                $ifNull: [{ $arrayElemAt: ['$manager.name', 0] }, null],
+              },
+            },
+          },
+        ])
+        .exec();
+
+      const zeroMetrics = {
+        staff: 0,
+        speed: 0,
+        clean: 0,
+        quality: 0,
+        overall: 0,
+      };
+
+      for (const outlet of allOutlets) {
+        if (!resultsByOutletId.has(outlet.outletId)) {
+          results.push({
+            outletId: outlet.outletId,
+            outletName: outlet.outletName,
+            managerName: outlet.managerName,
+            csatScore: 0,
+            metrics: { ...zeroMetrics },
+          });
+        }
+      }
+
+      results.sort((a, b) => b.csatScore - a.csatScore);
+
       const franchiseRanking = results.map((r, index) => ({
         rank: index + 1,
         outletId: r.outletId,
