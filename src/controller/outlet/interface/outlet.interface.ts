@@ -29,6 +29,7 @@ export interface IOutlet {
 export interface OutletByQrTokenResult {
   _id: string;
   name: string;
+  address?: string | null;
   form: IForm | null;
   /** Present when the token was a tableToken (table QR). */
   table?: { _id: string; name: string } | null;
