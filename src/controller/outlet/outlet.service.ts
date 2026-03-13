@@ -243,6 +243,10 @@ export class OutletService {
     return {
       _id: outlet._id.toString(),
       name: outlet.name,
+<<<<<<< HEAD
+=======
+      address: outlet.address ?? null,
+>>>>>>> dev
       form: form ? (form as unknown as OutletByQrTokenResult['form']) : null,
       ...(table && { table }),
     };
