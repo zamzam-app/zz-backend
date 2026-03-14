@@ -280,7 +280,15 @@ export class ReviewService {
             },
             pipeline: [
               { $match: { $expr: { $in: ['$_id', '$$ids'] } } },
-              { $project: { _id: 1, title: 1 } },
+              {
+                $project: {
+                  _id: 1,
+                  type: 1,
+                  title: 1,
+                  options: 1,
+                  maxRatings: 1,
+                },
+              },
             ],
             as: 'questionsLookup',
           },
