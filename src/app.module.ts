@@ -17,6 +17,7 @@ import { UploadModule } from './controller/upload/upload.module';
 import { OutletTableModule } from './controller/outlet-table/outlet-table.module';
 import { CategoryModule } from './controller/category/category.module';
 import { AnalyticsModule } from './controller/analytics/analytics.module';
+import { CakeVisualiserModule } from './controller/cake-visualiser/cake-visualiser.module';
 
 @Module({
   imports: [
@@ -46,7 +47,9 @@ import { AnalyticsModule } from './controller/analytics/analytics.module';
     OutletTableModule,
     CategoryModule,
     AnalyticsModule,
+    CakeVisualiserModule,
   ],
+
   controllers: [AppController],
   providers: [AppService],
 })
