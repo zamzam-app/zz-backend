@@ -13,7 +13,7 @@ interface GeminiErrorResponse {
 @Injectable()
 export class CakeVisualiserService {
   private readonly logger = new Logger(CakeVisualiserService.name);
-  private readonly GEMINI_MODEL = 'gemini-2.5-flash-image';
+  private readonly GEMINI_MODEL = 'gemini-3.1-flash-image-preview';
   private readonly PLACEHOLDER_IMAGE =
     'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=800';
 
@@ -59,7 +59,7 @@ export class CakeVisualiserService {
         body: JSON.stringify({
           contents: [{ parts }],
           generationConfig: {
-            responseMimeType: 'image/png',
+            responseMimeType: ['TEXT', 'IMAGE'],
           },
         }),
       });
