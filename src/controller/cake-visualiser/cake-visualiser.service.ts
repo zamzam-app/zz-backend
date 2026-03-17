@@ -4,26 +4,41 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { GoogleAuth } from 'google-auth-library';
 import { VisualiseCakeDto } from './dto/visualise-cake.dto';
 
-interface GeminiErrorResponse {
+interface VertexPrediction {
+  bytesBase64Encoded?: string;
+  mimeType?: string;
+}
+
+interface VertexResponse {
+  predictions?: VertexPrediction[];
   error?: { message?: string };
 }
 
 @Injectable()
 export class CakeVisualiserService {
   private readonly logger = new Logger(CakeVisualiserService.name);
-  private readonly GEMINI_MODEL = 'gemini-3.1-flash-image-preview';
+
+  // Use 'imagen-4.0-fast-generate-001' for dev (cheaper)
+  // Use 'imagen-4.0-generate-001' for production (higher quality)
+  private readonly MODEL = 'imagen-4.0-generate-001';
+
   private readonly PLACEHOLDER_IMAGE =
     'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=800';
 
   constructor(private readonly configService: ConfigService) {}
 
   async visualiseCake(dto: VisualiseCakeDto) {
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    const projectId = this.configService.get<string>('GOOGLE_CLOUD_PROJECT');
+    const clientEmail = this.configService.get<string>('GOOGLE_CLIENT_EMAIL');
+    const privateKeyRaw = this.configService.get<string>('GOOGLE_PRIVATE_KEY');
+    const location =
+      this.configService.get<string>('GOOGLE_CLOUD_LOCATION') || 'us-central1';
 
-    // Feature disabled — no API key present
-    if (!apiKey) {
+    // Feature disabled — credentials not configured
+    if (!projectId || !clientEmail || !privateKeyRaw) {
       return {
         success: false,
         message: 'Coming Soon',
@@ -31,85 +46,97 @@ export class CakeVisualiserService {
       };
     }
 
-    const prompt = this.buildPrompt(dto);
-    const parts: object[] = [];
+    // Convert escaped \n back to real newlines (needed when reading from .env)
+    const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
 
-    // If a base image URL is provided, fetch and convert to base64
+    const prompt = this.buildPrompt(dto);
+
+    // Get a short-lived access token using the service account credentials
+    let accessToken: string;
+    try {
+      const auth = new GoogleAuth({
+        credentials: { client_email: clientEmail, private_key: privateKey },
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+      });
+      accessToken = (await auth.getAccessToken()) as string;
+    } catch (err) {
+      this.logger.error('Failed to obtain Google access token', err);
+      throw new InternalServerErrorException(
+        'Authentication with Google Cloud failed',
+      );
+    }
+
+    const endpoint = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.MODEL}:predict`;
+
+    // Build the instance payload
+    const instance: Record<string, unknown> = { prompt };
+
+    // If a base image is provided, include it as a reference image
     if (dto.baseImage) {
       try {
         const { base64, mimeType } = await this.fetchImageAsBase64(
           dto.baseImage,
         );
-        parts.push({ inlineData: { mimeType, data: base64 } });
+        instance.referenceImages = [
+          {
+            referenceType: 'REFERENCE_TYPE_RAW',
+            referenceId: 1,
+            referenceImage: { bytesBase64Encoded: base64, mimeType },
+          },
+        ];
       } catch (err) {
         this.logger.warn(`Failed to fetch base image: ${dto.baseImage}`, err);
         // Continue without the base image rather than failing the whole request
       }
     }
 
-    parts.push({ text: prompt });
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.GEMINI_MODEL}:generateContent?key=${apiKey}`;
-
-    let geminiResponse: Response;
+    let vertexRes: Response;
     try {
-      geminiResponse = await fetch(url, {
+      vertexRes = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: {
-            responseMimeType: ['TEXT', 'IMAGE'],
+          instances: [instance],
+          parameters: {
+            sampleCount: 1,
+            outputOptions: { mimeType: 'image/png' },
           },
         }),
       });
     } catch (err) {
-      this.logger.error('Network error calling Gemini API', err);
+      this.logger.error('Network error calling Vertex AI', err);
       throw new InternalServerErrorException(
         'Failed to reach image generation service',
       );
     }
 
-    if (!geminiResponse.ok) {
-      const errData = (await geminiResponse
-        .json()
-        .catch(() => ({}))) as GeminiErrorResponse;
-      this.logger.error('Gemini API error response', errData);
+    const vertexData = (await vertexRes.json()) as VertexResponse;
+
+    if (!vertexRes.ok) {
+      this.logger.error('Vertex AI error response', vertexData);
       throw new InternalServerErrorException(
-        errData?.error?.message || 'Image generation service returned an error',
+        vertexData?.error?.message ||
+          'Image generation service returned an error',
       );
     }
 
-    const geminiData = (await geminiResponse.json()) as {
-      candidates?: Array<{
-        content?: {
-          parts?: Array<{
-            inlineData?: { data: string; mimeType: string };
-            text?: string;
-          }>;
-        };
-      }>;
-    };
-    const responseParts = geminiData?.candidates?.[0]?.content?.parts ?? [];
+    const prediction = vertexData?.predictions?.[0];
 
-    const imagePart = responseParts.find((p) => p.inlineData);
-    const textPart = responseParts.find((p) => p.text);
-
-    if (imagePart?.inlineData) {
-      return {
-        success: true,
-        imageBase64: imagePart.inlineData.data,
-        mimeType: imagePart.inlineData.mimeType,
-        prompt: textPart?.text ?? '',
-      };
+    if (!prediction?.bytesBase64Encoded) {
+      this.logger.warn('Vertex AI returned no image in predictions');
+      throw new InternalServerErrorException(
+        'No image returned from Vertex AI',
+      );
     }
 
-    // Gemini returned no image — return the text description as fallback
-    this.logger.warn('Gemini returned no image part, falling back to text');
     return {
       success: true,
-      imageBase64: null,
-      prompt: textPart?.text ?? 'No description generated',
+      imageBase64: prediction.bytesBase64Encoded,
+      mimeType: prediction.mimeType || 'image/png',
+      prompt: '',
     };
   }
 
