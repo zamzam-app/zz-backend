@@ -21,9 +21,11 @@ interface VertexResponse {
 export class CakeVisualiserService {
   private readonly logger = new Logger(CakeVisualiserService.name);
 
-  // Use 'imagen-4.0-fast-generate-001' for dev (cheaper)
-  // Use 'imagen-4.0-generate-001' for production (higher quality)
-  private readonly MODEL = 'imagen-4.0-generate-001';
+  /** Text → image only (no referenceImages). */
+  private readonly GEN_MODEL = 'imagen-4.0-generate-001';
+  /** Image + prompt editing (referenceImages / REFERENCE_TYPE_RAW). */
+  private readonly EDIT_MODEL = 'imagen-3.0-capability-001';
+  // private readonly EDIT_MODEL = 'imagen-4.0-ultra-generate-001';
 
   private readonly PLACEHOLDER_IMAGE =
     'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=800';
@@ -66,28 +68,49 @@ export class CakeVisualiserService {
       );
     }
 
-    const endpoint = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.MODEL}:predict`;
+    const baseUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models`;
 
-    // Build the instance payload
-    const instance: Record<string, unknown> = { prompt };
+    const genPayload = {
+      instances: [{ prompt }],
+      parameters: {
+        sampleCount: 1,
+        outputOptions: { mimeType: 'image/png' },
+      },
+    };
 
-    // If a base image is provided, include it as a reference image
+    let endpoint: string;
+    let requestBody: object;
+
     if (dto.baseImage) {
       try {
-        const { base64, mimeType } = await this.fetchImageAsBase64(
-          dto.baseImage,
-        );
-        instance.referenceImages = [
-          {
-            referenceType: 'REFERENCE_TYPE_RAW',
-            referenceId: 1,
-            referenceImage: { bytesBase64Encoded: base64, mimeType },
+        const { base64 } = await this.fetchImageAsBase64(dto.baseImage);
+        endpoint = `${baseUrl}/${this.EDIT_MODEL}:predict`;
+        requestBody = {
+          instances: [
+            {
+              prompt,
+              referenceImages: [
+                {
+                  referenceType: 'REFERENCE_TYPE_RAW',
+                  referenceId: 1,
+                  referenceImage: { bytesBase64Encoded: base64 },
+                },
+              ],
+            },
+          ],
+          parameters: {
+            sampleCount: 1,
+            outputOptions: { mimeType: 'image/png' },
           },
-        ];
+        };
       } catch (err) {
         this.logger.warn(`Failed to fetch base image: ${dto.baseImage}`, err);
-        // Continue without the base image rather than failing the whole request
+        endpoint = `${baseUrl}/${this.GEN_MODEL}:predict`;
+        requestBody = genPayload;
       }
+    } else {
+      endpoint = `${baseUrl}/${this.GEN_MODEL}:predict`;
+      requestBody = genPayload;
     }
 
     let vertexRes: Response;
@@ -98,13 +121,7 @@ export class CakeVisualiserService {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          instances: [instance],
-          parameters: {
-            sampleCount: 1,
-            outputOptions: { mimeType: 'image/png' },
-          },
-        }),
+        body: JSON.stringify(requestBody),
       });
     } catch (err) {
       this.logger.error('Network error calling Vertex AI', err);
