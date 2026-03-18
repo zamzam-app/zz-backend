@@ -16,7 +16,7 @@ export class CakeVisualiserController {
     status: 200,
     description: 'Cake visualization generated successfully.',
   })
-  async visualise(@Body() visualiseCakeDto: VisualiseCakeDto) {
-    return this.cakeVisualiserService.visualise(visualiseCakeDto);
+  async visualiseCake(@Body() dto: VisualiseCakeDto) {
+    return this.cakeVisualiserService.visualiseCake(dto);
   }
 }
