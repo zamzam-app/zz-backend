@@ -105,6 +105,15 @@ export class CreateUserDto {
   dob?: string;
 
   @ApiProperty({
+    example: 'male',
+    description: 'Gender',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  gender?: string;
+
+  @ApiProperty({
     example: '2025-02-21T12:00:00.000Z',
     description: 'Timestamp of the user’s last login (ISO 8601)',
     required: false,

@@ -21,4 +21,6 @@ export interface UserDb {
   isDeleted: boolean;
   createdAt?: Date;
   updatedAt?: Date;
+  userReviews?: string[];
+  custom_cakes?: string[];
 }
