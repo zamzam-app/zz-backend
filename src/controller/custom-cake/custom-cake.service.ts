@@ -86,30 +86,21 @@ export class CustomCakeService {
       if (query.userId) {
         matchStage.userId = new Types.ObjectId(query.userId);
       }
+      const total = await this.customCakeModel.countDocuments(matchStage).exec();
+      const queryBuilder = this.customCakeModel
+        .find(matchStage)
+        .sort({ createdAt: -1 })
+        .populate('userId');
 
-      const dataPipeline = limit ? [{ $skip: skip }, { $limit: limit }] : [];
+      if (limit) {
+        queryBuilder.skip(skip).limit(limit);
+      }
 
-      const [result] = await this.customCakeModel
-        .aggregate<{
-          data: CustomCake[];
-          totalCount: [{ count: number }];
-        }>([
-          { $match: matchStage },
-          { $sort: { createdAt: -1 } },
-          {
-            $facet: {
-              data: dataPipeline,
-              totalCount: [{ $count: 'count' }],
-            },
-          },
-        ])
-        .exec();
-
-      const total = result.totalCount[0]?.count ?? 0;
+      const data = await queryBuilder.exec();
       const effectiveLimit = limit ?? total;
 
       return {
-        data: result.data,
+        data,
         meta: {
           total,
           currentPage: limit ? page : 1,
@@ -129,6 +120,7 @@ export class CustomCakeService {
   async findOne(id: string): Promise<CustomCakeDocument> {
     const doc = await this.customCakeModel
       .findOne({ _id: new Types.ObjectId(id), isDeleted: false })
+      .populate('userId')
       .exec();
     if (!doc) {
       throw new NotFoundException(`Custom cake with ID ${id} not found`);
