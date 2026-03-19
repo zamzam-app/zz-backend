@@ -57,6 +57,13 @@ export class User extends BaseEntity {
     default: [],
   })
   userReviews?: string[];
+
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'CustomCake' }],
+    required: false,
+    default: [],
+  })
+  custom_cakes?: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

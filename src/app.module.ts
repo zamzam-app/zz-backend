@@ -18,6 +18,7 @@ import { OutletTableModule } from './controller/outlet-table/outlet-table.module
 import { CategoryModule } from './controller/category/category.module';
 import { AnalyticsModule } from './controller/analytics/analytics.module';
 import { CakeVisualiserModule } from './controller/cake-visualiser/cake-visualiser.module';
+import { CustomCakeModule } from './controller/custom-cake/custom-cake.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { CakeVisualiserModule } from './controller/cake-visualiser/cake-visualis
     CategoryModule,
     AnalyticsModule,
     CakeVisualiserModule,
+    CustomCakeModule,
   ],
 
   controllers: [AppController],
