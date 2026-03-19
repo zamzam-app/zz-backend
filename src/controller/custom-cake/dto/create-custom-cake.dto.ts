@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUrl } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUrl,
+} from 'class-validator';
 
 export class CreateCustomCakeDto {
   @ApiProperty({
@@ -18,4 +25,33 @@ export class CreateCustomCakeDto {
   @IsNotEmpty()
   @IsUrl()
   imageUrl: string;
+
+  @ApiProperty({
+    description: 'Date of birth (ISO date string)',
+    example: '1990-01-15',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString()
+  dob?: string;
+
+  @ApiProperty({
+    description:
+      'Phone number (used to find or create the user to associate the cake with)',
+    example: '+919876543210',
+  })
+  @IsString()
+  @IsNotEmpty()
+  phone: string;
+
+  @ApiProperty({
+    description: 'Gender',
+    example: 'male',
+    enum: ['male', 'female', 'other'],
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['male', 'female'])
+  gender?: string;
 }

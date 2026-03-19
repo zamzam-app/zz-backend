@@ -1,14 +1,17 @@
 import {
-  Injectable,
-  NotFoundException,
-  InternalServerErrorException,
+  BadRequestException,
   HttpException,
+  Injectable,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CustomCake, CustomCakeDocument } from './entities/custom-cake.entity';
 import { CreateCustomCakeDto } from './dto/create-custom-cake.dto';
 import { UsersService } from '../users/users.service';
+import { normalizePhoneNumber } from '../../util/normalize.util';
+import { UserRole } from '../users/interfaces/user.interface';
+import { CreateUserDto } from '../users/dto/create-user.dto';
 
 @Injectable()
 export class CustomCakeService {
@@ -17,14 +20,39 @@ export class CustomCakeService {
     private readonly usersService: UsersService,
   ) {}
 
-  async create(
-    userId: string,
-    dto: CreateCustomCakeDto,
-  ): Promise<CustomCakeDocument> {
+  async create(dto: CreateCustomCakeDto): Promise<CustomCakeDocument> {
     try {
-      const user = await this.usersService.findOne(userId);
-      if (!user) {
-        throw new NotFoundException(`User with ID ${userId} not found`);
+      if (!dto.phone?.trim()) {
+        throw new BadRequestException('phone is required');
+      }
+
+      const normPhone = normalizePhoneNumber(dto.phone);
+      if (!normPhone) {
+        throw new BadRequestException('Invalid phone number');
+      }
+
+      const existingUser =
+        await this.usersService.findOneByPhoneNumber(normPhone);
+      let userId: string;
+
+      if (existingUser) {
+        userId = (
+          existingUser as unknown as { _id: Types.ObjectId }
+        )._id.toString();
+        const updatePayload: { dob?: string; gender?: string } = {};
+        if (dto.dob != null) updatePayload.dob = dto.dob;
+        if (dto.gender != null) updatePayload.gender = dto.gender;
+        if (Object.keys(updatePayload).length > 0) {
+          await this.usersService.update(userId, updatePayload);
+        }
+      } else {
+        const newUser = await this.usersService.create({
+          phoneNumber: normPhone,
+          role: UserRole.USER,
+          dob: dto.dob,
+          gender: dto.gender,
+        } as CreateUserDto);
+        userId = (newUser as unknown as { _id: Types.ObjectId })._id.toString();
       }
 
       const doc = new this.customCakeModel({

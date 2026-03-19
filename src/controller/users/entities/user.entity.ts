@@ -45,6 +45,9 @@ export class User extends BaseEntity {
   @Prop({ required: false, select: false })
   otp?: string;
 
+  @Prop({ required: false, type: String, default: 'male' })
+  gender?: string;
+
   @Prop({ required: false, type: Date, default: null })
   dob?: Date;
 
