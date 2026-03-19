@@ -86,7 +86,9 @@ export class CustomCakeService {
       if (query.userId) {
         matchStage.userId = new Types.ObjectId(query.userId);
       }
-      const total = await this.customCakeModel.countDocuments(matchStage).exec();
+      const total = await this.customCakeModel
+        .countDocuments(matchStage)
+        .exec();
       const queryBuilder = this.customCakeModel
         .find(matchStage)
         .sort({ createdAt: -1 })
