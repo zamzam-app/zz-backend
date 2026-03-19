@@ -3,11 +3,14 @@ import {
   HttpException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CustomCake, CustomCakeDocument } from './entities/custom-cake.entity';
 import { CreateCustomCakeDto } from './dto/create-custom-cake.dto';
+import { QueryCustomCakeDto } from './dto/query-custom-cake.dto';
+import { FindAllCustomCakesResult } from './interfaces/query-custom-cake.interface';
 import { UsersService } from '../users/users.service';
 import { normalizePhoneNumber } from '../../util/normalize.util';
 import { UserRole } from '../users/interfaces/user.interface';
@@ -71,5 +74,65 @@ export class CustomCakeService {
         (error as Error)?.message ?? 'Failed to save custom cake',
       );
     }
+  }
+
+  async findAll(query: QueryCustomCakeDto): Promise<FindAllCustomCakesResult> {
+    try {
+      const page = query.page ?? 1;
+      const limit = query.limit;
+      const skip = limit ? (page - 1) * limit : 0;
+
+      const matchStage: Record<string, unknown> = { isDeleted: false };
+      if (query.userId) {
+        matchStage.userId = new Types.ObjectId(query.userId);
+      }
+
+      const dataPipeline = limit ? [{ $skip: skip }, { $limit: limit }] : [];
+
+      const [result] = await this.customCakeModel
+        .aggregate<{
+          data: CustomCake[];
+          totalCount: [{ count: number }];
+        }>([
+          { $match: matchStage },
+          { $sort: { createdAt: -1 } },
+          {
+            $facet: {
+              data: dataPipeline,
+              totalCount: [{ $count: 'count' }],
+            },
+          },
+        ])
+        .exec();
+
+      const total = result.totalCount[0]?.count ?? 0;
+      const effectiveLimit = limit ?? total;
+
+      return {
+        data: result.data,
+        meta: {
+          total,
+          currentPage: limit ? page : 1,
+          hasPrevPage: limit ? page > 1 : false,
+          hasNextPage: limit ? page * limit < total : false,
+          limit: effectiveLimit,
+        },
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to list custom cakes',
+      );
+    }
+  }
+
+  async findOne(id: string): Promise<CustomCakeDocument> {
+    const doc = await this.customCakeModel
+      .findOne({ _id: new Types.ObjectId(id), isDeleted: false })
+      .exec();
+    if (!doc) {
+      throw new NotFoundException(`Custom cake with ID ${id} not found`);
+    }
+    return doc;
   }
 }
