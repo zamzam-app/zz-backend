@@ -35,12 +35,11 @@ export class Outlet extends BaseEntity {
   images: string[];
 
   @Prop({
-    type: MongooseSchema.Types.ObjectId,
-    ref: 'User',
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'User' }],
     required: false,
-    default: null,
+    default: [],
   })
-  managerId: string;
+  managerIds: string[];
 
   // This can be used to store form for the outlet.
   @Prop({ type: MongooseSchema.Types.ObjectId, required: false, default: null })
