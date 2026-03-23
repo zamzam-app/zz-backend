@@ -562,9 +562,15 @@ export class AnalyticsService {
       const allOutletDocs = await db
         .collection(outletCollectionName)
         .find({ isDeleted: false })
-        .project<{ _id: unknown; name: string; managerId?: unknown }>({
+        .project<{
+          _id: unknown;
+          name: string;
+          managerIds?: unknown;
+          managerId?: unknown;
+        }>({
           _id: 1,
           name: 1,
+          managerIds: 1,
           managerId: 1,
         })
         .toArray();
@@ -572,18 +578,28 @@ export class AnalyticsService {
       const allOutlets: {
         outletId: string;
         outletName: string;
-        managerName: string | null;
+        managerNames: string[];
       }[] = allOutletDocs.map((doc) => ({
         outletId: (doc._id as { toString(): string }).toString(),
         outletName: doc.name ?? '',
-        managerName: null,
+        managerNames: [],
       }));
 
       if (allOutlets.length > 0) {
+        const rawManagerIds: unknown[] = allOutletDocs.flatMap(
+          (d): unknown[] => {
+            const ids: unknown[] = [];
+            if (Array.isArray(d.managerIds)) {
+              ids.push(...(d.managerIds as unknown[]));
+            } else if (d.managerId != null) {
+              ids.push(d.managerId);
+            }
+            return ids;
+          },
+        );
         const managerIds = [
           ...new Set(
-            allOutletDocs
-              .map((d) => d.managerId)
+            rawManagerIds
               .filter((id): id is NonNullable<typeof id> => id != null)
               .map((id) =>
                 typeof id === 'string'
@@ -607,14 +623,20 @@ export class AnalyticsService {
             ]),
           );
           allOutlets.forEach((outlet, i) => {
-            const mid = allOutletDocs[i].managerId;
-            if (mid != null) {
-              const idStr =
+            const rawIds = Array.isArray(allOutletDocs[i].managerIds)
+              ? (allOutletDocs[i].managerIds as unknown[])
+              : allOutletDocs[i].managerId != null
+                ? [allOutletDocs[i].managerId]
+                : [];
+            const names = rawIds
+              .map((mid) =>
                 typeof mid === 'string'
                   ? mid
-                  : (mid as { toString(): string }).toString();
-              outlet.managerName = managerMap.get(idStr) ?? null;
-            }
+                  : (mid as { toString(): string }).toString(),
+              )
+              .map((idStr) => managerMap.get(idStr))
+              .filter((name): name is string => !!name);
+            outlet.managerNames = names;
           });
         }
       }
@@ -623,7 +645,7 @@ export class AnalyticsService {
         .aggregate<{
           outletId: string;
           outletName: string;
-          managerName: string | null;
+          managerNames: string[];
           csatScore: number;
           metrics: {
             staff: number;
@@ -783,24 +805,46 @@ export class AnalyticsService {
           },
           { $unwind: '$outlet' },
           {
-            $lookup: {
-              from: 'users',
-              localField: 'outlet.managerId',
-              foreignField: '_id',
-              as: 'manager',
+            $addFields: {
+              outletManagerIds: {
+                $cond: [
+                  { $isArray: '$outlet.managerIds' },
+                  '$outlet.managerIds',
+                  {
+                    $cond: [
+                      { $ne: ['$outlet.managerId', null] },
+                      ['$outlet.managerId'],
+                      [],
+                    ],
+                  },
+                ],
+              },
             },
           },
           {
-            $unwind: {
-              path: '$manager',
-              preserveNullAndEmptyArrays: true,
+            $lookup: {
+              from: 'users',
+              localField: 'outletManagerIds',
+              foreignField: '_id',
+              as: 'managers',
             },
           },
           {
             $project: {
               outletId: { $toString: '$_id' },
               outletName: '$outlet.name',
-              managerName: { $ifNull: ['$manager.name', null] },
+              managerNames: {
+                $ifNull: [
+                  {
+                    $map: {
+                      input: '$managers',
+                      as: 'm',
+                      in: '$$m.name',
+                    },
+                  },
+                  [],
+                ],
+              },
               csatScore: { $round: ['$overall', 1] },
               metrics: {
                 staff: { $ifNull: [{ $round: ['$staff', 1] }, 0] },
@@ -836,7 +880,7 @@ export class AnalyticsService {
         return {
           outletId: oid,
           outletName: outlet.outletName,
-          managerName: outlet.managerName,
+          managerNames: outlet.managerNames,
           csatScore: 0,
           metrics: { ...zeroMetrics },
         };
@@ -848,7 +892,7 @@ export class AnalyticsService {
         rank: index + 1,
         outletId: r.outletId,
         outletName: r.outletName,
-        managerName: r.managerName,
+        managerNames: r.managerNames,
         csatScore: r.csatScore,
       }));
 

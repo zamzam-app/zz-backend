@@ -10,8 +10,8 @@ export class FranchiseRankingItemDto {
   @ApiProperty({ example: 'Outlet 1' })
   outletName: string;
 
-  @ApiProperty({ example: 'John Doe', nullable: true })
-  managerName: string | null;
+  @ApiProperty({ example: ['John Doe', 'Jane Smith'] })
+  managerNames: string[];
 
   @ApiProperty({ example: 4.0 })
   csatScore: number;
