@@ -213,6 +213,12 @@ export class FormService {
         starStep: 1,
         hint: 'Please rate our quality',
       },
+      {
+        type: QuestionType.Paragraph,
+        title: 'Overall experience at the store',
+        isRequired: false,
+        hint: 'Tell us about your overall experience at the store',
+      },
     ];
   }
 
