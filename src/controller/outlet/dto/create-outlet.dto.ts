@@ -69,12 +69,13 @@ export class CreateOutletDto {
   qrToken?: string;
 
   @ApiPropertyOptional({
-    example: '60d5ecb86217152c9043e02d',
-    description: 'Associated manager ID',
+    example: ['60d5ecb86217152c9043e02d', '60d5ecb86217152c9043e02e'],
+    description: 'Associated manager IDs',
   })
-  @IsMongoId()
+  @IsArray()
+  @IsMongoId({ each: true })
   @IsOptional()
-  managerId?: string;
+  managerIds?: string[];
 
   @ApiPropertyOptional({
     example: '60d5ecb86217152c9043e02d',

@@ -57,16 +57,10 @@ export class OutletService {
         {
           $lookup: {
             from: 'users',
-            localField: 'managerId',
+            localField: 'managerIds',
             foreignField: '_id',
-            as: 'managerId',
+            as: 'managerIds',
             pipeline: [{ $project: { name: 1 } }],
-          },
-        },
-        {
-          $unwind: {
-            path: '$managerId',
-            preserveNullAndEmptyArrays: true,
           },
         },
         {

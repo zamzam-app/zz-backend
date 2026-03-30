@@ -14,7 +14,7 @@ export interface IOutlet {
   qrToken: string;
   isActive?: boolean;
   isDeleted?: boolean;
-  managerId?: string | null;
+  managerIds?: string[] | null;
   formId?: string | null;
   addressId?: string;
   address?: string;
