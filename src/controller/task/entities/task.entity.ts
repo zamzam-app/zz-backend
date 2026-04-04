@@ -10,6 +10,9 @@ export class Task extends BaseEntity {
   @Prop({ type: String, required: true, trim: true })
   description: string;
 
+  @Prop({ type: String, required: false, trim: true })
+  comment?: string;
+
   @Prop({ type: String, enum: TaskCategory, required: true })
   category: TaskCategory;
 
