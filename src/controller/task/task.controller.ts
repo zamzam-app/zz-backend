@@ -55,7 +55,6 @@ export class TaskController {
     @Query() query: QueryTaskDto,
     @Request() req: ExpressRequest & { user: JwtPayload },
   ) {
-    console.log('query', query);
     return this.taskService.findAll(query, req.user);
   }
 
