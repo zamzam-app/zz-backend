@@ -1,0 +1,74 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import { TaskCategory, TaskPriority, TaskStatus } from '../task.enums';
+
+export class QueryTaskDto {
+  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
+
+  @ApiPropertyOptional({ description: 'Filter by outlet ID' })
+  @IsOptional()
+  @IsMongoId()
+  outletId?: string;
+
+  @ApiPropertyOptional({ enum: TaskStatus })
+  @IsOptional()
+  @IsEnum(TaskStatus)
+  status?: TaskStatus;
+
+  @ApiPropertyOptional({ enum: TaskCategory })
+  @IsOptional()
+  @IsEnum(TaskCategory)
+  category?: TaskCategory;
+
+  @ApiPropertyOptional({ enum: TaskPriority })
+  @IsOptional()
+  @IsEnum(TaskPriority)
+  priority?: TaskPriority;
+
+  @ApiPropertyOptional({ description: 'Filter tasks assigned to this user' })
+  @IsOptional()
+  @IsMongoId()
+  assigneeId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Case-insensitive search on description',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Due date range start (ISO 8601)' })
+  @IsOptional()
+  @IsDateString()
+  dueFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Due date range end (ISO 8601)' })
+  @IsOptional()
+  @IsDateString()
+  dueTo?: string;
+}

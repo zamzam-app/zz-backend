@@ -1,0 +1,21 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { Outlet, OutletSchema } from '../outlet/entities/outlet.entity';
+import { User, UserSchema } from '../users/entities/user.entity';
+import { Task, TaskSchema } from './entities/task.entity';
+import { TaskController } from './task.controller';
+import { TaskService } from './task.service';
+
+@Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: Task.name, schema: TaskSchema },
+      { name: Outlet.name, schema: OutletSchema },
+      { name: User.name, schema: UserSchema },
+    ]),
+  ],
+  controllers: [TaskController],
+  providers: [TaskService],
+  exports: [TaskService],
+})
+export class TaskModule {}

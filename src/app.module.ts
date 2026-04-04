@@ -19,6 +19,7 @@ import { CategoryModule } from './controller/category/category.module';
 import { AnalyticsModule } from './controller/analytics/analytics.module';
 import { CakeVisualiserModule } from './controller/cake-visualiser/cake-visualiser.module';
 import { CustomCakeModule } from './controller/custom-cake/custom-cake.module';
+import { TaskModule } from './controller/task/task.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { CustomCakeModule } from './controller/custom-cake/custom-cake.module';
     AnalyticsModule,
     CakeVisualiserModule,
     CustomCakeModule,
+    TaskModule,
   ],
 
   controllers: [AppController],
