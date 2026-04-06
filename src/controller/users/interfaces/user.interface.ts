@@ -23,4 +23,5 @@ export interface UserDb {
   updatedAt?: Date;
   userReviews?: string[];
   custom_cakes?: string[];
+  uploaded_cakes?: string[];
 }
