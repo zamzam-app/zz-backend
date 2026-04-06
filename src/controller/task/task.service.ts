@@ -70,6 +70,9 @@ export class TaskService {
         createdBy: new Types.ObjectId(createdByUserId),
         imageUrls: dto.imageUrls ?? [],
         videoUrls: dto.videoUrls ?? [],
+        adminAudioUrl: dto.adminAudioUrl ?? [],
+        managerAudioUrl: dto.managerAudioUrl ?? [],
+        managerComments: dto.managerComments?.trim() ?? '',
         completedAt,
       });
 
@@ -136,7 +139,6 @@ export class TaskService {
         .exec();
 
       const total = result.totalCount[0]?.count ?? 0;
-
       return {
         data: result.data,
         meta: {
@@ -219,6 +221,15 @@ export class TaskService {
       if (dto.dueDate !== undefined) $set.dueDate = new Date(dto.dueDate);
       if (dto.imageUrls !== undefined) $set.imageUrls = dto.imageUrls;
       if (dto.videoUrls !== undefined) $set.videoUrls = dto.videoUrls;
+      if (dto.adminAudioUrl !== undefined) {
+        $set.adminAudioUrl = dto.adminAudioUrl;
+      }
+      if (dto.managerAudioUrl !== undefined) {
+        $set.managerAudioUrl = dto.managerAudioUrl;
+      }
+      if (dto.managerComments !== undefined) {
+        $set.managerComments = dto.managerComments.trim();
+      }
 
       if (dto.assigneeIds !== undefined) {
         $set.assigneeIds = dto.assigneeIds.map((id) => new Types.ObjectId(id));
@@ -360,8 +371,26 @@ export class TaskService {
       .select('outlets')
       .lean()
       .exec();
-    const outlets = user?.outlets ?? [];
-    return outlets.map((o) => new Types.ObjectId(o.toString()));
+    const fromProfile = (user?.outlets ?? []).map(
+      (o) => new Types.ObjectId(o.toString()),
+    );
+
+    const fromOutletDocs = await this.outletModel
+      .find({
+        isDeleted: false,
+        managerIds: new Types.ObjectId(userId),
+      } as Record<string, unknown>)
+      .select('_id')
+      .lean()
+      .exec();
+
+    const fromManagerRole = fromOutletDocs.map((o) => o._id);
+
+    const merged = new Map<string, Types.ObjectId>();
+    for (const id of [...fromProfile, ...fromManagerRole]) {
+      merged.set(id.toString(), id);
+    }
+    return [...merged.values()];
   }
 
   private async assertManagerOutletAccess(
@@ -375,8 +404,20 @@ export class TaskService {
     if (!user) {
       throw new ForbiddenException('User not found');
     }
-    const allowed = (user.outlets ?? []).map((o) => o.toString());
-    if (!allowed.includes(outletId)) {
+    const fromProfile = (user.outlets ?? []).map((o) => o.toString());
+    if (fromProfile.includes(outletId)) {
+      return;
+    }
+    const outlet = await this.outletModel
+      .findOne({
+        _id: outletId,
+        isDeleted: false,
+        managerIds: new Types.ObjectId(jwtUser.sub),
+      } as Record<string, unknown>)
+      .select('_id')
+      .lean()
+      .exec();
+    if (!outlet) {
       throw new ForbiddenException('You do not have access to this outlet');
     }
   }
