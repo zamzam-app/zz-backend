@@ -1,5 +1,10 @@
 import { applyDecorators } from '@nestjs/common';
-import { ApiCreatedResponse, ApiOperation } from '@nestjs/swagger';
+import {
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+} from '@nestjs/swagger';
 import { UploadedCake } from '../entities/uploaded-cake.entity';
 
 export function ApiUploadedCakeCreate() {
@@ -13,5 +18,30 @@ export function ApiUploadedCakeCreate() {
       description: 'Uploaded cake request created successfully.',
       type: UploadedCake,
     }),
+  );
+}
+
+export function ApiUploadedCakeFindAll() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get all uploaded cakes',
+      description:
+        'Returns paginated list. Optional query: page, limit, userId to filter by user.',
+    }),
+    ApiOkResponse({
+      description:
+        'List of uploaded cakes with meta (total, currentPage, etc.).',
+    }),
+  );
+}
+
+export function ApiUploadedCakeFindOne() {
+  return applyDecorators(
+    ApiOperation({ summary: 'Get one uploaded cake by ID' }),
+    ApiOkResponse({
+      description: 'Uploaded cake found.',
+      type: UploadedCake,
+    }),
+    ApiNotFoundResponse({ description: 'Uploaded cake not found.' }),
   );
 }
