@@ -276,6 +276,14 @@ export class UsersService {
       .exec();
   }
 
+  async addUploadedCake(userId: string, uploadedCakeId: string): Promise<void> {
+    await this.userModel
+      .findByIdAndUpdate(userId, {
+        $push: { uploaded_cakes: new Types.ObjectId(uploadedCakeId) },
+      })
+      .exec();
+  }
+
   /**
    * Finds a user by userId or phoneNumber. If not found, creates a minimal user
    * via create() and returns it. Used when creating reviews so the author exists.
