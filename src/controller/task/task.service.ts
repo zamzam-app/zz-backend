@@ -70,6 +70,9 @@ export class TaskService {
         createdBy: new Types.ObjectId(createdByUserId),
         imageUrls: dto.imageUrls ?? [],
         videoUrls: dto.videoUrls ?? [],
+        adminAudioUrl: dto.adminAudioUrl ?? [],
+        managerAudioUrl: dto.managerAudioUrl ?? [],
+        managerComments: dto.managerComments?.trim() ?? '',
         completedAt,
       });
 
@@ -218,6 +221,15 @@ export class TaskService {
       if (dto.dueDate !== undefined) $set.dueDate = new Date(dto.dueDate);
       if (dto.imageUrls !== undefined) $set.imageUrls = dto.imageUrls;
       if (dto.videoUrls !== undefined) $set.videoUrls = dto.videoUrls;
+      if (dto.adminAudioUrl !== undefined) {
+        $set.adminAudioUrl = dto.adminAudioUrl;
+      }
+      if (dto.managerAudioUrl !== undefined) {
+        $set.managerAudioUrl = dto.managerAudioUrl;
+      }
+      if (dto.managerComments !== undefined) {
+        $set.managerComments = dto.managerComments.trim();
+      }
 
       if (dto.assigneeIds !== undefined) {
         $set.assigneeIds = dto.assigneeIds.map((id) => new Types.ObjectId(id));

@@ -9,6 +9,9 @@ export interface TaskBoardItem {
   dueDate: Date;
   imageUrls: string[];
   videoUrls: string[];
+  adminAudioUrl: string[];
+  managerAudioUrl: string[];
+  managerComments: string;
   outlet: { _id: string; name: string };
   assignees: Array<{ _id: string; name?: string }>;
   createdBy: { _id: string; name?: string };
