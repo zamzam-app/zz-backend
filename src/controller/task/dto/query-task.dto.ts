@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
@@ -52,6 +52,10 @@ export class QueryTaskDto {
   @ApiPropertyOptional({ description: 'Filter tasks assigned to this user' })
   @IsOptional()
   @IsMongoId()
+  @Transform(({ obj }: { obj: Record<string, string> }) => {
+    const raw = obj.assigneeId ?? obj.assigneeid;
+    return raw === undefined || raw === '' ? undefined : raw;
+  })
   assigneeId?: string;
 
   @ApiPropertyOptional({
