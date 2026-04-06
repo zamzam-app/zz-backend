@@ -60,4 +60,22 @@ export class CreateTaskDto {
   @IsArray()
   @IsString({ each: true })
   videoUrls?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  adminAudioUrl?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  managerAudioUrl?: string[];
+
+  @ApiPropertyOptional({ description: 'Manager comments' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  managerComments?: string;
 }
