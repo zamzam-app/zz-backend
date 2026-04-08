@@ -1,10 +1,3 @@
-export enum TaskCategory {
-  HYGIENE = 'HYGIENE',
-  MAINTENANCE = 'MAINTENANCE',
-  INVENTORY = 'INVENTORY',
-  STAFFING = 'STAFFING',
-}
-
 export enum TaskPriority {
   LOW = 'LOW',
   MEDIUM = 'MEDIUM',

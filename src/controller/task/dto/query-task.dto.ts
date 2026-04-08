@@ -11,7 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { TaskCategory, TaskPriority, TaskStatus } from '../task.enums';
+import { TaskPriority, TaskStatus } from '../task.enums';
 
 export class QueryTaskDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
@@ -39,10 +39,14 @@ export class QueryTaskDto {
   @IsEnum(TaskStatus)
   status?: TaskStatus;
 
-  @ApiPropertyOptional({ enum: TaskCategory })
+  @ApiPropertyOptional({ description: 'Filter by task category ID' })
   @IsOptional()
-  @IsEnum(TaskCategory)
-  category?: TaskCategory;
+  @IsMongoId()
+  @Transform(({ obj }: { obj: Record<string, string> }) => {
+    const raw = obj.taskCategoryId ?? obj.taskCategoryid ?? obj.category;
+    return raw === undefined || raw === '' ? undefined : raw;
+  })
+  taskCategoryId?: string;
 
   @ApiPropertyOptional({ enum: TaskPriority })
   @IsOptional()
