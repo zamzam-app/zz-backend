@@ -1,10 +1,10 @@
-import { TaskCategory, TaskPriority, TaskStatus } from '../task.enums';
+import { TaskPriority, TaskStatus } from '../task.enums';
 
 export interface TaskBoardItem {
   _id: string;
   description: string;
   comment?: string;
-  category: TaskCategory;
+  taskCategory: { _id: string; name: string; description?: string };
   priority: TaskPriority;
   status: TaskStatus;
   dueDate: Date;

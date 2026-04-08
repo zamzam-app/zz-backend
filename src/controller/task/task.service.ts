@@ -11,6 +11,10 @@ import { Model, PipelineStage, Types } from 'mongoose';
 import { JwtPayload } from '../auth/interfaces/auth.interfaces';
 import { UserRole } from '../users/interfaces/user.interface';
 import { Outlet, OutletDocument } from '../outlet/entities/outlet.entity';
+import {
+  TaskCategory,
+  TaskCategoryDocument,
+} from '../task-category/entities/task-category.entity';
 import { User, UserDocument } from '../users/entities/user.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { QueryTaskDto } from './dto/query-task.dto';
@@ -30,6 +34,8 @@ export class TaskService {
   constructor(
     @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
     @InjectModel(Outlet.name) private outletModel: Model<OutletDocument>,
+    @InjectModel(TaskCategory.name)
+    private taskCategoryModel: Model<TaskCategoryDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
@@ -52,6 +58,7 @@ export class TaskService {
       }
 
       await this.assertManagerOutletAccess(jwtUser, dto.outletId);
+      await this.assertTaskCategoryExists(dto.taskCategoryId);
 
       const assigneeIds = dto.assigneeIds ?? [];
       await this.assertAssigneesAllowed(outlet, assigneeIds);
@@ -61,7 +68,7 @@ export class TaskService {
 
       const doc = new this.taskModel({
         description: dto.description.trim(),
-        category: dto.category,
+        taskCategoryId: new Types.ObjectId(dto.taskCategoryId),
         priority: dto.priority ?? undefined,
         status,
         dueDate: new Date(dto.dueDate),
@@ -216,7 +223,10 @@ export class TaskService {
       if (dto.description !== undefined) {
         $set.description = dto.description.trim();
       }
-      if (dto.category !== undefined) $set.category = dto.category;
+      if (dto.taskCategoryId !== undefined) {
+        await this.assertTaskCategoryExists(dto.taskCategoryId);
+        $set.taskCategoryId = new Types.ObjectId(dto.taskCategoryId);
+      }
       if (dto.priority !== undefined) $set.priority = dto.priority;
       if (dto.dueDate !== undefined) $set.dueDate = new Date(dto.dueDate);
       if (dto.imageUrls !== undefined) $set.imageUrls = dto.imageUrls;
@@ -329,8 +339,11 @@ export class TaskService {
     if (query.status) {
       matchStage.status = query.status;
     }
-    if (query.category) {
-      matchStage.category = query.category;
+    if (query.taskCategoryId) {
+      if (!Types.ObjectId.isValid(query.taskCategoryId)) {
+        throw new BadRequestException('Invalid task category ID filter');
+      }
+      matchStage.taskCategoryId = new Types.ObjectId(query.taskCategoryId);
     }
     if (query.priority) {
       matchStage.priority = query.priority;
@@ -464,6 +477,22 @@ export class TaskService {
     }
   }
 
+  private async assertTaskCategoryExists(
+    taskCategoryId: string,
+  ): Promise<void> {
+    if (!Types.ObjectId.isValid(taskCategoryId)) {
+      throw new BadRequestException('Invalid task category ID');
+    }
+    const taskCategory = await this.taskCategoryModel
+      .findOne({ _id: taskCategoryId, isDeleted: false })
+      .select('_id')
+      .lean()
+      .exec();
+    if (!taskCategory) {
+      throw new NotFoundException('Task category not found');
+    }
+  }
+
   private taskLookupStages(): PipelineStage[] {
     return [
       {
@@ -475,6 +504,17 @@ export class TaskService {
             { $project: { _id: 1, name: 1 } },
           ],
           as: 'outletArr',
+        },
+      },
+      {
+        $lookup: {
+          from: 'taskcategories',
+          let: { tcid: '$taskCategoryId' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$tcid'] } } },
+            { $project: { _id: 1, name: 1, description: 1 } },
+          ],
+          as: 'taskCategoryArr',
         },
       },
       {
@@ -508,14 +548,17 @@ export class TaskService {
       {
         $addFields: {
           outlet: { $arrayElemAt: ['$outletArr', 0] },
+          taskCategory: { $arrayElemAt: ['$taskCategoryArr', 0] },
           createdBy: { $arrayElemAt: ['$creatorArr', 0] },
         },
       },
       {
         $project: {
           outletArr: 0,
+          taskCategoryArr: 0,
           creatorArr: 0,
           outletId: 0,
+          taskCategoryId: 0,
           assigneeIds: 0,
         },
       },

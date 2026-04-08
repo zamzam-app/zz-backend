@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { TaskCategory, TaskPriority, TaskStatus } from '../task.enums';
+import { TaskPriority, TaskStatus } from '../task.enums';
 
 export type TaskDocument = HydratedDocument<Task>;
 
@@ -13,8 +13,12 @@ export class Task extends BaseEntity {
   @Prop({ type: String, required: false, trim: true })
   comment?: string;
 
-  @Prop({ type: String, enum: TaskCategory, required: true })
-  category: TaskCategory;
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'TaskCategory',
+    required: true,
+  })
+  taskCategoryId: string;
 
   @Prop({
     type: String,
@@ -76,4 +80,4 @@ export const TaskSchema = SchemaFactory.createForClass(Task);
 
 TaskSchema.index({ isDeleted: 1, outletId: 1, status: 1, dueDate: 1 });
 TaskSchema.index({ isDeleted: 1, assigneeIds: 1, status: 1, dueDate: 1 });
-TaskSchema.index({ isDeleted: 1, category: 1, priority: 1 });
+TaskSchema.index({ isDeleted: 1, taskCategoryId: 1, priority: 1 });
