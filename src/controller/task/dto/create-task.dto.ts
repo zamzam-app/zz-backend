@@ -9,7 +9,7 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
-import { TaskCategory, TaskPriority, TaskStatus } from '../task.enums';
+import { TaskPriority, TaskStatus } from '../task.enums';
 
 export class CreateTaskDto {
   @ApiProperty({ description: 'Task description', example: 'Clean prep area' })
@@ -18,9 +18,9 @@ export class CreateTaskDto {
   @MaxLength(10000)
   description: string;
 
-  @ApiProperty({ enum: TaskCategory })
-  @IsEnum(TaskCategory)
-  category: TaskCategory;
+  @ApiProperty({ description: 'Task category ID' })
+  @IsMongoId()
+  taskCategoryId: string;
 
   @ApiPropertyOptional({ enum: TaskPriority, default: TaskPriority.MEDIUM })
   @IsOptional()

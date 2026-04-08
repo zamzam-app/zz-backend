@@ -20,6 +20,7 @@ import { AnalyticsModule } from './controller/analytics/analytics.module';
 import { CakeVisualiserModule } from './controller/cake-visualiser/cake-visualiser.module';
 import { CustomCakeModule } from './controller/custom-cake/custom-cake.module';
 import { TaskModule } from './controller/task/task.module';
+import { TaskCategoryModule } from './controller/task-category/task-category.module';
 import { UploadedCakesModule } from './controller/uploaded-cakes/uploaded-cakes.module';
 
 @Module({
@@ -53,6 +54,7 @@ import { UploadedCakesModule } from './controller/uploaded-cakes/uploaded-cakes.
     CakeVisualiserModule,
     CustomCakeModule,
     TaskModule,
+    TaskCategoryModule,
     UploadedCakesModule,
   ],
 

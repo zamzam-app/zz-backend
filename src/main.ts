@@ -13,6 +13,7 @@ async function bootstrap() {
       'http://localhost:5173',
       'https://zz-admin-zeta.vercel.app',
       'https://zz-user.vercel.app',
+      'http://localhost:8081',
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
