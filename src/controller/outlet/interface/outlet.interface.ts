@@ -1,4 +1,4 @@
-import { IForm } from 'src/controller/forms/interfaces/form.interface';
+import { IForm } from '../../forms/interfaces/form.interface';
 
 export interface IOutletMenuItem {
   productId: string;
