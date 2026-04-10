@@ -7,7 +7,7 @@ export type TaskCategoryDocument = HydratedDocument<TaskCategory>;
 @Schema({ timestamps: true })
 export class TaskCategory extends BaseEntity {
   @Prop({ required: true, trim: true })
-  name: string;
+  name!: string;
 
   @Prop({ required: false, trim: true })
   description?: string;

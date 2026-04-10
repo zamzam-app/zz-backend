@@ -45,19 +45,23 @@ export class TaskService {
     jwtUser: JwtPayload,
   ): Promise<TaskBoardItem> {
     try {
-      if (!Types.ObjectId.isValid(dto.outletId)) {
-        throw new BadRequestException('Invalid outlet ID');
+      let outlet: OutletDocument | null = null;
+      if (dto.outletId) {
+        if (!Types.ObjectId.isValid(dto.outletId)) {
+          throw new BadRequestException('Invalid outlet ID');
+        }
+
+        outlet = await this.outletModel.findOne({
+          _id: dto.outletId,
+          isDeleted: false,
+        });
+        if (!outlet) {
+          throw new NotFoundException('Outlet not found');
+        }
+
+        await this.assertManagerOutletAccess(jwtUser, dto.outletId);
       }
 
-      const outlet = await this.outletModel.findOne({
-        _id: dto.outletId,
-        isDeleted: false,
-      });
-      if (!outlet) {
-        throw new NotFoundException('Outlet not found');
-      }
-
-      await this.assertManagerOutletAccess(jwtUser, dto.outletId);
       await this.assertTaskCategoryExists(dto.taskCategoryId);
 
       const assigneeIds = dto.assigneeIds ?? [];
@@ -72,15 +76,26 @@ export class TaskService {
         priority: dto.priority ?? undefined,
         status,
         dueDate: new Date(dto.dueDate),
-        outletId: new Types.ObjectId(dto.outletId),
+        outletId: dto.outletId ? new Types.ObjectId(dto.outletId) : null,
         assigneeIds: assigneeIds.map((id) => new Types.ObjectId(id)),
         createdBy: new Types.ObjectId(createdByUserId),
-        imageUrls: dto.imageUrls ?? [],
-        videoUrls: dto.videoUrls ?? [],
-        adminAudioUrl: dto.adminAudioUrl ?? [],
-        managerAudioUrl: dto.managerAudioUrl ?? [],
-        managerComments: dto.managerComments?.trim() ?? '',
         completedAt,
+        adminSubmission: dto.adminSubmission
+          ? {
+              ...dto.adminSubmission,
+              createdBy: new Types.ObjectId(createdByUserId),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+          : undefined,
+        managerSubmission: dto.managerSubmission
+          ? {
+              ...dto.managerSubmission,
+              createdBy: new Types.ObjectId(createdByUserId),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+          : undefined,
       });
 
       const saved = await doc.save();
@@ -203,15 +218,31 @@ export class TaskService {
         throw new NotFoundException('Task not found');
       }
 
-      const outletIdStr = existing.outletId.toString();
-      await this.assertManagerOutletAccess(jwtUser, outletIdStr);
+      if (existing.outletId) {
+        await this.assertManagerOutletAccess(
+          jwtUser,
+          existing.outletId.toString(),
+        );
+      }
 
-      const outlet = await this.outletModel.findOne({
-        _id: outletIdStr,
-        isDeleted: false,
-      });
-      if (!outlet) {
-        throw new NotFoundException('Outlet not found');
+      let outlet: OutletDocument | null = null;
+      const outletId =
+        dto.outletId !== undefined ? dto.outletId : existing.outletId;
+
+      if (outletId) {
+        outlet = await this.outletModel.findOne({
+          _id: outletId,
+          isDeleted: false,
+        });
+        if (!outlet) {
+          throw new NotFoundException('Outlet not found');
+        }
+        if (dto.outletId) {
+          await this.assertManagerOutletAccess(
+            jwtUser,
+            dto.outletId.toString(),
+          );
+        }
       }
 
       if (dto.assigneeIds !== undefined) {
@@ -229,20 +260,71 @@ export class TaskService {
       }
       if (dto.priority !== undefined) $set.priority = dto.priority;
       if (dto.dueDate !== undefined) $set.dueDate = new Date(dto.dueDate);
-      if (dto.imageUrls !== undefined) $set.imageUrls = dto.imageUrls;
-      if (dto.videoUrls !== undefined) $set.videoUrls = dto.videoUrls;
-      if (dto.adminAudioUrl !== undefined) {
-        $set.adminAudioUrl = dto.adminAudioUrl;
-      }
-      if (dto.managerAudioUrl !== undefined) {
-        $set.managerAudioUrl = dto.managerAudioUrl;
-      }
-      if (dto.managerComments !== undefined) {
-        $set.managerComments = dto.managerComments.trim();
+      if (dto.outletId !== undefined) {
+        $set.outletId = dto.outletId ? new Types.ObjectId(dto.outletId) : null;
       }
 
       if (dto.assigneeIds !== undefined) {
         $set.assigneeIds = dto.assigneeIds.map((id) => new Types.ObjectId(id));
+      }
+
+      if (dto.adminSubmission !== undefined) {
+        const adminSub = dto.adminSubmission;
+        if (adminSub.text !== undefined) {
+          $set['adminSubmission.text'] = adminSub.text;
+        }
+        if (adminSub.attachments !== undefined) {
+          if (adminSub.attachments.images !== undefined) {
+            $set['adminSubmission.attachments.images'] =
+              adminSub.attachments.images;
+          }
+          if (adminSub.attachments.videos !== undefined) {
+            $set['adminSubmission.attachments.videos'] =
+              adminSub.attachments.videos;
+          }
+          if (adminSub.attachments.audios !== undefined) {
+            $set['adminSubmission.attachments.audios'] =
+              adminSub.attachments.audios;
+          }
+          if (adminSub.attachments.files !== undefined) {
+            $set['adminSubmission.attachments.files'] =
+              adminSub.attachments.files;
+          }
+        }
+        $set['adminSubmission.createdBy'] = new Types.ObjectId(jwtUser.sub);
+        $set['adminSubmission.updatedAt'] = new Date();
+        if (!existing.adminSubmission) {
+          $set['adminSubmission.createdAt'] = new Date();
+        }
+      }
+      if (dto.managerSubmission !== undefined) {
+        const managerSub = dto.managerSubmission;
+        if (managerSub.text !== undefined) {
+          $set['managerSubmission.text'] = managerSub.text;
+        }
+        if (managerSub.attachments !== undefined) {
+          if (managerSub.attachments.images !== undefined) {
+            $set['managerSubmission.attachments.images'] =
+              managerSub.attachments.images;
+          }
+          if (managerSub.attachments.videos !== undefined) {
+            $set['managerSubmission.attachments.videos'] =
+              managerSub.attachments.videos;
+          }
+          if (managerSub.attachments.audios !== undefined) {
+            $set['managerSubmission.attachments.audios'] =
+              managerSub.attachments.audios;
+          }
+          if (managerSub.attachments.files !== undefined) {
+            $set['managerSubmission.attachments.files'] =
+              managerSub.attachments.files;
+          }
+        }
+        $set['managerSubmission.createdBy'] = new Types.ObjectId(jwtUser.sub);
+        $set['managerSubmission.updatedAt'] = new Date();
+        if (!existing.managerSubmission) {
+          $set['managerSubmission.createdAt'] = new Date();
+        }
       }
 
       let nextStatus = existing.status;
@@ -287,6 +369,23 @@ export class TaskService {
     return this.update(id, { status: dto.status }, jwtUser);
   }
 
+  async findByAssignee(
+    userId: string,
+    query: QueryTaskDto,
+    jwtUser: JwtPayload,
+  ): Promise<FindAllTasksResult> {
+    if (jwtUser.role === UserRole.MANAGER && jwtUser.sub !== userId) {
+      throw new ForbiddenException('You can only view your own tasks');
+    }
+
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    const modifiedQuery = { ...query, assigneeId: userId };
+    return this.findAll(modifiedQuery, jwtUser);
+  }
+
   async remove(id: string, jwtUser: JwtPayload): Promise<TaskBoardItem> {
     try {
       if (!Types.ObjectId.isValid(id)) {
@@ -329,10 +428,20 @@ export class TaskService {
       matchStage.outletId = new Types.ObjectId(query.outletId);
     } else if (jwtUser.role === UserRole.MANAGER) {
       const allowed = await this.managerOutletObjectIds(jwtUser.sub);
-      if (allowed.length === 0) {
-        matchStage.outletId = { $in: [] };
+      const managerDefaultFilters = [
+        { outletId: { $in: allowed } },
+        { assigneeIds: new Types.ObjectId(jwtUser.sub) },
+        { createdBy: new Types.ObjectId(jwtUser.sub) },
+      ];
+
+      if (matchStage.assigneeIds) {
+        matchStage.$and = [
+          { $or: managerDefaultFilters },
+          { assigneeIds: matchStage.assigneeIds },
+        ];
+        delete matchStage.assigneeIds;
       } else {
-        matchStage.outletId = { $in: allowed };
+        matchStage.$or = managerDefaultFilters;
       }
     }
 
@@ -436,25 +545,20 @@ export class TaskService {
   }
 
   private async assertAssigneesAllowed(
-    outlet: OutletDocument,
+    outlet: OutletDocument | null,
     assigneeIds: string[],
   ): Promise<void> {
     if (assigneeIds.length === 0) {
       return;
     }
 
-    const managerIdSet = new Set(
-      (outlet.managerIds ?? []).map((id) => id.toString()),
-    );
+    const managerIdSet = outlet
+      ? new Set((outlet.managerIds ?? []).map((id) => id.toString()))
+      : null;
 
     for (const aid of assigneeIds) {
       if (!Types.ObjectId.isValid(aid)) {
         throw new BadRequestException(`Invalid assignee ID: ${aid}`);
-      }
-      if (!managerIdSet.has(aid)) {
-        throw new BadRequestException(
-          'Assignees must be managers of the selected outlet',
-        );
       }
 
       const user = await this.userModel
@@ -465,14 +569,26 @@ export class TaskService {
         throw new BadRequestException(`Assignee not found: ${aid}`);
       }
 
-      const userOutlets = (user.outlets ?? []).map((o) => o.toString());
-      if (
-        userOutlets.length > 0 &&
-        !userOutlets.includes(outlet._id.toString())
-      ) {
-        throw new BadRequestException(
-          `Assignee ${aid} is not linked to this outlet`,
-        );
+      if (user.role !== UserRole.MANAGER && user.role !== UserRole.ADMIN) {
+        throw new BadRequestException(`Assignee ${aid} must be a manager`);
+      }
+
+      if (outlet && managerIdSet) {
+        if (!managerIdSet.has(aid)) {
+          throw new BadRequestException(
+            'Assignees must be managers of the selected outlet',
+          );
+        }
+
+        const userOutlets = (user.outlets ?? []).map((o) => o.toString());
+        if (
+          userOutlets.length > 0 &&
+          !userOutlets.includes(outlet._id.toString())
+        ) {
+          throw new BadRequestException(
+            `Assignee ${aid} is not linked to this outlet`,
+          );
+        }
       }
     }
   }
@@ -504,6 +620,28 @@ export class TaskService {
             { $project: { _id: 1, name: 1 } },
           ],
           as: 'outletArr',
+        },
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { cid: '$adminSubmission.createdBy' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$cid'] } } },
+            { $project: { _id: 1, name: 1 } },
+          ],
+          as: 'adminSubmissionCreator',
+        },
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { cid: '$managerSubmission.createdBy' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$cid'] } } },
+            { $project: { _id: 1, name: 1 } },
+          ],
+          as: 'managerSubmissionCreator',
         },
       },
       {
@@ -547,9 +685,17 @@ export class TaskService {
       },
       {
         $addFields: {
-          outlet: { $arrayElemAt: ['$outletArr', 0] },
+          outlet: {
+            $ifNull: [{ $arrayElemAt: ['$outletArr', 0] }, null],
+          },
           taskCategory: { $arrayElemAt: ['$taskCategoryArr', 0] },
           createdBy: { $arrayElemAt: ['$creatorArr', 0] },
+          'adminSubmission.createdBy': {
+            $arrayElemAt: ['$adminSubmissionCreator', 0],
+          },
+          'managerSubmission.createdBy': {
+            $arrayElemAt: ['$managerSubmissionCreator', 0],
+          },
         },
       },
       {
@@ -557,6 +703,8 @@ export class TaskService {
           outletArr: 0,
           taskCategoryArr: 0,
           creatorArr: 0,
+          adminSubmissionCreator: 0,
+          managerSubmissionCreator: 0,
           outletId: 0,
           taskCategoryId: 0,
           assigneeIds: 0,
@@ -571,14 +719,25 @@ export class TaskService {
   ): Promise<TaskBoardItem | null> {
     const task = await this.taskModel
       .findOne({ _id: id, isDeleted: false })
-      .select('outletId')
+      .select('outletId assigneeIds createdBy')
       .lean()
       .exec();
     if (!task) {
       return null;
     }
 
-    await this.assertManagerOutletAccess(jwtUser, task.outletId.toString());
+    if (task.outletId) {
+      await this.assertManagerOutletAccess(jwtUser, task.outletId.toString());
+    } else if (jwtUser.role === UserRole.MANAGER) {
+      const isAssignee = (task.assigneeIds ?? [])
+        .map((aid) => aid.toString())
+        .includes(jwtUser.sub);
+      const isCreator = task.createdBy.toString() === jwtUser.sub;
+
+      if (!isAssignee && !isCreator) {
+        throw new ForbiddenException('You do not have access to this task');
+      }
+    }
 
     const pipeline: PipelineStage[] = [
       {
