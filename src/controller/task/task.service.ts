@@ -242,7 +242,10 @@ export class TaskService {
           throw new NotFoundException('Outlet not found');
         }
         if (dto.outletId) {
-          await this.assertManagerOutletAccess(jwtUser, dto.outletId.toString());
+          await this.assertManagerOutletAccess(
+            jwtUser,
+            dto.outletId.toString(),
+          );
         }
       }
 

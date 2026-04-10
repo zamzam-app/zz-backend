@@ -8,27 +8,23 @@ import { User } from '../users/entities/user.entity';
 import { Types } from 'mongoose';
 import { UserRole } from '../users/interfaces/user.interface';
 import { TaskPriority, TaskStatus } from './task.enums';
+import { CreateTaskDto } from './dto/create-task.dto';
+import { JwtPayload } from '../auth/interfaces/auth.interfaces';
+
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 
 describe('TaskService (Partial)', () => {
   let service: TaskService;
-  let taskModel: any;
-  let outletModel: any;
-  let userModel: any;
-  let taskCategoryModel: any;
 
   const mockTaskModel = {
-    new: jest.fn().mockImplementation((dto) => ({
-      ...dto,
-      save: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), ...dto }),
-    })),
-    constructor: jest.fn(),
     findOne: jest.fn(),
     aggregate: jest.fn(),
     updateOne: jest.fn(),
   };
 
   // Mocking the constructor-like behavior for "new this.taskModel"
-  function MockTask(dto: any) {
+  function MockTask(this: any, dto: any) {
     this._id = new Types.ObjectId();
     Object.assign(this, dto);
     this.save = jest.fn().mockResolvedValue(this);
@@ -73,10 +69,12 @@ describe('TaskService (Partial)', () => {
 
     service = module.get<TaskService>(TaskService);
     // Assigning the model to the service manually because we used a constructor function for MockTask
-    (service as any).taskModel = MockTask;
-    (MockTask as any).findOne = mockTaskModel.findOne;
-    (MockTask as any).aggregate = mockTaskModel.aggregate;
-    (MockTask as any).updateOne = mockTaskModel.updateOne;
+    const serviceAsAny = service as any;
+    serviceAsAny.taskModel = MockTask;
+    const MockTaskAsAny = MockTask as any;
+    MockTaskAsAny.findOne = mockTaskModel.findOne;
+    MockTaskAsAny.aggregate = mockTaskModel.aggregate;
+    MockTaskAsAny.updateOne = mockTaskModel.updateOne;
   });
 
   it('should be defined', () => {
@@ -93,7 +91,10 @@ describe('TaskService (Partial)', () => {
         status: TaskStatus.OPEN,
       };
 
-      const jwtUser = { sub: new Types.ObjectId().toString(), role: UserRole.ADMIN };
+      const jwtUser = {
+        sub: new Types.ObjectId().toString(),
+        role: UserRole.ADMIN,
+      };
 
       mockTaskCategoryModel.findOne.mockReturnValue({
         select: jest.fn().mockReturnValue({
@@ -108,23 +109,29 @@ describe('TaskService (Partial)', () => {
         select: jest.fn().mockReturnValue({
           lean: jest.fn().mockReturnValue({
             exec: jest.fn().mockResolvedValue({
-               _id: new Types.ObjectId(),
-               outletId: null,
-               assigneeIds: [],
-               createdBy: new Types.ObjectId(jwtUser.sub)
+              _id: new Types.ObjectId(),
+              outletId: null,
+              assigneeIds: [],
+              createdBy: new Types.ObjectId(jwtUser.sub),
             }),
           }),
         }),
       });
 
       mockTaskModel.aggregate.mockReturnValue({
-        exec: jest.fn().mockResolvedValue([{
-          description: 'Test task',
-          outlet: null,
-        }]),
+        exec: jest.fn().mockResolvedValue([
+          {
+            description: 'Test task',
+            outlet: null,
+          },
+        ]),
       });
 
-      const result = await service.create(dto as any, jwtUser.sub, jwtUser as any);
+      const result = await service.create(
+        dto as any as CreateTaskDto,
+        jwtUser.sub,
+        jwtUser as any as JwtPayload,
+      );
       expect(result).toBeDefined();
       expect(result.outlet).toBeNull();
     });

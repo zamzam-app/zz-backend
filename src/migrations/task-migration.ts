@@ -19,7 +19,7 @@ async function migrate() {
   console.log(`Found ${tasks.length} tasks to migrate.`);
 
   for (const task of tasks) {
-    const update: any = {};
+    const update: Record<string, unknown> = {};
 
     if (!task.adminSubmission) {
       update.adminSubmission = {
@@ -31,8 +31,8 @@ async function migrate() {
           files: [],
         },
         createdBy: task.createdBy,
-        createdAt: (task as any).createdAt || new Date(),
-        updatedAt: (task as any).updatedAt || new Date(),
+        createdAt: (task.get('createdAt') as Date) || new Date(),
+        updatedAt: (task.get('updatedAt') as Date) || new Date(),
       };
     }
 
@@ -46,8 +46,8 @@ async function migrate() {
           files: [],
         },
         createdBy: task.assigneeIds?.[0] || task.createdBy, // Best effort for legacy
-        createdAt: (task as any).createdAt || new Date(),
-        updatedAt: (task as any).updatedAt || new Date(),
+        createdAt: (task.get('createdAt') as Date) || new Date(),
+        updatedAt: (task.get('updatedAt') as Date) || new Date(),
       };
     }
 
