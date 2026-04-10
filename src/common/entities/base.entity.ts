@@ -8,7 +8,7 @@ export class BaseEntity {
     default: true,
   })
   @Prop({ default: true })
-  isActive: boolean;
+  isActive!: boolean;
 
   @ApiProperty({
     example: false,
@@ -16,5 +16,5 @@ export class BaseEntity {
     default: false,
   })
   @Prop({ default: false })
-  isDeleted: boolean;
+  isDeleted!: boolean;
 }
