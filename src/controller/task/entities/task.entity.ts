@@ -5,6 +5,39 @@ import { TaskPriority, TaskStatus } from '../task.enums';
 
 export type TaskDocument = HydratedDocument<Task>;
 
+@Schema({ _id: false })
+export class TaskAttachments {
+  @Prop({ type: [String], default: [] })
+  images: string[];
+
+  @Prop({ type: [String], default: [] })
+  videos: string[];
+
+  @Prop({ type: [String], default: [] })
+  audios: string[];
+
+  @Prop({ type: [String], default: [] })
+  files: string[];
+}
+
+@Schema({ _id: false })
+export class TaskSubmission {
+  @Prop({ type: String, trim: true })
+  text?: string;
+
+  @Prop({ type: TaskAttachments, default: () => ({}) })
+  attachments: TaskAttachments;
+
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
+  createdBy: string;
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+
+  @Prop({ type: Date, default: Date.now })
+  updatedAt: Date;
+}
+
 @Schema({ timestamps: true })
 export class Task extends BaseEntity {
   @Prop({ type: String, required: true, trim: true })
@@ -40,7 +73,8 @@ export class Task extends BaseEntity {
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'Outlet',
-    required: true,
+    required: false,
+    default: null,
   })
   outletId: string;
 
@@ -74,6 +108,12 @@ export class Task extends BaseEntity {
 
   @Prop({ type: Date, required: false, default: null })
   completedAt?: Date | null;
+
+  @Prop({ type: TaskSubmission, required: false })
+  adminSubmission?: TaskSubmission;
+
+  @Prop({ type: TaskSubmission, required: false })
+  managerSubmission?: TaskSubmission;
 }
 
 export const TaskSchema = SchemaFactory.createForClass(Task);

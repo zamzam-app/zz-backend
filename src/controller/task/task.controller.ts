@@ -25,6 +25,7 @@ import {
   ApiTaskCreate,
   ApiTaskFindAll,
   ApiTaskFindOne,
+  ApiTaskFindByAssignee,
   ApiTaskRemove,
   ApiTaskUpdate,
   ApiTaskUpdateStatus,
@@ -98,5 +99,16 @@ export class TaskController {
     @Request() req: ExpressRequest & { user: JwtPayload },
   ) {
     return this.taskService.remove(id, req.user);
+  }
+
+  @Get('assignee/:userId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiTaskFindByAssignee()
+  findByAssignee(
+    @Param('userId') userId: string,
+    @Query() query: QueryTaskDto,
+    @Request() req: ExpressRequest & { user: JwtPayload },
+  ) {
+    return this.taskService.findByAssignee(userId, query, req.user);
   }
 }

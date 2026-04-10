@@ -1,5 +1,20 @@
 import { TaskPriority, TaskStatus } from '../task.enums';
 
+export interface TaskAttachments {
+  images: string[];
+  videos: string[];
+  audios: string[];
+  files: string[];
+}
+
+export interface TaskSubmission {
+  text?: string;
+  attachments: TaskAttachments;
+  createdBy: { _id: string; name?: string };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface TaskBoardItem {
   _id: string;
   description: string;
@@ -13,7 +28,9 @@ export interface TaskBoardItem {
   adminAudioUrl?: string[];
   managerAudioUrl?: string[];
   managerComments?: string;
-  outlet: { _id: string; name: string };
+  adminSubmission?: TaskSubmission;
+  managerSubmission?: TaskSubmission;
+  outlet: { _id: string; name: string } | null;
   assignees: Array<{ _id: string; name?: string }>;
   createdBy: { _id: string; name?: string };
   createdAt: Date;
