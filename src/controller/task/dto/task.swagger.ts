@@ -32,6 +32,16 @@ export function ApiTaskFindOne() {
   );
 }
 
+export function ApiTaskFindByAssignee() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'List tasks by assignee userId',
+      description: 'Returns tasks where the user is an assignee.',
+    }),
+    ApiOkResponse({ description: 'Paginated task list' }),
+  );
+}
+
 export function ApiTaskUpdate() {
   return applyDecorators(
     ApiOperation({ summary: 'Update a task' }),

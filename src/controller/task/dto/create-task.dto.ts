@@ -1,15 +1,59 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
   IsEnum,
   IsMongoId,
   IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 import { TaskPriority, TaskStatus } from '../task.enums';
+
+export class TaskAttachmentsDto {
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  videos?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  audios?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  files?: string[];
+}
+
+export class TaskSubmissionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  text?: string;
+
+  @ApiPropertyOptional({ type: TaskAttachmentsDto })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => TaskAttachmentsDto)
+  attachments?: TaskAttachmentsDto;
+}
 
 export class CreateTaskDto {
   @ApiProperty({ description: 'Task description', example: 'Clean prep area' })
@@ -37,11 +81,12 @@ export class CreateTaskDto {
   dueDate: string;
 
   @ApiProperty({ description: 'Outlet ID' })
+  @IsOptional()
   @IsMongoId()
-  outletId: string;
+  outletId?: string;
 
   @ApiPropertyOptional({
-    description: 'Manager user IDs for this outlet',
+    description: 'Manager user IDs for this task',
     type: [String],
   })
   @IsOptional()
@@ -49,33 +94,17 @@ export class CreateTaskDto {
   @IsMongoId({ each: true })
   assigneeIds?: string[];
 
-  @ApiPropertyOptional({ type: [String] })
+  @ApiPropertyOptional({ type: () => TaskSubmissionDto })
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  imageUrls?: string[];
+  @IsObject()
+  @ValidateNested()
+  @Type(() => TaskSubmissionDto)
+  adminSubmission?: TaskSubmissionDto;
 
-  @ApiPropertyOptional({ type: [String] })
+  @ApiPropertyOptional({ type: () => TaskSubmissionDto })
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  videoUrls?: string[];
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  adminAudioUrl?: string[];
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  managerAudioUrl?: string[];
-
-  @ApiPropertyOptional({ description: 'Manager comments' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(10000)
-  managerComments?: string;
+  @IsObject()
+  @ValidateNested()
+  @Type(() => TaskSubmissionDto)
+  managerSubmission?: TaskSubmissionDto;
 }

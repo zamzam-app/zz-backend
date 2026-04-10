@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IForm } from 'src/controller/forms/interfaces/form.interface';
+import { IForm } from '../../forms/interfaces/form.interface';
 
 export class OutletByQrTokenResponseDto {
   @ApiProperty({ description: 'Outlet ID' })
