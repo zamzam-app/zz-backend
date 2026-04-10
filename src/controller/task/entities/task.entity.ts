@@ -8,16 +8,16 @@ export type TaskDocument = HydratedDocument<Task>;
 @Schema({ _id: false })
 export class TaskAttachments {
   @Prop({ type: [String], default: [] })
-  images: string[];
+  images!: string[];
 
   @Prop({ type: [String], default: [] })
-  videos: string[];
+  videos!: string[];
 
   @Prop({ type: [String], default: [] })
-  audios: string[];
+  audios!: string[];
 
   @Prop({ type: [String], default: [] })
-  files: string[];
+  files!: string[];
 }
 
 @Schema({ _id: false })
@@ -26,22 +26,22 @@ export class TaskSubmission {
   text?: string;
 
   @Prop({ type: TaskAttachments, default: () => ({}) })
-  attachments: TaskAttachments;
+  attachments!: TaskAttachments;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
-  createdBy: string;
+  createdBy!: string;
 
   @Prop({ type: Date, default: Date.now })
-  createdAt: Date;
+  createdAt!: Date;
 
   @Prop({ type: Date, default: Date.now })
-  updatedAt: Date;
+  updatedAt!: Date;
 }
 
 @Schema({ timestamps: true })
 export class Task extends BaseEntity {
   @Prop({ type: String, required: true, trim: true })
-  description: string;
+  description!: string;
 
   @Prop({ type: String, required: false, trim: true })
   comment?: string;
@@ -51,24 +51,24 @@ export class Task extends BaseEntity {
     ref: 'TaskCategory',
     required: true,
   })
-  taskCategoryId: string;
+  taskCategoryId!: string;
 
   @Prop({
     type: String,
     enum: TaskPriority,
     default: TaskPriority.MEDIUM,
   })
-  priority: TaskPriority;
+  priority!: TaskPriority;
 
   @Prop({
     type: String,
     enum: TaskStatus,
     default: TaskStatus.OPEN,
   })
-  status: TaskStatus;
+  status!: TaskStatus;
 
   @Prop({ type: Date, required: true })
-  dueDate: Date;
+  dueDate!: Date;
 
   @Prop({
     type: MongooseSchema.Types.ObjectId,
@@ -76,20 +76,20 @@ export class Task extends BaseEntity {
     required: false,
     default: null,
   })
-  outletId: string;
+  outletId!: string;
 
   @Prop({
     type: [{ type: MongooseSchema.Types.ObjectId, ref: 'User' }],
     default: [],
   })
-  assigneeIds: string[];
+  assigneeIds!: string[];
 
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'User',
     required: true,
   })
-  createdBy: string;
+  createdBy!: string;
 
   @Prop({ type: [String], required: false, default: [] })
   imageUrls?: string[];
