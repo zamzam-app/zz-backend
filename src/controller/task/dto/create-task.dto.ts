@@ -14,6 +14,47 @@ import {
 } from 'class-validator';
 import { TaskPriority, TaskStatus } from '../task.enums';
 
+export class TaskAttachmentsDto {
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  videos?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  audios?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  files?: string[];
+}
+
+export class TaskSubmissionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  text?: string;
+
+  @ApiPropertyOptional({ type: TaskAttachmentsDto })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => TaskAttachmentsDto)
+  attachments?: TaskAttachmentsDto;
+}
+
 export class CreateTaskDto {
   @ApiProperty({ description: 'Task description', example: 'Clean prep area' })
   @IsString()
@@ -66,45 +107,4 @@ export class CreateTaskDto {
   @ValidateNested()
   @Type(() => TaskSubmissionDto)
   managerSubmission?: TaskSubmissionDto;
-}
-
-export class TaskAttachmentsDto {
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  images?: string[];
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  videos?: string[];
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  audios?: string[];
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  files?: string[];
-}
-
-export class TaskSubmissionDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(10000)
-  text?: string;
-
-  @ApiPropertyOptional({ type: TaskAttachmentsDto })
-  @IsOptional()
-  @IsObject()
-  @ValidateNested()
-  @Type(() => TaskAttachmentsDto)
-  attachments?: TaskAttachmentsDto;
 }
