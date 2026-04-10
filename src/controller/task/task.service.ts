@@ -79,11 +79,6 @@ export class TaskService {
         outletId: dto.outletId ? new Types.ObjectId(dto.outletId) : null,
         assigneeIds: assigneeIds.map((id) => new Types.ObjectId(id)),
         createdBy: new Types.ObjectId(createdByUserId),
-        imageUrls: dto.imageUrls ?? [],
-        videoUrls: dto.videoUrls ?? [],
-        adminAudioUrl: dto.adminAudioUrl ?? [],
-        managerAudioUrl: dto.managerAudioUrl ?? [],
-        managerComments: dto.managerComments?.trim() ?? '',
         completedAt,
         adminSubmission: dto.adminSubmission
           ? {
@@ -231,7 +226,8 @@ export class TaskService {
       }
 
       let outlet: OutletDocument | null = null;
-      const outletId = dto.outletId ?? existing.outletId;
+      const outletId =
+        dto.outletId !== undefined ? dto.outletId : existing.outletId;
 
       if (outletId) {
         outlet = await this.outletModel.findOne({
@@ -267,37 +263,68 @@ export class TaskService {
       if (dto.outletId !== undefined) {
         $set.outletId = dto.outletId ? new Types.ObjectId(dto.outletId) : null;
       }
-      if (dto.imageUrls !== undefined) $set.imageUrls = dto.imageUrls;
-      if (dto.videoUrls !== undefined) $set.videoUrls = dto.videoUrls;
-      if (dto.adminAudioUrl !== undefined) {
-        $set.adminAudioUrl = dto.adminAudioUrl;
-      }
-      if (dto.managerAudioUrl !== undefined) {
-        $set.managerAudioUrl = dto.managerAudioUrl;
-      }
-      if (dto.managerComments !== undefined) {
-        $set.managerComments = dto.managerComments.trim();
-      }
 
       if (dto.assigneeIds !== undefined) {
         $set.assigneeIds = dto.assigneeIds.map((id) => new Types.ObjectId(id));
       }
 
       if (dto.adminSubmission !== undefined) {
-        $set.adminSubmission = {
-          ...dto.adminSubmission,
-          createdBy: new Types.ObjectId(jwtUser.sub),
-          updatedAt: new Date(),
-          createdAt: existing.adminSubmission?.createdAt ?? new Date(),
-        };
+        const adminSub = dto.adminSubmission;
+        if (adminSub.text !== undefined) {
+          $set['adminSubmission.text'] = adminSub.text;
+        }
+        if (adminSub.attachments !== undefined) {
+          if (adminSub.attachments.images !== undefined) {
+            $set['adminSubmission.attachments.images'] =
+              adminSub.attachments.images;
+          }
+          if (adminSub.attachments.videos !== undefined) {
+            $set['adminSubmission.attachments.videos'] =
+              adminSub.attachments.videos;
+          }
+          if (adminSub.attachments.audios !== undefined) {
+            $set['adminSubmission.attachments.audios'] =
+              adminSub.attachments.audios;
+          }
+          if (adminSub.attachments.files !== undefined) {
+            $set['adminSubmission.attachments.files'] =
+              adminSub.attachments.files;
+          }
+        }
+        $set['adminSubmission.createdBy'] = new Types.ObjectId(jwtUser.sub);
+        $set['adminSubmission.updatedAt'] = new Date();
+        if (!existing.adminSubmission) {
+          $set['adminSubmission.createdAt'] = new Date();
+        }
       }
       if (dto.managerSubmission !== undefined) {
-        $set.managerSubmission = {
-          ...dto.managerSubmission,
-          createdBy: new Types.ObjectId(jwtUser.sub),
-          updatedAt: new Date(),
-          createdAt: existing.managerSubmission?.createdAt ?? new Date(),
-        };
+        const managerSub = dto.managerSubmission;
+        if (managerSub.text !== undefined) {
+          $set['managerSubmission.text'] = managerSub.text;
+        }
+        if (managerSub.attachments !== undefined) {
+          if (managerSub.attachments.images !== undefined) {
+            $set['managerSubmission.attachments.images'] =
+              managerSub.attachments.images;
+          }
+          if (managerSub.attachments.videos !== undefined) {
+            $set['managerSubmission.attachments.videos'] =
+              managerSub.attachments.videos;
+          }
+          if (managerSub.attachments.audios !== undefined) {
+            $set['managerSubmission.attachments.audios'] =
+              managerSub.attachments.audios;
+          }
+          if (managerSub.attachments.files !== undefined) {
+            $set['managerSubmission.attachments.files'] =
+              managerSub.attachments.files;
+          }
+        }
+        $set['managerSubmission.createdBy'] = new Types.ObjectId(jwtUser.sub);
+        $set['managerSubmission.updatedAt'] = new Date();
+        if (!existing.managerSubmission) {
+          $set['managerSubmission.createdAt'] = new Date();
+        }
       }
 
       let nextStatus = existing.status;

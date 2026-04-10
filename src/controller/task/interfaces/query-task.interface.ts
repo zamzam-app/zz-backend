@@ -18,16 +18,10 @@ export interface TaskSubmission {
 export interface TaskBoardItem {
   _id: string;
   description: string;
-  comment?: string;
   taskCategory: { _id: string; name: string; description?: string };
   priority: TaskPriority;
   status: TaskStatus;
   dueDate: Date;
-  imageUrls?: string[];
-  videoUrls?: string[];
-  adminAudioUrl?: string[];
-  managerAudioUrl?: string[];
-  managerComments?: string;
   adminSubmission?: TaskSubmission;
   managerSubmission?: TaskSubmission;
   outlet: { _id: string; name: string } | null;

@@ -53,41 +53,6 @@ export class CreateTaskDto {
   @IsMongoId({ each: true })
   assigneeIds?: string[];
 
-  /** @deprecated Use adminSubmission or managerSubmission */
-  @ApiPropertyOptional({ type: [String], deprecated: true })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  imageUrls?: string[];
-
-  /** @deprecated Use adminSubmission or managerSubmission */
-  @ApiPropertyOptional({ type: [String], deprecated: true })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  videoUrls?: string[];
-
-  /** @deprecated Use adminSubmission or managerSubmission */
-  @ApiPropertyOptional({ type: [String], deprecated: true })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  adminAudioUrl?: string[];
-
-  /** @deprecated Use adminSubmission or managerSubmission */
-  @ApiPropertyOptional({ type: [String], deprecated: true })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  managerAudioUrl?: string[];
-
-  /** @deprecated Use adminSubmission or managerSubmission */
-  @ApiPropertyOptional({ description: 'Manager comments', deprecated: true })
-  @IsOptional()
-  @IsString()
-  @MaxLength(10000)
-  managerComments?: string;
-
   @ApiPropertyOptional({ type: () => TaskSubmissionDto })
   @IsOptional()
   @IsObject()

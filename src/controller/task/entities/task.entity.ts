@@ -43,9 +43,6 @@ export class Task extends BaseEntity {
   @Prop({ type: String, required: true, trim: true })
   description!: string;
 
-  @Prop({ type: String, required: false, trim: true })
-  comment?: string;
-
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'TaskCategory',
@@ -90,21 +87,6 @@ export class Task extends BaseEntity {
     required: true,
   })
   createdBy!: string;
-
-  @Prop({ type: [String], required: false, default: [] })
-  imageUrls?: string[];
-
-  @Prop({ type: [String], required: false, default: [] })
-  videoUrls?: string[];
-
-  @Prop({ type: [String], required: false, default: [] })
-  adminAudioUrl?: string[];
-
-  @Prop({ type: [String], required: false, default: [] })
-  managerAudioUrl?: string[];
-
-  @Prop({ type: String, required: false, trim: true, default: '' })
-  managerComments?: string;
 
   @Prop({ type: Date, required: false, default: null })
   completedAt?: Date | null;
