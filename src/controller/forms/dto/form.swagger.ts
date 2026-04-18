@@ -11,6 +11,14 @@ import {
 import { Form } from '../entities/form.entity';
 import { QuestionType } from '../../question/entities/question.entity';
 
+export class OptionDtoSwagger {
+  @ApiProperty({
+    example: 'Option 1',
+    description: 'Option label',
+  })
+  text: string;
+}
+
 export class QuestionDtoSwagger {
   @ApiProperty({
     example: 'short_answer',
@@ -34,11 +42,12 @@ export class QuestionDtoSwagger {
 
   @ApiProperty({
     example: [{ text: 'Option 1' }, { text: 'Option 2' }],
-    description: 'Array of options for multiple choice or checkbox questions',
-    type: [Object],
+    description:
+      'Array of option schema entries for checkbox/multiple choice questions (no per-user selection state).',
+    type: [OptionDtoSwagger],
     required: false,
   })
-  options?: object[];
+  options?: OptionDtoSwagger[];
 
   @ApiProperty({
     example: true,
