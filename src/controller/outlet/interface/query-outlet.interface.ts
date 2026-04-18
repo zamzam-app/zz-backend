@@ -1,7 +1,7 @@
-import { Outlet } from '../entities/outlet.entity';
+import { OutletWithReviewMetrics } from './outlet.interface';
 
 export interface FindAllOutletsResult {
-  data: Outlet[];
+  data: OutletWithReviewMetrics[];
   meta: {
     total: number;
     currentPage: number;

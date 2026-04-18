@@ -26,6 +26,11 @@ export interface IOutlet {
   updatedAt?: Date;
 }
 
+export interface OutletWithReviewMetrics extends IOutlet {
+  rating: number;
+  totalFeedback: number;
+}
+
 export interface OutletByQrTokenResult {
   _id: string;
   name: string;
