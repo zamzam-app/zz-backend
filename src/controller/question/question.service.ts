@@ -69,7 +69,7 @@ export class QuestionService {
   }
 
   private sanitizeQuestionOptions<
-    T extends { options?: Array<{ text: string; selected?: boolean }> },
+    T extends { options?: Array<{ text: string }> },
   >(question: T): T {
     if (!question.options) {
       return question;
