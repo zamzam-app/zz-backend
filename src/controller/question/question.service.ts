@@ -12,7 +12,8 @@ export class QuestionService {
   ) {}
 
   async create(createQuestionDto: CreateQuestionDto): Promise<Question> {
-    const created = new this.questionModel(createQuestionDto);
+    const sanitizedQuestion = this.sanitizeQuestionOptions(createQuestionDto);
+    const created = new this.questionModel(sanitizedQuestion);
     const saved = await created.save();
     return saved.toObject() as Question;
   }
@@ -39,10 +40,11 @@ export class QuestionService {
     id: string,
     updateQuestionDto: UpdateQuestionDto,
   ): Promise<Question> {
+    const sanitizedUpdate = this.sanitizeQuestionOptions(updateQuestionDto);
     const updated = await this.questionModel
       .findOneAndUpdate(
         { _id: new Types.ObjectId(id), isDeleted: false },
-        updateQuestionDto,
+        sanitizedUpdate,
         { new: true },
       )
       .lean()
@@ -64,5 +66,20 @@ export class QuestionService {
       throw new NotFoundException(`Question with ID ${id} not found`);
     }
     return { message: 'Question deleted successfully' };
+  }
+
+  private sanitizeQuestionOptions<
+    T extends { options?: Array<{ text: string; selected?: boolean }> },
+  >(question: T): T {
+    if (!question.options) {
+      return question;
+    }
+
+    return {
+      ...question,
+      options: question.options.map((option) => ({
+        text: option.text,
+      })),
+    };
   }
 }

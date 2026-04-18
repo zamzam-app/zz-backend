@@ -16,6 +16,10 @@ export class OptionDto {
   @IsNotEmpty()
   text: string;
 
+  /**
+   * @deprecated Kept for backward compatibility only. Backend ignores it and
+   * derives user selections from review responses.
+   */
   @IsBoolean()
   @IsOptional()
   selected?: boolean;
