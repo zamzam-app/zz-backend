@@ -26,7 +26,9 @@ export class FormService {
 
   async create(createFormDto: CreateFormDto, userId?: string): Promise<Form> {
     const { questions, ...formData } = createFormDto;
-    const mergedQuestions = this.mergeWithDefaultQuestions(questions);
+    const mergedQuestions = this.mergeWithDefaultQuestions(
+      this.sanitizeQuestionsOptions(questions),
+    );
 
     // Create all questions first
     const questionIds = await Promise.all(
@@ -131,7 +133,9 @@ export class FormService {
     const updateData: UpdateQuery<Form> = { ...formData };
 
     if (questions) {
-      const mergedQuestions = this.mergeWithDefaultQuestions(questions);
+      const mergedQuestions = this.mergeWithDefaultQuestions(
+        this.sanitizeQuestionsOptions(questions),
+      );
       const questionIds = await Promise.all(
         mergedQuestions.map(async (q) => {
           const newQuestion = new this.questionModel(q);
@@ -238,5 +242,26 @@ export class FormService {
     }
 
     return deduped;
+  }
+
+  private sanitizeQuestionsOptions(
+    questions?: CreateFormDto['questions'],
+  ): CreateFormDto['questions'] | undefined {
+    if (!questions) {
+      return questions;
+    }
+
+    return questions.map((question) => {
+      if (!question.options) {
+        return question;
+      }
+
+      return {
+        ...question,
+        options: question.options.map((option) => ({
+          text: option.text,
+        })),
+      };
+    });
   }
 }

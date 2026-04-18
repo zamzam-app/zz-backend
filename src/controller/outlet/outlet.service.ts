@@ -11,7 +11,10 @@ import { UpdateOutletDto } from './dto/update-outlet.dto';
 import { Outlet, OutletDocument } from './entities/outlet.entity';
 import { QueryOutletDto } from './dto/query-outlet.dto';
 import { FindAllOutletsResult } from './interface/query-outlet.interface';
-import { OutletByQrTokenResult } from './interface/outlet.interface';
+import {
+  OutletByQrTokenResult,
+  OutletWithReviewMetrics,
+} from './interface/outlet.interface';
 import { generateOutletQrToken } from '../../util/outlet-qr-token.util';
 import { Form, FormDocument } from '../forms/entities/form.entity';
 import {
@@ -126,8 +129,65 @@ export class OutletService {
           },
         },
         {
+          $lookup: {
+            from: 'reviews',
+            let: { outletIdAsString: { $toString: '$_id' } },
+            pipeline: [
+              {
+                $match: {
+                  isDeleted: false,
+                  $expr: {
+                    $eq: [
+                      {
+                        $convert: {
+                          input: '$outletId',
+                          to: 'string',
+                          onError: '',
+                          onNull: '',
+                        },
+                      },
+                      '$$outletIdAsString',
+                    ],
+                  },
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  totalFeedback: { $sum: 1 },
+                  avgOverallRating: { $avg: '$overallRating' },
+                },
+              },
+              {
+                $project: {
+                  _id: 0,
+                  totalFeedback: 1,
+                  rating: {
+                    $round: [{ $ifNull: ['$avgOverallRating', 0] }, 1],
+                  },
+                },
+              },
+            ],
+            as: '_reviewMetrics',
+          },
+        },
+        {
+          $addFields: {
+            rating: {
+              $ifNull: [{ $arrayElemAt: ['$_reviewMetrics.rating', 0] }, 0],
+            },
+            totalFeedback: {
+              $ifNull: [
+                { $arrayElemAt: ['$_reviewMetrics.totalFeedback', 0] },
+                0,
+              ],
+            },
+          },
+        },
+        {
           $project: {
             _productsLookup: 0,
+            _reviewMetrics: 0,
             'menuItems.productId': 0,
           },
         },
@@ -136,7 +196,7 @@ export class OutletService {
 
       const [result] = await this.outletModel
         .aggregate<{
-          data: Outlet[];
+          data: OutletWithReviewMetrics[];
           totalCount: [{ count: number }];
         }>([
           { $match: matchStage },

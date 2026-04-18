@@ -1,11 +1,14 @@
 import { applyDecorators } from '@nestjs/common';
 import {
+  ApiExtraModels,
   ApiOperation,
   ApiOkResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import { Outlet } from '../entities/outlet.entity';
+import { OutletReviewMetricsDto } from './outlet-review-metrics.dto';
 
 export function ApiOutletCreate() {
   return applyDecorators(
@@ -20,13 +23,20 @@ export function ApiOutletCreate() {
 export function ApiOutletFindAll() {
   return applyDecorators(
     ApiOperation({ summary: 'Retrieve all outlets with pagination' }),
+    ApiExtraModels(Outlet, OutletReviewMetricsDto),
     ApiOkResponse({
       description: 'Successfully retrieved outlets.',
       schema: {
+        type: 'object',
         properties: {
           data: {
             type: 'array',
-            items: { $ref: '#/components/schemas/Outlet' },
+            items: {
+              allOf: [
+                { $ref: getSchemaPath(Outlet) },
+                { $ref: getSchemaPath(OutletReviewMetricsDto) },
+              ],
+            },
           },
           meta: {
             type: 'object',
