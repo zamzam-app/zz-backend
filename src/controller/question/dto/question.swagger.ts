@@ -8,6 +8,14 @@ import {
 } from '@nestjs/swagger';
 import { QuestionType } from '../entities/question.entity';
 
+export class OptionDtoSwagger {
+  @ApiProperty({
+    example: 'Option 1',
+    description: 'Option label',
+  })
+  text: string;
+}
+
 export class QuestionDtoSwagger {
   @ApiProperty({ example: true, description: 'Whether the question is active' })
   isActive: boolean;
@@ -34,8 +42,13 @@ export class QuestionDtoSwagger {
   @ApiProperty({ example: 'Please enter your full name', required: false })
   hint?: string;
 
-  @ApiProperty({ type: [Object], required: false })
-  options?: object[];
+  @ApiProperty({
+    type: [OptionDtoSwagger],
+    required: false,
+    description:
+      'Array of option schema entries for checkbox/multiple choice questions (no per-user selection state).',
+  })
+  options?: OptionDtoSwagger[];
 
   @ApiProperty({ example: 5, required: false })
   maxRatings?: number;

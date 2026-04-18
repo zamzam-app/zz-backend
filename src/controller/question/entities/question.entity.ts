@@ -16,9 +16,6 @@ export enum QuestionType {
 export class Option {
   @Prop({ required: true })
   text: string;
-
-  @Prop({ required: true, default: false })
-  selected?: boolean;
 }
 
 @Schema({ timestamps: true })
