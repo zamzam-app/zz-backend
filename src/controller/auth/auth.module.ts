@@ -6,9 +6,16 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { ConfigModule } from '@nestjs/config';
+import { TwilioModule } from '../../integrations/twilio/twilio.module';
 
 @Module({
-  imports: [ConfigModule, UsersModule, PassportModule, JwtModule.register({})],
+  imports: [
+    ConfigModule,
+    UsersModule,
+    PassportModule,
+    JwtModule.register({}),
+    TwilioModule,
+  ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
   exports: [AuthService],

@@ -11,9 +11,13 @@ import {
 import { ReviewService } from './review.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
+import { QueryRatingsSummaryDto } from './dto/query-ratings-summary.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
-import { ApiReviewResolveComplaint } from './dto/review.swagger';
+import {
+  ApiReviewRatingsSummary,
+  ApiReviewResolveComplaint,
+} from './dto/review.swagger';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
 import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
@@ -38,6 +42,13 @@ export class ReviewController {
   @Get()
   findAll(@Query() query: QueryReviewDto) {
     return this.reviewService.findAll(query);
+  }
+
+  @Public()
+  @Get('ratings-summary')
+  @ApiReviewRatingsSummary()
+  getRatingsSummary(@Query() query: QueryRatingsSummaryDto) {
+    return this.reviewService.getRatingsSummary(query);
   }
 
   @Post('resolve-complaint/:reviewId')
