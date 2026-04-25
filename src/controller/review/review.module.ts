@@ -10,6 +10,7 @@ import {
   OutletTableSchema,
 } from '../outlet-table/entities/outlet-table.entity';
 import { UsersModule } from '../users/users.module';
+import { TwilioModule } from '../../integrations/twilio/twilio.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { UsersModule } from '../users/users.module';
       { name: OutletTable.name, schema: OutletTableSchema },
     ]),
     UsersModule,
+    TwilioModule,
   ],
   controllers: [ReviewController],
   providers: [ReviewService],

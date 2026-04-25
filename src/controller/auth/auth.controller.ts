@@ -55,8 +55,7 @@ export class AuthController {
   @Public()
   @Post('verify-otp')
   @ApiOperation({
-    summary:
-      'User Login (Phone + OTP). OTP is cleared from DB after successful verification.',
+    summary: 'User Login (Phone + OTP) using Twilio Verify.',
   })
   @ApiBody({ type: VerifyOtpDto })
   async verifyOtp(
