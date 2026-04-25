@@ -11,6 +11,7 @@ import { Model, Types } from 'mongoose';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
+import { QueryRatingsSummaryDto } from './dto/query-ratings-summary.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import {
@@ -39,6 +40,19 @@ import { TwilioVerifyService } from '../../integrations/twilio/twilio-verify.ser
 
 const VALID_MAX_RATINGS = new Set([3, 5, 10]);
 const OVERALL_RATING_SCALE = { min: 1, max: 5 };
+
+type RatingsSummaryBreakdownItem = {
+  rating: number;
+  count: number;
+  percentage: number;
+};
+
+type RatingsSummaryResult = {
+  averageRating: number;
+  totalReviews: number;
+  maxRating: number;
+  ratingBreakdown: RatingsSummaryBreakdownItem[];
+};
 
 @Injectable()
 export class ReviewService {
@@ -362,6 +376,112 @@ export class ReviewService {
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch reviews',
+      );
+    }
+  }
+
+  async getRatingsSummary(
+    query: QueryRatingsSummaryDto,
+  ): Promise<RatingsSummaryResult> {
+    try {
+      const matchStage: Record<string, unknown> = { isDeleted: false };
+      if (query.outletId) {
+        matchStage.outletId = new Types.ObjectId(query.outletId);
+      }
+
+      const [result] = await this.reviewModel
+        .aggregate<{
+          summary: { totalReviews: number; averageRating: number }[];
+          distribution: { rating: number; count: number }[];
+        }>([
+          { $match: matchStage },
+          {
+            $facet: {
+              summary: [
+                {
+                  $group: {
+                    _id: null,
+                    totalReviews: { $sum: 1 },
+                    averageRating: { $avg: '$overallRating' },
+                  },
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    totalReviews: 1,
+                    averageRating: 1,
+                  },
+                },
+              ],
+              distribution: [
+                {
+                  $project: {
+                    rating: {
+                      $toInt: {
+                        $min: [
+                          OVERALL_RATING_SCALE.max,
+                          {
+                            $max: [
+                              OVERALL_RATING_SCALE.min,
+                              { $round: ['$overallRating', 0] },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+                {
+                  $group: {
+                    _id: '$rating',
+                    count: { $sum: 1 },
+                  },
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    rating: '$_id',
+                    count: 1,
+                  },
+                },
+              ],
+            },
+          },
+        ])
+        .exec();
+
+      const totalReviews = result?.summary[0]?.totalReviews ?? 0;
+      const averageRatingRaw = result?.summary[0]?.averageRating ?? 0;
+      const averageRating = Math.round(averageRatingRaw * 10) / 10;
+
+      const distributionMap = new Map(
+        (result?.distribution ?? []).map((item) => [item.rating, item.count]),
+      );
+
+      const ratingBreakdown = Array.from(
+        { length: OVERALL_RATING_SCALE.max },
+        (_, index) => {
+          const rating = OVERALL_RATING_SCALE.max - index;
+          const count = distributionMap.get(rating) ?? 0;
+          const percentage =
+            totalReviews === 0
+              ? 0
+              : Math.round((count / totalReviews) * 1000) / 10;
+          return { rating, count, percentage };
+        },
+      );
+
+      return {
+        averageRating,
+        totalReviews,
+        maxRating: OVERALL_RATING_SCALE.max,
+        ratingBreakdown,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch ratings summary',
       );
     }
   }
