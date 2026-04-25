@@ -35,6 +35,7 @@ import {
 } from '../outlet-table/entities/outlet-table.entity';
 import { FindAllReviewsResult } from './interfaces/query-review.interface';
 import { UsersService } from '../users/users.service';
+import { TwilioVerifyService } from '../../integrations/twilio/twilio-verify.service';
 
 const VALID_MAX_RATINGS = new Set([3, 5, 10]);
 const OVERALL_RATING_SCALE = { min: 1, max: 5 };
@@ -48,25 +49,24 @@ export class ReviewService {
     @InjectModel(OutletTable.name)
     private outletTableModel: Model<OutletTableDocument>,
     private usersService: UsersService,
+    private twilioVerifyService: TwilioVerifyService,
   ) {}
 
   async submitWithOtp(
     dto: SubmitReviewWithOtpDto,
   ): Promise<{ overallRating: number }> {
-    if (dto.otp !== '123456') {
-      throw new UnauthorizedException('Invalid OTP');
-    }
     const normPhone = normalizePhoneNumber(dto.phoneNumber);
     if (!normPhone) {
       throw new UnauthorizedException('Invalid OTP');
     }
-    const userDoc = await this.usersService.findOneByPhoneNumber(normPhone);
-    if (!userDoc) {
-      throw new UnauthorizedException('Invalid OTP');
-    }
+    await this.twilioVerifyService.verifyOtp(normPhone, dto.otp);
+
     const userId = (
-      userDoc as unknown as { _id: Types.ObjectId }
-    )._id.toString();
+      (await this.usersService.findOneOrCreateForReview({
+        phoneNumber: normPhone,
+      })) as { _id: Types.ObjectId } | null
+    )?._id?.toString();
+    if (!userId) throw new UnauthorizedException('Invalid OTP');
 
     const profileUpdate: { name?: string; email?: string; dob?: string } = {};
     if (dto.name !== undefined) profileUpdate.name = dto.name;
@@ -107,7 +107,6 @@ export class ReviewService {
 
     const savedReview = await this.create(createReviewDto);
 
-    await this.usersService.clearOtp(userId);
     await this.usersService.update(userId, {
       lastLoginAt: new Date().toISOString(),
     });
