@@ -3,7 +3,11 @@ import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 export class ValidateUserDto {
   @IsString()
   @IsNotEmpty()
-  pass: string;
+  pass!: string;
+
+  @IsString()
+  @IsOptional()
+  userName?: string;
 
   @IsString()
   @IsOptional()

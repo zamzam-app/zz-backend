@@ -3,8 +3,17 @@ import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({
+    example: 'manager_01',
+    description: 'Manager username for login',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  userName?: string;
+
+  @ApiProperty({
     example: 'johndoe',
-    description: 'The name of the user',
+    description: 'Legacy name identifier for login (backward compatibility)',
     required: false,
   })
   @IsString()
@@ -13,7 +22,7 @@ export class LoginDto {
 
   @ApiProperty({
     example: 'john@example.com',
-    description: 'The email of the user',
+    description: 'Admin email for login',
     required: false,
   })
   @IsString()
@@ -26,5 +35,5 @@ export class LoginDto {
   })
   @IsString()
   @IsNotEmpty()
-  password: string;
+  password!: string;
 }
