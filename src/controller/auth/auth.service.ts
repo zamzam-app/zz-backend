@@ -33,6 +33,7 @@ export class AuthService {
   async signIn(loginDto: LoginDto): Promise<LoginResponse> {
     const user = await this.validateUser({
       pass: loginDto.password,
+      userName: loginDto.userName,
       name: loginDto.name,
       email: loginDto.email,
     });
@@ -194,12 +195,21 @@ export class AuthService {
   async validateUser(
     validateUserDto: ValidateUserDto,
   ): Promise<ValidatedUser | null> {
-    const { pass, name, email } = validateUserDto;
+    const { pass, userName, email, name } = validateUserDto;
     let user: UserDocument | null = null;
-    if (name) {
-      user = await this.usersService.findOneByName(name, true);
+    if (userName?.trim()) {
+      const { data, userPresent } =
+        await this.usersService.findUserByIdentifiers({
+          userName,
+          includePassword: true,
+        });
+      if (userPresent && data) {
+        user = data as UserDocument;
+      }
     } else if (email) {
       user = await this.usersService.findOneByEmail(email, true);
+    } else if (name) {
+      user = await this.usersService.findOneByName(name, true);
     }
 
     if (user && user.password && (await bcrypt.compare(pass, user.password))) {

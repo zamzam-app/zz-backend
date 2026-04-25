@@ -405,6 +405,7 @@ export class UsersService {
     phoneNumber?: string;
     email?: string;
     includeDeleted?: boolean;
+    includePassword?: boolean;
   }): Promise<{ data: User | null; userPresent: boolean }> {
     try {
       const orClauses: Record<string, unknown>[] = [];
@@ -429,7 +430,11 @@ export class UsersService {
       if (!params.includeDeleted) {
         match.isDeleted = false;
       }
-      const user = await this.userModel.findOne(match).exec();
+      const query = this.userModel.findOne(match);
+      if (params.includePassword) {
+        query.select('+password');
+      }
+      const user = await query.exec();
       return { data: user ?? null, userPresent: !!user };
     } catch (error) {
       if (error instanceof HttpException) throw error;
