@@ -198,6 +198,66 @@ export function ApiReviewResolveComplaint(): ApiDecorator {
   );
 }
 
+export class RatingsSummaryBreakdownItemSwagger {
+  @ApiProperty({
+    example: 5,
+    description: 'Star bucket (1-5)',
+  })
+  rating: number;
+
+  @ApiProperty({
+    example: 7392,
+    description: 'Number of reviews in this star bucket',
+  })
+  count: number;
+
+  @ApiProperty({
+    example: 50.3,
+    description: 'Percentage share in this star bucket',
+  })
+  percentage: number;
+}
+
+export class RatingsSummaryResponseSwagger {
+  @ApiProperty({
+    example: 4.2,
+    description: 'Average overall rating out of 5',
+  })
+  averageRating: number;
+
+  @ApiProperty({
+    example: 14706,
+    description: 'Total number of reviews considered',
+  })
+  totalReviews: number;
+
+  @ApiProperty({
+    example: 5,
+    description: 'Maximum rating scale',
+  })
+  maxRating: number;
+
+  @ApiProperty({ type: [RatingsSummaryBreakdownItemSwagger] })
+  ratingBreakdown: RatingsSummaryBreakdownItemSwagger[];
+}
+
+export function ApiReviewRatingsSummary(): ApiDecorator {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get ratings summary for testimonial widget',
+      description:
+        'Returns average rating, total reviews, and the 1-5 star distribution with percentages.',
+    }),
+    ApiOkResponse({
+      description: 'Ratings summary fetched successfully.',
+      type: RatingsSummaryResponseSwagger,
+    }),
+    ApiBadRequestResponse({
+      description: 'Invalid outlet ID filter.',
+    }),
+  );
+}
+
 export class GlobalCsatResponseSwagger {
   @ApiProperty({ example: 4.2, description: 'Global CSAT score out of 5' })
   globalCsatScore: number;

@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -9,11 +13,11 @@ import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { ValidateUserDto } from './dto/validate-user.dto';
-import { createOtp } from '../../util/otp.util';
 import {
   normalizeEmail,
   normalizePhoneNumber,
 } from '../../util/normalize.util';
+import { TwilioVerifyService } from '../../integrations/twilio/twilio-verify.service';
 import {
   JwtPayload,
   AuthTokens,
@@ -27,6 +31,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private twilioVerifyService: TwilioVerifyService,
   ) {}
 
   // Admin and Manager login
@@ -54,35 +59,37 @@ export class AuthService {
     return this.login(user);
   }
 
-  /** Request OTP: find user by phone or create new user, store OTP, return success. */
+  /** Request OTP: find user by phone or create new user, then send OTP via Twilio Verify. */
   async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {
     const normPhone = normalizePhoneNumber(dto.phoneNumber);
+    if (!normPhone) {
+      throw new BadRequestException('Invalid phone number');
+    }
     let userDoc: UserDocument | null =
       (await this.usersService.findOneByPhoneNumber(
         normPhone,
       )) as UserDocument | null;
 
-    const otp = createOtp();
-
     if (userDoc) {
-      await this.usersService.setOtp(userDoc._id.toString(), otp);
+      await this.twilioVerifyService.sendOtp(normPhone);
       return { message: 'OTP sent successfully to your phone number' };
     }
 
     userDoc = await this.usersService.create({
-      phoneNumber: normPhone || dto.phoneNumber,
+      phoneNumber: normPhone,
       role: UserRole.USER,
-      otp,
     });
+    await this.twilioVerifyService.sendOtp(normPhone);
     return { message: 'OTP sent successfully to your phone number' };
   }
 
   // Users OTP login (Auto-registration supported)
   async signInWithOtp(verifyOtpDto: VerifyOtpDto): Promise<LoginResponse> {
-    // 1. Initial OTP Check (hardcoded for now)
-    if (verifyOtpDto.otp !== '123456') {
+    const normPhone = normalizePhoneNumber(verifyOtpDto.phoneNumber);
+    if (!normPhone) {
       throw new UnauthorizedException('Invalid OTP');
     }
+    await this.twilioVerifyService.verifyOtp(normPhone, verifyOtpDto.otp);
 
     // 2. Find or Create User (by userId if provided, else by phoneNumber)
     let userDoc: UserDocument;
@@ -91,7 +98,6 @@ export class AuthService {
       const found = await this.usersService.findOne(requestUserId);
       userDoc = found as unknown as UserDocument;
     } else {
-      const normPhone = normalizePhoneNumber(verifyOtpDto.phoneNumber);
       const normEmail = normalizeEmail(verifyOtpDto.email);
       let byPhone = await this.usersService.findOneByPhoneNumber(normPhone);
       if (!byPhone && verifyOtpDto.email) {
@@ -103,7 +109,7 @@ export class AuthService {
       }
       if (!byPhone) {
         byPhone = await this.usersService.create({
-          phoneNumber: normPhone || verifyOtpDto.phoneNumber,
+          phoneNumber: normPhone,
           role: UserRole.USER,
           ...(verifyOtpDto.name && { name: verifyOtpDto.name }),
           ...(verifyOtpDto.email && { email: normEmail || verifyOtpDto.email }),
@@ -158,10 +164,7 @@ export class AuthService {
       );
     }
 
-    // 4. Clear OTP from DB after successful verification
-    await this.usersService.clearOtp(userId);
-
-    // 5. Sanitize and Login (ensure otp/password never in response)
+    // 4. Sanitize and Login (ensure otp/password never in response)
     const raw =
       typeof (userDoc as { toObject?: () => unknown }).toObject === 'function'
         ? (userDoc as { toObject: () => unknown }).toObject()
