@@ -9,19 +9,19 @@ import {
 
 export class TaskOverviewResponseSwagger {
   @ApiProperty({ example: 25 })
-  totalOpenTasks: number;
+  totalOpenTasks!: number;
 
   @ApiProperty({ example: 80 })
-  completedTasks: number;
+  completedTasks!: number;
 
   @ApiProperty({ example: 6 })
-  dueTodayTasks: number;
+  dueTodayTasks!: number;
 
   @ApiProperty({ example: 4 })
-  criticalOpenTasks: number;
+  criticalOpenTasks!: number;
 
   @ApiProperty({ example: '2026-04-27' })
-  snapshotDate: string;
+  snapshotDate!: string;
 }
 
 export function ApiTaskCreate() {
