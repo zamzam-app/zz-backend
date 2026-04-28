@@ -24,6 +24,7 @@ import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import {
   ApiTaskCreate,
   ApiTaskFindAll,
+  ApiTaskOverview,
   ApiTaskFindOne,
   ApiTaskFindByAssignee,
   ApiTaskRemove,
@@ -57,6 +58,13 @@ export class TaskController {
     @Request() req: ExpressRequest & { user: JwtPayload },
   ) {
     return this.taskService.findAll(query, req.user);
+  }
+
+  @Get('overview')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiTaskOverview()
+  getOverview(@Request() req: ExpressRequest & { user: JwtPayload }) {
+    return this.taskService.getOverview(req.user);
   }
 
   @Get(':id')

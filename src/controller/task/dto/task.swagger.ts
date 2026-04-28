@@ -4,7 +4,25 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiProperty,
 } from '@nestjs/swagger';
+
+export class TaskOverviewResponseSwagger {
+  @ApiProperty({ example: 25 })
+  totalOpenTasks: number;
+
+  @ApiProperty({ example: 80 })
+  completedTasks: number;
+
+  @ApiProperty({ example: 6 })
+  dueTodayTasks: number;
+
+  @ApiProperty({ example: 4 })
+  criticalOpenTasks: number;
+
+  @ApiProperty({ example: '2026-04-27' })
+  snapshotDate: string;
+}
 
 export function ApiTaskCreate() {
   return applyDecorators(
@@ -39,6 +57,20 @@ export function ApiTaskFindByAssignee() {
       description: 'Returns tasks where the user is an assignee.',
     }),
     ApiOkResponse({ description: 'Paginated task list' }),
+  );
+}
+
+export function ApiTaskOverview() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get task overview metrics',
+      description:
+        'Returns open, completed, due-today, and critical-open task counts from DB aggregation.',
+    }),
+    ApiOkResponse({
+      description: 'Task overview fetched',
+      type: TaskOverviewResponseSwagger,
+    }),
   );
 }
 

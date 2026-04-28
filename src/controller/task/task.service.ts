@@ -21,13 +21,23 @@ import { QueryTaskDto } from './dto/query-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { Task, TaskDocument } from './entities/task.entity';
-import { TaskStatus } from './task.enums';
+import { TaskPriority, TaskStatus } from './task.enums';
 import {
   FindAllTasksResult,
   TaskBoardItem,
 } from './interfaces/query-task.interface';
 
+const TASK_STATUS_OPEN = TaskStatus.OPEN;
 const TASK_STATUS_COMPLETED = TaskStatus.COMPLETED;
+const TASK_PRIORITY_HIGH = TaskPriority.HIGH;
+
+type TaskOverviewResult = {
+  totalOpenTasks: number;
+  completedTasks: number;
+  dueTodayTasks: number;
+  criticalOpenTasks: number;
+  snapshotDate: string;
+};
 
 @Injectable()
 export class TaskService {
@@ -176,6 +186,97 @@ export class TaskService {
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch tasks',
+      );
+    }
+  }
+
+  async getOverview(jwtUser: JwtPayload): Promise<TaskOverviewResult> {
+    try {
+      const matchStage = await this.buildListMatchStage(
+        {} as QueryTaskDto,
+        jwtUser,
+      );
+
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+      const todayEnd = new Date(todayStart);
+      todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+      todayEnd.setMilliseconds(todayEnd.getMilliseconds() - 1);
+
+      const [result] = await this.taskModel
+        .aggregate<{
+          totalOpenTasks: number;
+          completedTasks: number;
+          dueTodayTasks: number;
+          criticalOpenTasks: number;
+        }>([
+          { $match: matchStage },
+          {
+            $group: {
+              _id: null,
+              totalOpenTasks: {
+                $sum: { $cond: [{ $eq: ['$status', TASK_STATUS_OPEN] }, 1, 0] },
+              },
+              completedTasks: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', TASK_STATUS_COMPLETED] }, 1, 0],
+                },
+              },
+              dueTodayTasks: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', TASK_STATUS_OPEN] },
+                        { $gte: ['$dueDate', todayStart] },
+                        { $lte: ['$dueDate', todayEnd] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              criticalOpenTasks: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', TASK_STATUS_OPEN] },
+                        { $eq: ['$priority', TASK_PRIORITY_HIGH] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              totalOpenTasks: 1,
+              completedTasks: 1,
+              dueTodayTasks: 1,
+              criticalOpenTasks: 1,
+            },
+          },
+        ])
+        .exec();
+
+      return {
+        totalOpenTasks: result?.totalOpenTasks ?? 0,
+        completedTasks: result?.completedTasks ?? 0,
+        dueTodayTasks: result?.dueTodayTasks ?? 0,
+        criticalOpenTasks: result?.criticalOpenTasks ?? 0,
+        snapshotDate: todayStart.toISOString().slice(0, 10),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch task overview',
       );
     }
   }
