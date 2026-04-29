@@ -18,6 +18,10 @@ import {
 import { User, UserDocument } from '../users/entities/user.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { QueryTaskDto } from './dto/query-task.dto';
+import {
+  QueryTaskOverviewDto,
+  TaskOverviewPeriod,
+} from './dto/query-task-overview.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { Task, TaskDocument } from './entities/task.entity';
@@ -30,6 +34,7 @@ import {
 const TASK_STATUS_OPEN = TaskStatus.OPEN;
 const TASK_STATUS_COMPLETED = TaskStatus.COMPLETED;
 const TASK_PRIORITY_HIGH = TaskPriority.HIGH;
+const TASK_OVERVIEW_TIMEZONE = 'Asia/Kolkata';
 
 type TaskOverviewResult = {
   totalOpenTasks: number;
@@ -37,6 +42,10 @@ type TaskOverviewResult = {
   dueTodayTasks: number;
   criticalOpenTasks: number;
   snapshotDate: string;
+  period: TaskOverviewPeriod;
+  dueInPeriodTasks: number;
+  dueThisWeekTasks: number;
+  dueThisMonthTasks: number;
 };
 
 @Injectable()
@@ -190,18 +199,22 @@ export class TaskService {
     }
   }
 
-  async getOverview(jwtUser: JwtPayload): Promise<TaskOverviewResult> {
+  async getOverview(
+    jwtUser: JwtPayload,
+    query: QueryTaskOverviewDto,
+  ): Promise<TaskOverviewResult> {
     try {
       const matchStage = await this.buildListMatchStage(
         {} as QueryTaskDto,
         jwtUser,
       );
 
-      const todayStart = new Date();
-      todayStart.setUTCHours(0, 0, 0, 0);
-      const todayEnd = new Date(todayStart);
-      todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
-      todayEnd.setMilliseconds(todayEnd.getMilliseconds() - 1);
+      // Business-day windows for overview counts use Asia/Kolkata timezone.
+      const period = query.period ?? TaskOverviewPeriod.WEEKLY;
+      const todayStart = this.getBusinessDayStart(new Date());
+      const todayEnd = this.getRangeEndFromStart(todayStart, 1);
+      const weekEnd = this.getRangeEndFromStart(todayStart, 7);
+      const monthEnd = this.getBusinessMonthEnd(new Date());
 
       const [result] = await this.taskModel
         .aggregate<{
@@ -209,6 +222,8 @@ export class TaskService {
           completedTasks: number;
           dueTodayTasks: number;
           criticalOpenTasks: number;
+          dueThisWeekTasks: number;
+          dueThisMonthTasks: number;
         }>([
           { $match: matchStage },
           {
@@ -230,6 +245,36 @@ export class TaskService {
                         { $eq: ['$status', TASK_STATUS_OPEN] },
                         { $gte: ['$dueDate', todayStart] },
                         { $lte: ['$dueDate', todayEnd] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              dueThisWeekTasks: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', TASK_STATUS_OPEN] },
+                        { $gte: ['$dueDate', todayStart] },
+                        { $lte: ['$dueDate', weekEnd] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              dueThisMonthTasks: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', TASK_STATUS_OPEN] },
+                        { $gte: ['$dueDate', todayStart] },
+                        { $lte: ['$dueDate', monthEnd] },
                       ],
                     },
                     1,
@@ -259,18 +304,34 @@ export class TaskService {
               totalOpenTasks: 1,
               completedTasks: 1,
               dueTodayTasks: 1,
+              dueThisWeekTasks: 1,
+              dueThisMonthTasks: 1,
               criticalOpenTasks: 1,
             },
           },
         ])
         .exec();
 
+      const dueTodayTasks = result?.dueTodayTasks ?? 0;
+      const dueThisWeekTasks = result?.dueThisWeekTasks ?? 0;
+      const dueThisMonthTasks = result?.dueThisMonthTasks ?? 0;
+      const dueInPeriodTasks =
+        period === TaskOverviewPeriod.DAILY
+          ? dueTodayTasks
+          : period === TaskOverviewPeriod.MONTHLY
+            ? dueThisMonthTasks
+            : dueThisWeekTasks;
+
       return {
         totalOpenTasks: result?.totalOpenTasks ?? 0,
         completedTasks: result?.completedTasks ?? 0,
-        dueTodayTasks: result?.dueTodayTasks ?? 0,
+        dueTodayTasks,
         criticalOpenTasks: result?.criticalOpenTasks ?? 0,
-        snapshotDate: todayStart.toISOString().slice(0, 10),
+        snapshotDate: this.formatDateInTimeZone(todayStart),
+        period,
+        dueInPeriodTasks,
+        dueThisWeekTasks,
+        dueThisMonthTasks,
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -513,6 +574,81 @@ export class TaskService {
           'Failed to delete task',
       );
     }
+  }
+
+  private getBusinessDayStart(date: Date): Date {
+    const { year, month, day } = this.getDatePartsInTimeZone(date);
+    const utcGuess = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+    const initialOffsetMinutes = this.getTimeZoneOffsetMinutes(
+      new Date(utcGuess),
+    );
+    let utcTime = utcGuess - initialOffsetMinutes * 60_000;
+
+    const correctedOffsetMinutes = this.getTimeZoneOffsetMinutes(
+      new Date(utcTime),
+    );
+    if (correctedOffsetMinutes !== initialOffsetMinutes) {
+      utcTime = utcGuess - correctedOffsetMinutes * 60_000;
+    }
+    return new Date(utcTime);
+  }
+
+  private getBusinessMonthEnd(date: Date): Date {
+    const { year, month } = this.getDatePartsInTimeZone(date);
+    const nextMonthYear = month === 12 ? year + 1 : year;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextMonthStart = this.getBusinessDayStart(
+      new Date(Date.UTC(nextMonthYear, nextMonth - 1, 1)),
+    );
+    return new Date(nextMonthStart.getTime() - 1);
+  }
+
+  private getRangeEndFromStart(start: Date, dayCount: number): Date {
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + dayCount);
+    end.setMilliseconds(end.getMilliseconds() - 1);
+    return end;
+  }
+
+  private getDatePartsInTimeZone(date: Date): {
+    year: number;
+    month: number;
+    day: number;
+  } {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TASK_OVERVIEW_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const parts = formatter.formatToParts(date);
+    return {
+      year: Number(parts.find((part) => part.type === 'year')?.value ?? 0),
+      month: Number(parts.find((part) => part.type === 'month')?.value ?? 0),
+      day: Number(parts.find((part) => part.type === 'day')?.value ?? 0),
+    };
+  }
+
+  private getTimeZoneOffsetMinutes(date: Date): number {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: TASK_OVERVIEW_TIMEZONE,
+      timeZoneName: 'shortOffset',
+    });
+    const offsetText =
+      formatter
+        .formatToParts(date)
+        .find((part) => part.type === 'timeZoneName')
+        ?.value.replace('GMT', '') ?? '+00:00';
+    const sign = offsetText.startsWith('-') ? -1 : 1;
+    const [hours, minutes = '0'] = offsetText.replace(/[+-]/, '').split(':');
+    return sign * (Number(hours) * 60 + Number(minutes));
+  }
+
+  private formatDateInTimeZone(date: Date): string {
+    const { year, month, day } = this.getDatePartsInTimeZone(date);
+    return `${year.toString().padStart(4, '0')}-${month
+      .toString()
+      .padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
   }
 
   private async buildListMatchStage(

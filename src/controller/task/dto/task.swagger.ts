@@ -22,6 +22,18 @@ export class TaskOverviewResponseSwagger {
 
   @ApiProperty({ example: '2026-04-27' })
   snapshotDate!: string;
+
+  @ApiProperty({ example: 'weekly', enum: ['daily', 'weekly', 'monthly'] })
+  period!: string;
+
+  @ApiProperty({ example: 14 })
+  dueInPeriodTasks!: number;
+
+  @ApiProperty({ example: 14 })
+  dueThisWeekTasks!: number;
+
+  @ApiProperty({ example: 42 })
+  dueThisMonthTasks!: number;
 }
 
 export function ApiTaskCreate() {
@@ -65,7 +77,7 @@ export function ApiTaskOverview() {
     ApiOperation({
       summary: 'Get task overview metrics',
       description:
-        'Returns open, completed, due-today, and critical-open task counts from DB aggregation.',
+        'Returns open/completed counts plus due counts for daily/weekly/monthly windows (business timezone: Asia/Kolkata).',
     }),
     ApiOkResponse({
       description: 'Task overview fetched',
