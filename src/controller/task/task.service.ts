@@ -141,7 +141,8 @@ export class TaskService {
       const limit = query.limit ?? 10;
       const skip = (page - 1) * limit;
 
-      const matchStage = await this.buildListMatchStage(query, jwtUser);
+      const { baseMatchStage, postLookupSearchMatchStage } =
+        await this.buildListMatchStages(query, jwtUser);
 
       const lookupStages = this.taskLookupStages();
 
@@ -160,8 +161,19 @@ export class TaskService {
       const dataPipeline: PipelineStage[] = [
         ...sortStages,
         ...lookupStages,
+        ...(postLookupSearchMatchStage
+          ? [{ $match: postLookupSearchMatchStage }]
+          : []),
         { $skip: skip },
         { $limit: limit },
+      ];
+
+      const totalCountPipeline: PipelineStage[] = [
+        ...lookupStages,
+        ...(postLookupSearchMatchStage
+          ? [{ $match: postLookupSearchMatchStage }]
+          : []),
+        { $count: 'count' },
       ];
 
       const [result] = await this.taskModel
@@ -169,11 +181,12 @@ export class TaskService {
           data: TaskBoardItem[];
           totalCount: [{ count: number }];
         }>([
-          { $match: matchStage },
+          { $match: baseMatchStage },
           {
             $facet: {
               data: dataPipeline as PipelineStage.FacetPipelineStage[],
-              totalCount: [{ $count: 'count' }],
+              totalCount:
+                totalCountPipeline as PipelineStage.FacetPipelineStage[],
             },
           },
         ])
@@ -204,7 +217,7 @@ export class TaskService {
     query: QueryTaskOverviewDto,
   ): Promise<TaskOverviewResult> {
     try {
-      const matchStage = await this.buildListMatchStage(
+      const { baseMatchStage } = await this.buildListMatchStages(
         {} as QueryTaskDto,
         jwtUser,
       );
@@ -225,7 +238,7 @@ export class TaskService {
           dueThisWeekTasks: number;
           dueThisMonthTasks: number;
         }>([
-          { $match: matchStage },
+          { $match: baseMatchStage },
           {
             $group: {
               _id: null,
@@ -651,18 +664,21 @@ export class TaskService {
       .padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
   }
 
-  private async buildListMatchStage(
+  private async buildListMatchStages(
     query: QueryTaskDto,
     jwtUser: JwtPayload,
-  ): Promise<Record<string, unknown>> {
-    const matchStage: Record<string, unknown> = { isDeleted: false };
+  ): Promise<{
+    baseMatchStage: Record<string, unknown>;
+    postLookupSearchMatchStage?: Record<string, unknown>;
+  }> {
+    const baseAnd: Record<string, unknown>[] = [{ isDeleted: false }];
 
     if (query.outletId) {
       if (!Types.ObjectId.isValid(query.outletId)) {
         throw new BadRequestException('Invalid outlet ID filter');
       }
       await this.assertManagerOutletAccess(jwtUser, query.outletId);
-      matchStage.outletId = new Types.ObjectId(query.outletId);
+      baseAnd.push({ outletId: new Types.ObjectId(query.outletId) });
     } else if (jwtUser.role === UserRole.MANAGER) {
       const allowed = await this.managerOutletObjectIds(jwtUser.sub);
       const managerDefaultFilters = [
@@ -670,56 +686,76 @@ export class TaskService {
         { assigneeIds: new Types.ObjectId(jwtUser.sub) },
         { createdBy: new Types.ObjectId(jwtUser.sub) },
       ];
-
-      if (matchStage.assigneeIds) {
-        matchStage.$and = [
-          { $or: managerDefaultFilters },
-          { assigneeIds: matchStage.assigneeIds },
-        ];
-        delete matchStage.assigneeIds;
-      } else {
-        matchStage.$or = managerDefaultFilters;
-      }
+      baseAnd.push({ $or: managerDefaultFilters });
     }
 
     if (query.status) {
-      matchStage.status = query.status;
+      baseAnd.push({ status: query.status });
     }
     if (query.taskCategoryId) {
       if (!Types.ObjectId.isValid(query.taskCategoryId)) {
         throw new BadRequestException('Invalid task category ID filter');
       }
-      matchStage.taskCategoryId = new Types.ObjectId(query.taskCategoryId);
+      baseAnd.push({
+        taskCategoryId: new Types.ObjectId(query.taskCategoryId),
+      });
     }
     if (query.priority) {
-      matchStage.priority = query.priority;
+      baseAnd.push({ priority: query.priority });
     }
     if (query.assigneeId) {
       if (!Types.ObjectId.isValid(query.assigneeId)) {
         throw new BadRequestException('Invalid assignee ID filter');
       }
-      matchStage.assigneeIds = new Types.ObjectId(query.assigneeId);
-    }
-
-    if (query.search?.trim()) {
-      matchStage.description = {
-        $regex: query.search.trim(),
-        $options: 'i',
-      };
+      baseAnd.push({ assigneeIds: new Types.ObjectId(query.assigneeId) });
     }
 
     const dueDateCond: Record<string, Date> = {};
+    const dueFrom = query.dueFrom ? new Date(query.dueFrom) : undefined;
+    const dueTo = query.dueTo ? new Date(query.dueTo) : undefined;
+    if (dueFrom && dueTo && dueFrom > dueTo) {
+      throw new BadRequestException('dueFrom cannot be greater than dueTo');
+    }
     if (query.dueFrom) {
-      dueDateCond.$gte = new Date(query.dueFrom);
+      dueDateCond.$gte = dueFrom as Date;
     }
     if (query.dueTo) {
-      dueDateCond.$lte = new Date(query.dueTo);
+      dueDateCond.$lte = dueTo as Date;
     }
     if (Object.keys(dueDateCond).length > 0) {
-      matchStage.dueDate = dueDateCond;
+      baseAnd.push({ dueDate: dueDateCond });
     }
 
-    return matchStage;
+    const baseMatchStage =
+      baseAnd.length === 1
+        ? baseAnd[0]
+        : ({ $and: baseAnd } as Record<string, unknown>);
+
+    const trimmedSearch = query.search?.trim();
+    if (!trimmedSearch) {
+      return { baseMatchStage };
+    }
+
+    const escapedSearch = this.escapeRegex(trimmedSearch);
+    const postLookupSearchOr: Record<string, unknown>[] = [
+      { description: { $regex: escapedSearch, $options: 'i' } },
+      { 'taskCategory.name': { $regex: escapedSearch, $options: 'i' } },
+      { 'outlet.name': { $regex: escapedSearch, $options: 'i' } },
+      { 'assignees.name': { $regex: escapedSearch, $options: 'i' } },
+    ];
+
+    if (Types.ObjectId.isValid(trimmedSearch)) {
+      postLookupSearchOr.push({ _id: new Types.ObjectId(trimmedSearch) });
+    }
+
+    return {
+      baseMatchStage,
+      postLookupSearchMatchStage: { $or: postLookupSearchOr },
+    };
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   private async managerOutletObjectIds(

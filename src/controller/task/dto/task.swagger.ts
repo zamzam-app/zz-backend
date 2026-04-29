@@ -48,7 +48,7 @@ export function ApiTaskFindAll() {
     ApiOperation({
       summary: 'List tasks with filters and pagination',
       description:
-        'Returns tasks with outlet, assignees, and creator for board UI. Managers only see tasks for their outlets.',
+        'Returns tasks with backend-side filtering (status, priority, search, due date range) and pagination for board/infinite-scroll UI. Managers only see tasks for their allowed scope.',
     }),
     ApiOkResponse({ description: 'Paginated task list' }),
   );

@@ -63,19 +63,24 @@ export class QueryTaskDto {
   assigneeId?: string;
 
   @ApiPropertyOptional({
-    description: 'Case-insensitive search on description',
+    description:
+      'Case-insensitive search across description, task category name, outlet name, assignee name, and exact task ID.',
   })
   @IsOptional()
   @IsString()
   @MaxLength(500)
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Due date range start (ISO 8601)' })
+  @ApiPropertyOptional({
+    description: 'Due date range start (ISO 8601, inclusive)',
+  })
   @IsOptional()
   @IsDateString()
   dueFrom?: string;
 
-  @ApiPropertyOptional({ description: 'Due date range end (ISO 8601)' })
+  @ApiPropertyOptional({
+    description: 'Due date range end (ISO 8601, inclusive)',
+  })
   @IsOptional()
   @IsDateString()
   dueTo?: string;
