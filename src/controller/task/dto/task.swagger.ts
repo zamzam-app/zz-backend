@@ -4,7 +4,37 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiProperty,
 } from '@nestjs/swagger';
+
+export class TaskOverviewResponseSwagger {
+  @ApiProperty({ example: 25 })
+  totalOpenTasks!: number;
+
+  @ApiProperty({ example: 80 })
+  completedTasks!: number;
+
+  @ApiProperty({ example: 6 })
+  dueTodayTasks!: number;
+
+  @ApiProperty({ example: 4 })
+  criticalOpenTasks!: number;
+
+  @ApiProperty({ example: '2026-04-27' })
+  snapshotDate!: string;
+
+  @ApiProperty({ example: 'weekly', enum: ['daily', 'weekly', 'monthly'] })
+  period!: string;
+
+  @ApiProperty({ example: 14 })
+  dueInPeriodTasks!: number;
+
+  @ApiProperty({ example: 14 })
+  dueThisWeekTasks!: number;
+
+  @ApiProperty({ example: 42 })
+  dueThisMonthTasks!: number;
+}
 
 export function ApiTaskCreate() {
   return applyDecorators(
@@ -18,7 +48,7 @@ export function ApiTaskFindAll() {
     ApiOperation({
       summary: 'List tasks with filters and pagination',
       description:
-        'Returns tasks with outlet, assignees, and creator for board UI. Managers only see tasks for their outlets.',
+        'Returns tasks with backend-side filtering (status, priority, search, due date range) and pagination for board/infinite-scroll UI. Managers only see tasks for their allowed scope.',
     }),
     ApiOkResponse({ description: 'Paginated task list' }),
   );
@@ -39,6 +69,20 @@ export function ApiTaskFindByAssignee() {
       description: 'Returns tasks where the user is an assignee.',
     }),
     ApiOkResponse({ description: 'Paginated task list' }),
+  );
+}
+
+export function ApiTaskOverview() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get task overview metrics',
+      description:
+        'Returns open/completed counts plus due counts for daily/weekly/monthly windows (business timezone: Asia/Kolkata).',
+    }),
+    ApiOkResponse({
+      description: 'Task overview fetched',
+      type: TaskOverviewResponseSwagger,
+    }),
   );
 }
 
