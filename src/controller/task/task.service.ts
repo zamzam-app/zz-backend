@@ -18,16 +18,35 @@ import {
 import { User, UserDocument } from '../users/entities/user.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { QueryTaskDto } from './dto/query-task.dto';
+import {
+  QueryTaskOverviewDto,
+  TaskOverviewPeriod,
+} from './dto/query-task-overview.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { Task, TaskDocument } from './entities/task.entity';
-import { TaskStatus } from './task.enums';
+import { TaskPriority, TaskStatus } from './task.enums';
 import {
   FindAllTasksResult,
   TaskBoardItem,
 } from './interfaces/query-task.interface';
 
+const TASK_STATUS_OPEN = TaskStatus.OPEN;
 const TASK_STATUS_COMPLETED = TaskStatus.COMPLETED;
+const TASK_PRIORITY_HIGH = TaskPriority.HIGH;
+const TASK_OVERVIEW_TIMEZONE = 'Asia/Kolkata';
+
+type TaskOverviewResult = {
+  totalOpenTasks: number;
+  completedTasks: number;
+  dueTodayTasks: number;
+  criticalOpenTasks: number;
+  snapshotDate: string;
+  period: TaskOverviewPeriod;
+  dueInPeriodTasks: number;
+  dueThisWeekTasks: number;
+  dueThisMonthTasks: number;
+};
 
 @Injectable()
 export class TaskService {
@@ -122,7 +141,8 @@ export class TaskService {
       const limit = query.limit ?? 10;
       const skip = (page - 1) * limit;
 
-      const matchStage = await this.buildListMatchStage(query, jwtUser);
+      const { baseMatchStage, postLookupSearchMatchStage } =
+        await this.buildListMatchStages(query, jwtUser);
 
       const lookupStages = this.taskLookupStages();
 
@@ -141,8 +161,19 @@ export class TaskService {
       const dataPipeline: PipelineStage[] = [
         ...sortStages,
         ...lookupStages,
+        ...(postLookupSearchMatchStage
+          ? [{ $match: postLookupSearchMatchStage }]
+          : []),
         { $skip: skip },
         { $limit: limit },
+      ];
+
+      const totalCountPipeline: PipelineStage[] = [
+        ...lookupStages,
+        ...(postLookupSearchMatchStage
+          ? [{ $match: postLookupSearchMatchStage }]
+          : []),
+        { $count: 'count' },
       ];
 
       const [result] = await this.taskModel
@@ -150,11 +181,12 @@ export class TaskService {
           data: TaskBoardItem[];
           totalCount: [{ count: number }];
         }>([
-          { $match: matchStage },
+          { $match: baseMatchStage },
           {
             $facet: {
               data: dataPipeline as PipelineStage.FacetPipelineStage[],
-              totalCount: [{ $count: 'count' }],
+              totalCount:
+                totalCountPipeline as PipelineStage.FacetPipelineStage[],
             },
           },
         ])
@@ -176,6 +208,149 @@ export class TaskService {
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch tasks',
+      );
+    }
+  }
+
+  async getOverview(
+    jwtUser: JwtPayload,
+    query: QueryTaskOverviewDto,
+  ): Promise<TaskOverviewResult> {
+    try {
+      const { baseMatchStage } = await this.buildListMatchStages(
+        {} as QueryTaskDto,
+        jwtUser,
+      );
+
+      // Business-day windows for overview counts use Asia/Kolkata timezone.
+      const period = query.period ?? TaskOverviewPeriod.WEEKLY;
+      const todayStart = this.getBusinessDayStart(new Date());
+      const todayEnd = this.getRangeEndFromStart(todayStart, 1);
+      const weekEnd = this.getRangeEndFromStart(todayStart, 7);
+      const monthEnd = this.getBusinessMonthEnd(new Date());
+
+      const [result] = await this.taskModel
+        .aggregate<{
+          totalOpenTasks: number;
+          completedTasks: number;
+          dueTodayTasks: number;
+          criticalOpenTasks: number;
+          dueThisWeekTasks: number;
+          dueThisMonthTasks: number;
+        }>([
+          { $match: baseMatchStage },
+          {
+            $group: {
+              _id: null,
+              totalOpenTasks: {
+                $sum: { $cond: [{ $eq: ['$status', TASK_STATUS_OPEN] }, 1, 0] },
+              },
+              completedTasks: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', TASK_STATUS_COMPLETED] }, 1, 0],
+                },
+              },
+              dueTodayTasks: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', TASK_STATUS_OPEN] },
+                        { $gte: ['$dueDate', todayStart] },
+                        { $lte: ['$dueDate', todayEnd] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              dueThisWeekTasks: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', TASK_STATUS_OPEN] },
+                        { $gte: ['$dueDate', todayStart] },
+                        { $lte: ['$dueDate', weekEnd] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              dueThisMonthTasks: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', TASK_STATUS_OPEN] },
+                        { $gte: ['$dueDate', todayStart] },
+                        { $lte: ['$dueDate', monthEnd] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              criticalOpenTasks: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', TASK_STATUS_OPEN] },
+                        { $eq: ['$priority', TASK_PRIORITY_HIGH] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              totalOpenTasks: 1,
+              completedTasks: 1,
+              dueTodayTasks: 1,
+              dueThisWeekTasks: 1,
+              dueThisMonthTasks: 1,
+              criticalOpenTasks: 1,
+            },
+          },
+        ])
+        .exec();
+
+      const dueTodayTasks = result?.dueTodayTasks ?? 0;
+      const dueThisWeekTasks = result?.dueThisWeekTasks ?? 0;
+      const dueThisMonthTasks = result?.dueThisMonthTasks ?? 0;
+      const dueInPeriodTasks =
+        period === TaskOverviewPeriod.DAILY
+          ? dueTodayTasks
+          : period === TaskOverviewPeriod.MONTHLY
+            ? dueThisMonthTasks
+            : dueThisWeekTasks;
+
+      return {
+        totalOpenTasks: result?.totalOpenTasks ?? 0,
+        completedTasks: result?.completedTasks ?? 0,
+        dueTodayTasks,
+        criticalOpenTasks: result?.criticalOpenTasks ?? 0,
+        snapshotDate: this.formatDateInTimeZone(todayStart),
+        period,
+        dueInPeriodTasks,
+        dueThisWeekTasks,
+        dueThisMonthTasks,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch task overview',
       );
     }
   }
@@ -414,18 +589,96 @@ export class TaskService {
     }
   }
 
-  private async buildListMatchStage(
+  private getBusinessDayStart(date: Date): Date {
+    const { year, month, day } = this.getDatePartsInTimeZone(date);
+    const utcGuess = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+    const initialOffsetMinutes = this.getTimeZoneOffsetMinutes(
+      new Date(utcGuess),
+    );
+    let utcTime = utcGuess - initialOffsetMinutes * 60_000;
+
+    const correctedOffsetMinutes = this.getTimeZoneOffsetMinutes(
+      new Date(utcTime),
+    );
+    if (correctedOffsetMinutes !== initialOffsetMinutes) {
+      utcTime = utcGuess - correctedOffsetMinutes * 60_000;
+    }
+    return new Date(utcTime);
+  }
+
+  private getBusinessMonthEnd(date: Date): Date {
+    const { year, month } = this.getDatePartsInTimeZone(date);
+    const nextMonthYear = month === 12 ? year + 1 : year;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextMonthStart = this.getBusinessDayStart(
+      new Date(Date.UTC(nextMonthYear, nextMonth - 1, 1)),
+    );
+    return new Date(nextMonthStart.getTime() - 1);
+  }
+
+  private getRangeEndFromStart(start: Date, dayCount: number): Date {
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + dayCount);
+    end.setMilliseconds(end.getMilliseconds() - 1);
+    return end;
+  }
+
+  private getDatePartsInTimeZone(date: Date): {
+    year: number;
+    month: number;
+    day: number;
+  } {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TASK_OVERVIEW_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const parts = formatter.formatToParts(date);
+    return {
+      year: Number(parts.find((part) => part.type === 'year')?.value ?? 0),
+      month: Number(parts.find((part) => part.type === 'month')?.value ?? 0),
+      day: Number(parts.find((part) => part.type === 'day')?.value ?? 0),
+    };
+  }
+
+  private getTimeZoneOffsetMinutes(date: Date): number {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: TASK_OVERVIEW_TIMEZONE,
+      timeZoneName: 'shortOffset',
+    });
+    const offsetText =
+      formatter
+        .formatToParts(date)
+        .find((part) => part.type === 'timeZoneName')
+        ?.value.replace('GMT', '') ?? '+00:00';
+    const sign = offsetText.startsWith('-') ? -1 : 1;
+    const [hours, minutes = '0'] = offsetText.replace(/[+-]/, '').split(':');
+    return sign * (Number(hours) * 60 + Number(minutes));
+  }
+
+  private formatDateInTimeZone(date: Date): string {
+    const { year, month, day } = this.getDatePartsInTimeZone(date);
+    return `${year.toString().padStart(4, '0')}-${month
+      .toString()
+      .padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+  }
+
+  private async buildListMatchStages(
     query: QueryTaskDto,
     jwtUser: JwtPayload,
-  ): Promise<Record<string, unknown>> {
-    const matchStage: Record<string, unknown> = { isDeleted: false };
+  ): Promise<{
+    baseMatchStage: Record<string, unknown>;
+    postLookupSearchMatchStage?: Record<string, unknown>;
+  }> {
+    const baseAnd: Record<string, unknown>[] = [{ isDeleted: false }];
 
     if (query.outletId) {
       if (!Types.ObjectId.isValid(query.outletId)) {
         throw new BadRequestException('Invalid outlet ID filter');
       }
       await this.assertManagerOutletAccess(jwtUser, query.outletId);
-      matchStage.outletId = new Types.ObjectId(query.outletId);
+      baseAnd.push({ outletId: new Types.ObjectId(query.outletId) });
     } else if (jwtUser.role === UserRole.MANAGER) {
       const allowed = await this.managerOutletObjectIds(jwtUser.sub);
       const managerDefaultFilters = [
@@ -433,56 +686,76 @@ export class TaskService {
         { assigneeIds: new Types.ObjectId(jwtUser.sub) },
         { createdBy: new Types.ObjectId(jwtUser.sub) },
       ];
-
-      if (matchStage.assigneeIds) {
-        matchStage.$and = [
-          { $or: managerDefaultFilters },
-          { assigneeIds: matchStage.assigneeIds },
-        ];
-        delete matchStage.assigneeIds;
-      } else {
-        matchStage.$or = managerDefaultFilters;
-      }
+      baseAnd.push({ $or: managerDefaultFilters });
     }
 
     if (query.status) {
-      matchStage.status = query.status;
+      baseAnd.push({ status: query.status });
     }
     if (query.taskCategoryId) {
       if (!Types.ObjectId.isValid(query.taskCategoryId)) {
         throw new BadRequestException('Invalid task category ID filter');
       }
-      matchStage.taskCategoryId = new Types.ObjectId(query.taskCategoryId);
+      baseAnd.push({
+        taskCategoryId: new Types.ObjectId(query.taskCategoryId),
+      });
     }
     if (query.priority) {
-      matchStage.priority = query.priority;
+      baseAnd.push({ priority: query.priority });
     }
     if (query.assigneeId) {
       if (!Types.ObjectId.isValid(query.assigneeId)) {
         throw new BadRequestException('Invalid assignee ID filter');
       }
-      matchStage.assigneeIds = new Types.ObjectId(query.assigneeId);
-    }
-
-    if (query.search?.trim()) {
-      matchStage.description = {
-        $regex: query.search.trim(),
-        $options: 'i',
-      };
+      baseAnd.push({ assigneeIds: new Types.ObjectId(query.assigneeId) });
     }
 
     const dueDateCond: Record<string, Date> = {};
+    const dueFrom = query.dueFrom ? new Date(query.dueFrom) : undefined;
+    const dueTo = query.dueTo ? new Date(query.dueTo) : undefined;
+    if (dueFrom && dueTo && dueFrom > dueTo) {
+      throw new BadRequestException('dueFrom cannot be greater than dueTo');
+    }
     if (query.dueFrom) {
-      dueDateCond.$gte = new Date(query.dueFrom);
+      dueDateCond.$gte = dueFrom as Date;
     }
     if (query.dueTo) {
-      dueDateCond.$lte = new Date(query.dueTo);
+      dueDateCond.$lte = dueTo as Date;
     }
     if (Object.keys(dueDateCond).length > 0) {
-      matchStage.dueDate = dueDateCond;
+      baseAnd.push({ dueDate: dueDateCond });
     }
 
-    return matchStage;
+    const baseMatchStage =
+      baseAnd.length === 1
+        ? baseAnd[0]
+        : ({ $and: baseAnd } as Record<string, unknown>);
+
+    const trimmedSearch = query.search?.trim();
+    if (!trimmedSearch) {
+      return { baseMatchStage };
+    }
+
+    const escapedSearch = this.escapeRegex(trimmedSearch);
+    const postLookupSearchOr: Record<string, unknown>[] = [
+      { description: { $regex: escapedSearch, $options: 'i' } },
+      { 'taskCategory.name': { $regex: escapedSearch, $options: 'i' } },
+      { 'outlet.name': { $regex: escapedSearch, $options: 'i' } },
+      { 'assignees.name': { $regex: escapedSearch, $options: 'i' } },
+    ];
+
+    if (Types.ObjectId.isValid(trimmedSearch)) {
+      postLookupSearchOr.push({ _id: new Types.ObjectId(trimmedSearch) });
+    }
+
+    return {
+      baseMatchStage,
+      postLookupSearchMatchStage: { $or: postLookupSearchOr },
+    };
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   private async managerOutletObjectIds(

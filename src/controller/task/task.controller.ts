@@ -19,11 +19,13 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/interfaces/user.interface';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { QueryTaskDto } from './dto/query-task.dto';
+import { QueryTaskOverviewDto } from './dto/query-task-overview.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import {
   ApiTaskCreate,
   ApiTaskFindAll,
+  ApiTaskOverview,
   ApiTaskFindOne,
   ApiTaskFindByAssignee,
   ApiTaskRemove,
@@ -57,6 +59,16 @@ export class TaskController {
     @Request() req: ExpressRequest & { user: JwtPayload },
   ) {
     return this.taskService.findAll(query, req.user);
+  }
+
+  @Get('overview')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiTaskOverview()
+  getOverview(
+    @Query() query: QueryTaskOverviewDto,
+    @Request() req: ExpressRequest & { user: JwtPayload },
+  ) {
+    return this.taskService.getOverview(req.user, query);
   }
 
   @Get(':id')
