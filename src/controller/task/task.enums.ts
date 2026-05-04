@@ -8,3 +8,8 @@ export enum TaskStatus {
   OPEN = 'OPEN',
   COMPLETED = 'COMPLETED',
 }
+
+export enum TaskRecurrenceType {
+  WEEKLY = 'WEEKLY',
+  MONTHLY = 'MONTHLY',
+}

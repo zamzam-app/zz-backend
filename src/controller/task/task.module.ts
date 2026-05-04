@@ -9,6 +9,8 @@ import { User, UserSchema } from '../users/entities/user.entity';
 import { Task, TaskSchema } from './entities/task.entity';
 import { TaskController } from './task.controller';
 import { TaskService } from './task.service';
+import { TaskRecurrenceService } from './task-recurrence.service';
+import { NotificationsModule } from '../../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -18,9 +20,10 @@ import { TaskService } from './task.service';
       { name: TaskCategory.name, schema: TaskCategorySchema },
       { name: User.name, schema: UserSchema },
     ]),
+    NotificationsModule,
   ],
   controllers: [TaskController],
-  providers: [TaskService],
+  providers: [TaskService, TaskRecurrenceService],
   exports: [TaskService],
 })
 export class TaskModule {}

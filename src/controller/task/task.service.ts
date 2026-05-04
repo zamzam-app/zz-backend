@@ -1,3 +1,4 @@
+import { NotificationsService } from '../../notifications/notifications.service';
 import {
   BadRequestException,
   ForbiddenException,
@@ -56,6 +57,7 @@ export class TaskService {
     @InjectModel(TaskCategory.name)
     private taskCategoryModel: Model<TaskCategoryDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private notificationsService: NotificationsService,
   ) {}
 
   async create(
@@ -95,6 +97,9 @@ export class TaskService {
         priority: dto.priority ?? undefined,
         status,
         dueDate: new Date(dto.dueDate),
+        isRecurring: dto.isRecurring ?? false,
+        recurrenceType: dto.recurrenceType,
+        recurrenceDays: dto.recurrenceDays,
         outletId: dto.outletId ? new Types.ObjectId(dto.outletId) : null,
         assigneeIds: assigneeIds.map((id) => new Types.ObjectId(id)),
         createdBy: new Types.ObjectId(createdByUserId),
@@ -122,6 +127,25 @@ export class TaskService {
       if (!one) {
         throw new InternalServerErrorException('Failed to load created task');
       }
+
+      if (assigneeIds.length > 0) {
+        const assignees = await this.userModel.find({
+          _id: { $in: assigneeIds.map((id) => new Types.ObjectId(id)) },
+          pushToken: { $ne: null },
+        });
+        const tokens = assignees
+          .map((u) => u.pushToken as string)
+          .filter(Boolean);
+        if (tokens.length > 0) {
+          await this.notificationsService.sendPush(
+            tokens,
+            'New Task Assigned',
+            `You have been assigned a new task: ${dto.description}`,
+            { type: 'task', taskId: saved._id.toString() },
+          );
+        }
+      }
+
       return one;
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -435,6 +459,11 @@ export class TaskService {
       }
       if (dto.priority !== undefined) $set.priority = dto.priority;
       if (dto.dueDate !== undefined) $set.dueDate = new Date(dto.dueDate);
+      if (dto.isRecurring !== undefined) $set.isRecurring = dto.isRecurring;
+      if (dto.recurrenceType !== undefined)
+        $set.recurrenceType = dto.recurrenceType;
+      if (dto.recurrenceDays !== undefined)
+        $set.recurrenceDays = dto.recurrenceDays;
       if (dto.outletId !== undefined) {
         $set.outletId = dto.outletId ? new Types.ObjectId(dto.outletId) : null;
       }
@@ -526,6 +555,57 @@ export class TaskService {
       if (!updated) {
         throw new NotFoundException('Task not found');
       }
+
+      if (dto.assigneeIds) {
+        const oldAssigneeIds = existing.assigneeIds.map((id) => id.toString());
+        const newAssigneeIds = dto.assigneeIds.filter(
+          (aId) => !oldAssigneeIds.includes(aId),
+        );
+        if (newAssigneeIds.length > 0) {
+          const newAssignees = await this.userModel.find({
+            _id: { $in: newAssigneeIds.map((id) => new Types.ObjectId(id)) },
+            pushToken: { $ne: null },
+          });
+          const tokens = newAssignees
+            .map((u) => u.pushToken as string)
+            .filter(Boolean);
+          if (tokens.length > 0) {
+            await this.notificationsService.sendPush(
+              tokens,
+              'New Task Assigned',
+              `You've been assigned a task: ${updated.description}`,
+              { type: 'task', taskId: updated._id.toString() },
+            );
+          }
+        }
+      }
+
+      if (dto.status !== undefined && dto.status !== existing.status) {
+        const userIdsToNotify = new Set([
+          existing.createdBy.toString(),
+          ...updated.assignees.map((a) => a._id.toString()),
+        ]);
+        const usersToNotify = await this.userModel.find({
+          _id: {
+            $in: Array.from(userIdsToNotify).map(
+              (uid) => new Types.ObjectId(uid),
+            ),
+          },
+          pushToken: { $ne: null },
+        });
+        const tokens = usersToNotify
+          .map((u) => u.pushToken as string)
+          .filter(Boolean);
+        if (tokens.length > 0) {
+          await this.notificationsService.sendPush(
+            tokens,
+            'Task Status Updated',
+            `Task '${updated.description}' marked ${dto.status}`,
+            { type: 'task', taskId: updated._id.toString() },
+          );
+        }
+      }
+
       return updated;
     } catch (error) {
       if (error instanceof HttpException) throw error;

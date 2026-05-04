@@ -11,6 +11,9 @@ import {
 } from '../outlet-table/entities/outlet-table.entity';
 import { UsersModule } from '../users/users.module';
 import { TwilioModule } from '../../integrations/twilio/twilio.module';
+import { User, UserSchema } from '../users/entities/user.entity';
+import { Outlet, OutletSchema } from '../outlet/entities/outlet.entity';
+import { NotificationsModule } from '../../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -19,9 +22,12 @@ import { TwilioModule } from '../../integrations/twilio/twilio.module';
       { name: Form.name, schema: FormSchema },
       { name: Question.name, schema: QuestionSchema },
       { name: OutletTable.name, schema: OutletTableSchema },
+      { name: User.name, schema: UserSchema },
+      { name: Outlet.name, schema: OutletSchema },
     ]),
     UsersModule,
     TwilioModule,
+    NotificationsModule,
   ],
   controllers: [ReviewController],
   providers: [ReviewService],
