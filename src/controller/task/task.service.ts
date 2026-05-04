@@ -95,6 +95,9 @@ export class TaskService {
         priority: dto.priority ?? undefined,
         status,
         dueDate: new Date(dto.dueDate),
+        isRecurring: dto.isRecurring ?? false,
+        recurrenceType: dto.recurrenceType,
+        recurrenceDays: dto.recurrenceDays,
         outletId: dto.outletId ? new Types.ObjectId(dto.outletId) : null,
         assigneeIds: assigneeIds.map((id) => new Types.ObjectId(id)),
         createdBy: new Types.ObjectId(createdByUserId),
@@ -435,6 +438,9 @@ export class TaskService {
       }
       if (dto.priority !== undefined) $set.priority = dto.priority;
       if (dto.dueDate !== undefined) $set.dueDate = new Date(dto.dueDate);
+      if (dto.isRecurring !== undefined) $set.isRecurring = dto.isRecurring;
+      if (dto.recurrenceType !== undefined) $set.recurrenceType = dto.recurrenceType;
+      if (dto.recurrenceDays !== undefined) $set.recurrenceDays = dto.recurrenceDays;
       if (dto.outletId !== undefined) {
         $set.outletId = dto.outletId ? new Types.ObjectId(dto.outletId) : null;
       }

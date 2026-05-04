@@ -7,6 +7,7 @@ import {
   IsMongoId,
   IsOptional,
   IsString,
+  IsBoolean,
   Max,
   MaxLength,
   Min,
@@ -84,4 +85,10 @@ export class QueryTaskDto {
   @IsOptional()
   @IsDateString()
   dueTo?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by recurring status' })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  isRecurring?: boolean;
 }
