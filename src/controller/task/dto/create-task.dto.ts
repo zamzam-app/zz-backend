@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsArray,
   IsDateString,
   IsEnum,
@@ -11,8 +12,9 @@ import {
   IsString,
   MaxLength,
   ValidateNested,
+  IsNumber,
 } from 'class-validator';
-import { TaskPriority, TaskStatus } from '../task.enums';
+import { TaskPriority, TaskStatus, TaskRecurrenceType } from '../task.enums';
 
 export class TaskAttachmentsDto {
   @ApiPropertyOptional({ type: [String] })
@@ -79,6 +81,22 @@ export class CreateTaskDto {
   @ApiProperty({ description: 'Due date (ISO 8601)' })
   @IsDateString()
   dueDate: string;
+
+  @ApiPropertyOptional({ description: 'Is the task recurring?' })
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
+
+  @ApiPropertyOptional({ enum: TaskRecurrenceType })
+  @IsOptional()
+  @IsEnum(TaskRecurrenceType)
+  recurrenceType?: TaskRecurrenceType;
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  recurrenceDays?: number[];
 
   @ApiProperty({ description: 'Outlet ID' })
   @IsOptional()

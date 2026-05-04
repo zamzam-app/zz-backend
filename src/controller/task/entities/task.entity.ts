@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { TaskPriority, TaskStatus } from '../task.enums';
+import { TaskPriority, TaskStatus, TaskRecurrenceType } from '../task.enums';
 
 export type TaskDocument = HydratedDocument<Task>;
 
@@ -66,6 +66,22 @@ export class Task extends BaseEntity {
 
   @Prop({ type: Date, required: true })
   dueDate!: Date;
+
+  @Prop({ type: Boolean, default: false })
+  isRecurring!: boolean;
+
+  @Prop({
+    type: String,
+    enum: TaskRecurrenceType,
+    required: false,
+  })
+  recurrenceType?: TaskRecurrenceType;
+
+  @Prop({
+    type: [Number],
+    required: false,
+  })
+  recurrenceDays?: number[];
 
   @Prop({
     type: MongooseSchema.Types.ObjectId,

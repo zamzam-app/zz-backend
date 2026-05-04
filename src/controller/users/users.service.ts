@@ -335,6 +335,23 @@ export class UsersService {
     return user;
   }
 
+  async updatePushToken(userId: string, pushToken: string) {
+    try {
+      const updatedUser = await this.userModel
+        .findByIdAndUpdate(userId, { pushToken }, { new: true })
+        .exec();
+      if (!updatedUser) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
+      return updatedUser;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to update push token',
+      );
+    }
+  }
+
   async changePassword(
     userId: string,
     oldPassword: string,
