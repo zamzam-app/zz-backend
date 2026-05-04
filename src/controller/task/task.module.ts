@@ -9,6 +9,7 @@ import { User, UserSchema } from '../users/entities/user.entity';
 import { Task, TaskSchema } from './entities/task.entity';
 import { TaskController } from './task.controller';
 import { TaskService } from './task.service';
+import { TaskRecurrenceService } from './task-recurrence.service';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { TaskService } from './task.service';
     ]),
   ],
   controllers: [TaskController],
-  providers: [TaskService],
+  providers: [TaskService, TaskRecurrenceService],
   exports: [TaskService],
 })
 export class TaskModule {}

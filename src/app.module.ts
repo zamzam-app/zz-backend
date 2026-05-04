@@ -23,11 +23,14 @@ import { TaskModule } from './controller/task/task.module';
 import { TaskCategoryModule } from './controller/task-category/task-category.module';
 import { UploadedCakesModule } from './controller/uploaded-cakes/uploaded-cakes.module';
 
+import { ScheduleModule } from '@nestjs/schedule';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
