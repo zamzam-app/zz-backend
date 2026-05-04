@@ -8,10 +8,12 @@ import {
   Delete,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdatePushTokenDto } from './dto/update-push-token.dto';
 import { QueryUserDto } from './dto/query-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import {
@@ -55,6 +57,12 @@ export class UsersController {
   @ApiUserFindOne()
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
+  }
+
+  @Patch('push-token')
+  @UseGuards(JwtAuthGuard)
+  updatePushToken(@Request() req: any, @Body() dto: UpdatePushTokenDto) {
+    return this.usersService.updatePushToken(req.user.sub, dto.pushToken);
   }
 
   @Patch(':id')

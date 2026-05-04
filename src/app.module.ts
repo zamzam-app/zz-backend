@@ -22,6 +22,7 @@ import { CustomCakeModule } from './controller/custom-cake/custom-cake.module';
 import { TaskModule } from './controller/task/task.module';
 import { TaskCategoryModule } from './controller/task-category/task-category.module';
 import { UploadedCakesModule } from './controller/uploaded-cakes/uploaded-cakes.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -59,6 +60,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     TaskModule,
     TaskCategoryModule,
     UploadedCakesModule,
+    NotificationsModule,
   ],
 
   controllers: [AppController],

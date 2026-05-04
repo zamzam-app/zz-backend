@@ -37,6 +37,10 @@ import {
 import { FindAllReviewsResult } from './interfaces/query-review.interface';
 import { UsersService } from '../users/users.service';
 import { TwilioVerifyService } from '../../integrations/twilio/twilio-verify.service';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { User, UserDocument } from '../users/entities/user.entity';
+import { Outlet, OutletDocument } from '../outlet/entities/outlet.entity';
+import { UserRole } from '../users/interfaces/user.interface';
 
 const VALID_MAX_RATINGS = new Set([3, 5, 10]);
 const OVERALL_RATING_SCALE = { min: 1, max: 5 };
@@ -62,8 +66,11 @@ export class ReviewService {
     @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
     @InjectModel(OutletTable.name)
     private outletTableModel: Model<OutletTableDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Outlet.name) private outletModel: Model<OutletDocument>,
     private usersService: UsersService,
     private twilioVerifyService: TwilioVerifyService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async submitWithOtp(
@@ -212,6 +219,39 @@ export class ReviewService {
           resolvedUser._id.toString(),
           savedReview._id.toString(),
         );
+      }
+
+      if (savedReview.isComplaint) {
+        // Find Admins
+        const admins = await this.userModel.find({
+          role: UserRole.ADMIN,
+          pushToken: { $ne: null },
+        });
+
+        // Find Outlet Managers
+        const outlet = await this.outletModel.findById(savedReview.outletId);
+        const managerIds = outlet?.managerIds ?? [];
+        const managers = managerIds.length > 0 ? await this.userModel.find({
+          _id: { $in: managerIds },
+          pushToken: { $ne: null },
+        }) : [];
+
+        const tokens = [
+          ...admins.map(a => a.pushToken as string),
+          ...managers.map(m => m.pushToken as string)
+        ].filter(Boolean);
+
+        const uniqueTokens = [...new Set(tokens)];
+
+        if (uniqueTokens.length > 0) {
+          const outletName = outlet?.name ?? 'an outlet';
+          this.notificationsService.sendPush(
+            uniqueTokens,
+            'New Complaint',
+            `New complaint at ${outletName}`,
+            { type: 'complaint', reviewId: savedReview._id.toString() }
+          );
+        }
       }
 
       return savedReview;
