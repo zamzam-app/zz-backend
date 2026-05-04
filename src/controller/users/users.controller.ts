@@ -61,7 +61,10 @@ export class UsersController {
 
   @Patch('push-token')
   @UseGuards(JwtAuthGuard)
-  updatePushToken(@Request() req: any, @Body() dto: UpdatePushTokenDto) {
+  updatePushToken(
+    @Request() req: { user: { sub: string } },
+    @Body() dto: UpdatePushTokenDto,
+  ) {
     return this.usersService.updatePushToken(req.user.sub, dto.pushToken);
   }
 

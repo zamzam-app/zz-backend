@@ -133,9 +133,11 @@ export class TaskService {
           _id: { $in: assigneeIds.map((id) => new Types.ObjectId(id)) },
           pushToken: { $ne: null },
         });
-        const tokens = assignees.map((u) => u.pushToken as string).filter(Boolean);
+        const tokens = assignees
+          .map((u) => u.pushToken as string)
+          .filter(Boolean);
         if (tokens.length > 0) {
-          this.notificationsService.sendPush(
+          void this.notificationsService.sendPush(
             tokens,
             'New Task Assigned',
             `You have been assigned a new task: ${dto.description}`,
@@ -458,8 +460,10 @@ export class TaskService {
       if (dto.priority !== undefined) $set.priority = dto.priority;
       if (dto.dueDate !== undefined) $set.dueDate = new Date(dto.dueDate);
       if (dto.isRecurring !== undefined) $set.isRecurring = dto.isRecurring;
-      if (dto.recurrenceType !== undefined) $set.recurrenceType = dto.recurrenceType;
-      if (dto.recurrenceDays !== undefined) $set.recurrenceDays = dto.recurrenceDays;
+      if (dto.recurrenceType !== undefined)
+        $set.recurrenceType = dto.recurrenceType;
+      if (dto.recurrenceDays !== undefined)
+        $set.recurrenceDays = dto.recurrenceDays;
       if (dto.outletId !== undefined) {
         $set.outletId = dto.outletId ? new Types.ObjectId(dto.outletId) : null;
       }
@@ -554,15 +558,19 @@ export class TaskService {
 
       if (dto.assigneeIds) {
         const oldAssigneeIds = existing.assigneeIds.map((id) => id.toString());
-        const newAssigneeIds = dto.assigneeIds.filter(aId => !oldAssigneeIds.includes(aId));
+        const newAssigneeIds = dto.assigneeIds.filter(
+          (aId) => !oldAssigneeIds.includes(aId),
+        );
         if (newAssigneeIds.length > 0) {
           const newAssignees = await this.userModel.find({
             _id: { $in: newAssigneeIds.map((id) => new Types.ObjectId(id)) },
             pushToken: { $ne: null },
           });
-          const tokens = newAssignees.map((u) => u.pushToken as string).filter(Boolean);
+          const tokens = newAssignees
+            .map((u) => u.pushToken as string)
+            .filter(Boolean);
           if (tokens.length > 0) {
-            this.notificationsService.sendPush(
+            void this.notificationsService.sendPush(
               tokens,
               'New Task Assigned',
               `You've been assigned a task: ${updated.description}`,
@@ -575,15 +583,21 @@ export class TaskService {
       if (dto.status !== undefined && dto.status !== existing.status) {
         const userIdsToNotify = new Set([
           existing.createdBy.toString(),
-          ...updated.assignees.map(a => a._id.toString())
+          ...updated.assignees.map((a) => a._id.toString()),
         ]);
         const usersToNotify = await this.userModel.find({
-          _id: { $in: Array.from(userIdsToNotify).map((uid) => new Types.ObjectId(uid)) },
+          _id: {
+            $in: Array.from(userIdsToNotify).map(
+              (uid) => new Types.ObjectId(uid),
+            ),
+          },
           pushToken: { $ne: null },
         });
-        const tokens = usersToNotify.map((u) => u.pushToken as string).filter(Boolean);
+        const tokens = usersToNotify
+          .map((u) => u.pushToken as string)
+          .filter(Boolean);
         if (tokens.length > 0) {
-          this.notificationsService.sendPush(
+          void this.notificationsService.sendPush(
             tokens,
             'Task Status Updated',
             `Task '${updated.description}' marked ${dto.status}`,

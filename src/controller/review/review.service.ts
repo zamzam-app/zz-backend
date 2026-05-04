@@ -231,25 +231,28 @@ export class ReviewService {
         // Find Outlet Managers
         const outlet = await this.outletModel.findById(savedReview.outletId);
         const managerIds = outlet?.managerIds ?? [];
-        const managers = managerIds.length > 0 ? await this.userModel.find({
-          _id: { $in: managerIds },
-          pushToken: { $ne: null },
-        }) : [];
+        const managers =
+          managerIds.length > 0
+            ? await this.userModel.find({
+                _id: { $in: managerIds },
+                pushToken: { $ne: null },
+              })
+            : [];
 
         const tokens = [
-          ...admins.map(a => a.pushToken as string),
-          ...managers.map(m => m.pushToken as string)
+          ...admins.map((a) => a.pushToken as string),
+          ...managers.map((m) => m.pushToken as string),
         ].filter(Boolean);
 
         const uniqueTokens = [...new Set(tokens)];
 
         if (uniqueTokens.length > 0) {
           const outletName = outlet?.name ?? 'an outlet';
-          this.notificationsService.sendPush(
+          void this.notificationsService.sendPush(
             uniqueTokens,
             'New Complaint',
             `New complaint at ${outletName}`,
-            { type: 'complaint', reviewId: savedReview._id.toString() }
+            { type: 'complaint', reviewId: savedReview._id.toString() },
           );
         }
       }
