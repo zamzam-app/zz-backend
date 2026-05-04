@@ -29,6 +29,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from './interfaces/user.interface';
+import { JwtPayload } from '../auth/interfaces/auth.interfaces';
 
 @ApiTags('users')
 @Controller('users')
@@ -62,7 +63,7 @@ export class UsersController {
   @Patch('push-token')
   @UseGuards(JwtAuthGuard)
   updatePushToken(
-    @Request() req: { user: { sub: string } },
+    @Request() req: { user: JwtPayload },
     @Body() dto: UpdatePushTokenDto,
   ) {
     return this.usersService.updatePushToken(req.user.sub, dto.pushToken);

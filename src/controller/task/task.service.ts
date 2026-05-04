@@ -137,7 +137,7 @@ export class TaskService {
           .map((u) => u.pushToken as string)
           .filter(Boolean);
         if (tokens.length > 0) {
-          void this.notificationsService.sendPush(
+          await this.notificationsService.sendPush(
             tokens,
             'New Task Assigned',
             `You have been assigned a new task: ${dto.description}`,
@@ -570,7 +570,7 @@ export class TaskService {
             .map((u) => u.pushToken as string)
             .filter(Boolean);
           if (tokens.length > 0) {
-            void this.notificationsService.sendPush(
+            await this.notificationsService.sendPush(
               tokens,
               'New Task Assigned',
               `You've been assigned a task: ${updated.description}`,
@@ -597,7 +597,7 @@ export class TaskService {
           .map((u) => u.pushToken as string)
           .filter(Boolean);
         if (tokens.length > 0) {
-          void this.notificationsService.sendPush(
+          await this.notificationsService.sendPush(
             tokens,
             'Task Status Updated',
             `Task '${updated.description}' marked ${dto.status}`,

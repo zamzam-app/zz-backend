@@ -248,7 +248,7 @@ export class ReviewService {
 
         if (uniqueTokens.length > 0) {
           const outletName = outlet?.name ?? 'an outlet';
-          void this.notificationsService.sendPush(
+          await this.notificationsService.sendPush(
             uniqueTokens,
             'New Complaint',
             `New complaint at ${outletName}`,
