@@ -42,6 +42,9 @@ export class User extends BaseEntity {
   @Prop({ required: false, unique: true, sparse: true })
   phoneNumber?: string;
 
+  @Prop({ type: String, default: null })
+  pushToken?: string;
+
   @Prop({ required: false, select: false })
   otp?: string;
 
