@@ -28,8 +28,8 @@ export class Outlet extends BaseEntity {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ required: true })
-  description: string;
+  @Prop({ required: false })
+  description?: string;
 
   @Prop({ type: [String], required: true })
   images: string[];

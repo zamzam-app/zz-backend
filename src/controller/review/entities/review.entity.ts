@@ -25,6 +25,21 @@ export class UserResponse {
 
 export const UserResponseSchema = SchemaFactory.createForClass(UserResponse);
 
+@Schema({ _id: false })
+export class ResolutionAttachments {
+  @Prop({ type: [String], default: [] })
+  images!: string[];
+
+  @Prop({ type: [String], default: [] })
+  videos!: string[];
+
+  @Prop({ type: [String], default: [] })
+  audios!: string[];
+
+  @Prop({ type: [String], default: [] })
+  files!: string[];
+}
+
 @Schema({ timestamps: true })
 export class Review extends BaseEntity {
   @Prop({
@@ -89,6 +104,9 @@ export class Review extends BaseEntity {
 
   @Prop({ type: String, required: false, default: null })
   resolutionNotes?: string | null;
+
+  @Prop({ type: ResolutionAttachments, required: false })
+  resolutionAttachments?: ResolutionAttachments;
 }
 
 export const ReviewSchema = SchemaFactory.createForClass(Review);

@@ -19,10 +19,11 @@ export class CreateOutletTypeDto {
   @ApiProperty({
     example: 'A place where people can eat and dine',
     description: 'Description of the outlet type',
+    required: false,
   })
   @IsString()
-  @IsNotEmpty()
-  description: string;
+  @IsOptional()
+  description?: string;
 
   @ApiProperty({
     example: ['60d5ecb86217152c9043e02d'],

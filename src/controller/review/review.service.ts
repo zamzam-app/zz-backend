@@ -288,20 +288,9 @@ export class ReviewService {
             let: { uid: '$userId' },
             pipeline: [
               { $match: { $expr: { $eq: ['$_id', '$$uid'] } } },
-              { $project: { _id: 1, name: 1 } },
+              { $project: { _id: 1, name: 1, phoneNumber: 1 } },
             ],
             as: 'userIdLookup',
-          },
-        },
-        {
-          $lookup: {
-            from: 'outlets',
-            let: { oid: { $toObjectId: { $toString: '$outletId' } } },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
-              { $project: { _id: 1, name: 1 } },
-            ],
-            as: 'outletIdLookup',
           },
         },
         {
@@ -318,7 +307,6 @@ export class ReviewService {
         {
           $addFields: {
             userId: { $arrayElemAt: ['$userIdLookup', 0] },
-            outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
           },
         },
         { $project: { userIdLookup: 0, outletIdLookup: 0, outletIdObj: 0 } },
@@ -392,6 +380,28 @@ export class ReviewService {
           totalCount: [{ count: number }];
         }>([
           { $match: matchStage },
+          {
+            $lookup: {
+              from: 'outlets',
+              let: { oid: { $toObjectId: { $toString: '$outletId' } } },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ['$_id', '$$oid'] },
+                    isDeleted: false,
+                  },
+                },
+                { $project: { _id: 1, name: 1 } },
+              ],
+              as: 'outletIdLookup',
+            },
+          },
+          {
+            $addFields: {
+              outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
+            },
+          },
+          { $match: { outletId: { $ne: null } } }, // Filter out reviews with deleted outlets BEFORE counting
           {
             $facet: {
               data: dataPipeline,
@@ -550,7 +560,7 @@ export class ReviewService {
               let: { uid: '$userId' },
               pipeline: [
                 { $match: { $expr: { $eq: ['$_id', '$$uid'] } } },
-                { $project: { _id: 1, name: 1 } },
+                { $project: { _id: 1, name: 1, phoneNumber: 1 } },
               ],
               as: 'userIdLookup',
             },
@@ -565,6 +575,7 @@ export class ReviewService {
                     $expr: {
                       $eq: [{ $toString: '$_id' }, { $toString: '$$oid' }],
                     },
+                    isDeleted: false,
                   },
                 },
                 {
@@ -623,6 +634,7 @@ export class ReviewService {
               },
             },
           },
+          { $match: { outletId: { $ne: null } } },
           {
             $project: {
               userIdLookup: 0,
@@ -698,7 +710,7 @@ export class ReviewService {
               let: { uid: '$userId' },
               pipeline: [
                 { $match: { $expr: { $eq: ['$_id', '$$uid'] } } },
-                { $project: { _id: 1, name: 1 } },
+                { $project: { _id: 1, name: 1, phoneNumber: 1 } },
               ],
               as: 'userIdLookup',
             },
@@ -713,6 +725,7 @@ export class ReviewService {
                     $expr: {
                       $eq: [{ $toString: '$_id' }, { $toString: '$$oid' }],
                     },
+                    isDeleted: false,
                   },
                 },
                 {
@@ -771,6 +784,7 @@ export class ReviewService {
               },
             },
           },
+          { $match: { outletId: { $ne: null } } },
           {
             $project: {
               userIdLookup: 0,
@@ -902,6 +916,15 @@ export class ReviewService {
       };
       if (dto.resolutionNotes !== undefined) {
         $set.resolutionNotes = dto.resolutionNotes;
+      }
+
+      if (dto.images || dto.videos || dto.audios || dto.files) {
+        $set.resolutionAttachments = {
+          images: dto.images ?? [],
+          videos: dto.videos ?? [],
+          audios: dto.audios ?? [],
+          files: dto.files ?? [],
+        };
       }
 
       const updated = await this.reviewModel
