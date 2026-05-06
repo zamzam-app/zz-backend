@@ -9,8 +9,8 @@ export class OutletType extends BaseEntity {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ required: true })
-  description: string;
+  @Prop({ required: false })
+  description?: string;
 
   @Prop({
     type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Outlet', default: [] }],
