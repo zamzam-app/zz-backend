@@ -904,6 +904,15 @@ export class ReviewService {
         $set.resolutionNotes = dto.resolutionNotes;
       }
 
+      if (dto.images || dto.videos || dto.audios || dto.files) {
+        $set.resolutionAttachments = {
+          images: dto.images ?? [],
+          videos: dto.videos ?? [],
+          audios: dto.audios ?? [],
+          files: dto.files ?? [],
+        };
+      }
+
       const updated = await this.reviewModel
         .findOneAndUpdate(
           {
