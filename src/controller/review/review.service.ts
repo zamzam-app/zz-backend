@@ -281,8 +281,97 @@ export class ReviewService {
         matchStage.userId = new Types.ObjectId(query.userId);
       }
 
+      const lookupStages = [
+        {
+          $lookup: {
+            from: 'users',
+            let: { uid: '$userId' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$_id', '$$uid'] } } },
+              { $project: { _id: 1, name: 1, phoneNumber: 1 } },
+            ],
+            as: 'userIdLookup',
+          },
+        },
+        {
+          $lookup: {
+            from: 'outlettables',
+            let: { tid: '$outletTableId' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$_id', '$$tid'] } } },
+              { $project: { id: '$_id', name: 1, tableToken: 1, _id: 0 } },
+            ],
+            as: 'outletTableIdLookup',
+          },
+        },
+        {
+          $addFields: {
+            userId: { $arrayElemAt: ['$userIdLookup', 0] },
+          },
+        },
+        { $project: { userIdLookup: 0, outletIdLookup: 0, outletIdObj: 0 } },
+        {
+          $lookup: {
+            from: 'questions',
+            let: {
+              ids: {
+                $map: {
+                  input: '$userResponses',
+                  as: 'ur',
+                  in: '$$ur.questionId',
+                },
+              },
+            },
+            pipeline: [
+              { $match: { $expr: { $in: ['$_id', '$$ids'] } } },
+              {
+                $project: {
+                  _id: 1,
+                  type: 1,
+                  title: 1,
+                  options: 1,
+                  maxRatings: 1,
+                },
+              },
+            ],
+            as: 'questionsLookup',
+          },
+        },
+        {
+          $addFields: {
+            userResponses: {
+              $map: {
+                input: '$userResponses',
+                as: 'ur',
+                in: {
+                  $mergeObjects: [
+                    '$$ur',
+                    {
+                      questionId: {
+                        $arrayElemAt: [
+                          {
+                            $filter: {
+                              input: '$questionsLookup',
+                              as: 'q',
+                              cond: { $eq: ['$$q._id', '$$ur.questionId'] },
+                            },
+                          },
+                          0,
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        { $project: { questionsLookup: 0 } },
+      ];
+
       const dataPipeline = [
         ...(limit ? [{ $skip: skip }, { $limit: limit }] : []),
+        ...lookupStages,
       ];
 
       const [result] = await this.reviewModel
@@ -471,7 +560,7 @@ export class ReviewService {
               let: { uid: '$userId' },
               pipeline: [
                 { $match: { $expr: { $eq: ['$_id', '$$uid'] } } },
-                { $project: { _id: 1, name: 1 } },
+                { $project: { _id: 1, name: 1, phoneNumber: 1 } },
               ],
               as: 'userIdLookup',
             },
@@ -621,7 +710,7 @@ export class ReviewService {
               let: { uid: '$userId' },
               pipeline: [
                 { $match: { $expr: { $eq: ['$_id', '$$uid'] } } },
-                { $project: { _id: 1, name: 1 } },
+                { $project: { _id: 1, name: 1, phoneNumber: 1 } },
               ],
               as: 'userIdLookup',
             },
