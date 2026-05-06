@@ -281,109 +281,8 @@ export class ReviewService {
         matchStage.userId = new Types.ObjectId(query.userId);
       }
 
-      const lookupStages = [
-        {
-          $lookup: {
-            from: 'users',
-            let: { uid: '$userId' },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$_id', '$$uid'] } } },
-              { $project: { _id: 1, name: 1 } },
-            ],
-            as: 'userIdLookup',
-          },
-        },
-        {
-          $lookup: {
-            from: 'outlets',
-            let: { oid: { $toObjectId: { $toString: '$outletId' } } },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$_id', '$$oid'] } } },
-              { $project: { _id: 1, name: 1 } },
-            ],
-            as: 'outletIdLookup',
-          },
-        },
-        {
-          $lookup: {
-            from: 'outlettables',
-            let: { tid: '$outletTableId' },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$_id', '$$tid'] } } },
-              { $project: { id: '$_id', name: 1, tableToken: 1, _id: 0 } },
-            ],
-            as: 'outletTableIdLookup',
-          },
-        },
-        {
-          $addFields: {
-            userId: { $arrayElemAt: ['$userIdLookup', 0] },
-            outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
-          },
-        },
-        { $project: { userIdLookup: 0, outletIdLookup: 0, outletIdObj: 0 } },
-        {
-          $lookup: {
-            from: 'questions',
-            let: {
-              ids: {
-                $map: {
-                  input: '$userResponses',
-                  as: 'ur',
-                  in: '$$ur.questionId',
-                },
-              },
-            },
-            pipeline: [
-              { $match: { $expr: { $in: ['$_id', '$$ids'] } } },
-              {
-                $project: {
-                  _id: 1,
-                  type: 1,
-                  title: 1,
-                  options: 1,
-                  maxRatings: 1,
-                },
-              },
-            ],
-            as: 'questionsLookup',
-          },
-        },
-        {
-          $addFields: {
-            userResponses: {
-              $map: {
-                input: '$userResponses',
-                as: 'ur',
-                in: {
-                  $mergeObjects: [
-                    '$$ur',
-                    {
-                      questionId: {
-                        $arrayElemAt: [
-                          {
-                            $filter: {
-                              input: '$questionsLookup',
-                              as: 'q',
-                              cond: { $eq: ['$$q._id', '$$ur.questionId'] },
-                            },
-                          },
-                          0,
-                        ],
-                      },
-                    },
-                  ],
-                },
-              },
-            },
-          },
-        },
-        { $project: { questionsLookup: 0 } },
-      ];
-
       const dataPipeline = [
         ...(limit ? [{ $skip: skip }, { $limit: limit }] : []),
-        ...lookupStages,
       ];
 
       const [result] = await this.reviewModel
@@ -392,6 +291,28 @@ export class ReviewService {
           totalCount: [{ count: number }];
         }>([
           { $match: matchStage },
+          {
+            $lookup: {
+              from: 'outlets',
+              let: { oid: { $toObjectId: { $toString: '$outletId' } } },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ['$_id', '$$oid'] },
+                    isDeleted: false,
+                  },
+                },
+                { $project: { _id: 1, name: 1 } },
+              ],
+              as: 'outletIdLookup',
+            },
+          },
+          {
+            $addFields: {
+              outletId: { $arrayElemAt: ['$outletIdLookup', 0] },
+            },
+          },
+          { $match: { outletId: { $ne: null } } }, // Filter out reviews with deleted outlets BEFORE counting
           {
             $facet: {
               data: dataPipeline,
@@ -565,6 +486,7 @@ export class ReviewService {
                     $expr: {
                       $eq: [{ $toString: '$_id' }, { $toString: '$$oid' }],
                     },
+                    isDeleted: false,
                   },
                 },
                 {
@@ -623,6 +545,7 @@ export class ReviewService {
               },
             },
           },
+          { $match: { outletId: { $ne: null } } },
           {
             $project: {
               userIdLookup: 0,
@@ -713,6 +636,7 @@ export class ReviewService {
                     $expr: {
                       $eq: [{ $toString: '$_id' }, { $toString: '$$oid' }],
                     },
+                    isDeleted: false,
                   },
                 },
                 {
@@ -771,6 +695,7 @@ export class ReviewService {
               },
             },
           },
+          { $match: { outletId: { $ne: null } } },
           {
             $project: {
               userIdLookup: 0,

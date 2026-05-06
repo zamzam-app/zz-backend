@@ -804,6 +804,7 @@ export class AnalyticsService {
             },
           },
           { $unwind: '$outlet' },
+          { $match: { 'outlet.isDeleted': false } },
           {
             $addFields: {
               outletManagerIds: {
