@@ -45,10 +45,11 @@ export class CreateOutletDto {
   @ApiProperty({
     example: 'A cozy bistro in the city center.',
     description: 'Outlet description',
+    required: false,
   })
   @IsString()
-  @IsNotEmpty()
-  description: string;
+  @IsOptional()
+  description?: string;
 
   @ApiProperty({
     example: ['image1.jpg', 'image2.jpg'],
