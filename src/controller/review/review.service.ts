@@ -36,7 +36,7 @@ import {
 } from '../outlet-table/entities/outlet-table.entity';
 import { FindAllReviewsResult } from './interfaces/query-review.interface';
 import { UsersService } from '../users/users.service';
-import { TwilioVerifyService } from '../../integrations/twilio/twilio-verify.service';
+import { Msg91Service } from '../../integrations/msg91/msg91.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { User, UserDocument } from '../users/entities/user.entity';
 import { Outlet, OutletDocument } from '../outlet/entities/outlet.entity';
@@ -69,7 +69,7 @@ export class ReviewService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Outlet.name) private outletModel: Model<OutletDocument>,
     private usersService: UsersService,
-    private twilioVerifyService: TwilioVerifyService,
+    private msg91Service: Msg91Service,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -80,7 +80,7 @@ export class ReviewService {
     if (!normPhone) {
       throw new UnauthorizedException('Invalid OTP');
     }
-    await this.twilioVerifyService.verifyOtp(normPhone, dto.otp);
+    await this.msg91Service.verifyOtp(normPhone, dto.otp);
 
     const userId = (
       (await this.usersService.findOneOrCreateForReview({
