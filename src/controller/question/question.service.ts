@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Question, QuestionDocument } from './entities/question.entity';
@@ -40,6 +44,19 @@ export class QuestionService {
     id: string,
     updateQuestionDto: UpdateQuestionDto,
   ): Promise<Question> {
+    const existingQuestion = await this.questionModel
+      .findOne({ _id: new Types.ObjectId(id), isDeleted: false })
+      .lean()
+      .exec();
+
+    if (!existingQuestion) {
+      throw new NotFoundException(`Question with ID ${id} not found`);
+    }
+
+    if (existingQuestion.isDefault) {
+      throw new ForbiddenException('Default questions cannot be modified');
+    }
+
     const sanitizedUpdate = this.sanitizeQuestionOptions(updateQuestionDto);
     const updated = await this.questionModel
       .findOneAndUpdate(
@@ -56,6 +73,19 @@ export class QuestionService {
   }
 
   async remove(id: string): Promise<{ message: string }> {
+    const existingQuestion = await this.questionModel
+      .findOne({ _id: new Types.ObjectId(id), isDeleted: false })
+      .lean()
+      .exec();
+
+    if (!existingQuestion) {
+      throw new NotFoundException(`Question with ID ${id} not found`);
+    }
+
+    if (existingQuestion.isDefault) {
+      throw new ForbiddenException('Default questions cannot be deleted');
+    }
+
     const result = await this.questionModel
       .findOneAndUpdate(
         { _id: new Types.ObjectId(id), isDeleted: false },

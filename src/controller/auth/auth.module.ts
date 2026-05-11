@@ -6,7 +6,7 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { ConfigModule } from '@nestjs/config';
-import { TwilioModule } from '../../integrations/twilio/twilio.module';
+import { Msg91Module } from '../../integrations/msg91/msg91.module';
 
 @Module({
   imports: [
@@ -14,7 +14,7 @@ import { TwilioModule } from '../../integrations/twilio/twilio.module';
     UsersModule,
     PassportModule,
     JwtModule.register({}),
-    TwilioModule,
+    Msg91Module,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
