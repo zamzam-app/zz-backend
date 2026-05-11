@@ -291,6 +291,12 @@ export class ReviewService {
 
   async findAll(query: QueryReviewDto): Promise<FindAllReviewsResult> {
     try {
+      const hiddenOutletTypeIds = (process.env.HIDDEN_OUTLET_TYPE_IDS || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0 && Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id));
+
       const page = query.page ?? 1;
       const limit = query.limit;
       const skip = limit ? (page - 1) * limit : 0;
@@ -411,6 +417,9 @@ export class ReviewService {
                   $match: {
                     $expr: { $eq: ['$_id', '$$oid'] },
                     isDeleted: false,
+                    ...(hiddenOutletTypeIds.length > 0
+                      ? { outletType: { $nin: hiddenOutletTypeIds } }
+                      : {}),
                   },
                 },
                 { $project: { _id: 1, name: 1 } },

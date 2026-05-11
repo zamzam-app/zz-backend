@@ -548,6 +548,12 @@ export class AnalyticsService {
       const { appliedStartDate, appliedEndDate } =
         this.resolveAnalyticsRange(query);
 
+      const hiddenOutletTypeIds = (process.env.HIDDEN_OUTLET_TYPE_IDS || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0 && Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id));
+
       const matchStage: Record<string, any> = { isDeleted: false };
       if (appliedStartDate && appliedEndDate) {
         matchStage.createdAt = {
@@ -561,7 +567,12 @@ export class AnalyticsService {
       const outletCollectionName = this.outletModel.collection.name;
       const allOutletDocs = await db
         .collection(outletCollectionName)
-        .find({ isDeleted: false })
+        .find({
+          isDeleted: false,
+          ...(hiddenOutletTypeIds.length > 0
+            ? { outletType: { $nin: hiddenOutletTypeIds } }
+            : {}),
+        })
         .project<{
           _id: unknown;
           name: string;
@@ -804,7 +815,14 @@ export class AnalyticsService {
             },
           },
           { $unwind: '$outlet' },
-          { $match: { 'outlet.isDeleted': false } },
+          {
+            $match: {
+              'outlet.isDeleted': false,
+              ...(hiddenOutletTypeIds.length > 0
+                ? { 'outlet.outletType': { $nin: hiddenOutletTypeIds } }
+                : {}),
+            },
+          },
           {
             $addFields: {
               outletManagerIds: {
