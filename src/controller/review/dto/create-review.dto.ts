@@ -18,8 +18,8 @@ export class ResponseDto {
   @IsNotEmpty()
   questionId: string;
 
-  @IsNotEmpty()
-  answer: string | string[] | number;
+  @IsOptional()
+  answer?: string | string[] | number;
 }
 
 export class CreateReviewDto {
