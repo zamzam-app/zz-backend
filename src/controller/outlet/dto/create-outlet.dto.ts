@@ -57,8 +57,8 @@ export class CreateOutletDto {
   })
   @IsArray()
   @IsString({ each: true })
-  @IsNotEmpty()
-  images: string[];
+  @IsOptional()
+  images?: string[];
 
   @ApiPropertyOptional({
     example: 'unique-qr-token-123',
