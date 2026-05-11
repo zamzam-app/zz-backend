@@ -10,7 +10,7 @@ import {
   OutletTableSchema,
 } from '../outlet-table/entities/outlet-table.entity';
 import { UsersModule } from '../users/users.module';
-import { TwilioModule } from '../../integrations/twilio/twilio.module';
+import { Msg91Module } from '../../integrations/msg91/msg91.module';
 import { User, UserSchema } from '../users/entities/user.entity';
 import { Outlet, OutletSchema } from '../outlet/entities/outlet.entity';
 import { NotificationsModule } from '../../notifications/notifications.module';
@@ -26,7 +26,7 @@ import { NotificationsModule } from '../../notifications/notifications.module';
       { name: Outlet.name, schema: OutletSchema },
     ]),
     UsersModule,
-    TwilioModule,
+    Msg91Module,
     NotificationsModule,
   ],
   controllers: [ReviewController],

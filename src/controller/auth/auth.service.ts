@@ -17,7 +17,7 @@ import {
   normalizeEmail,
   normalizePhoneNumber,
 } from '../../util/normalize.util';
-import { TwilioVerifyService } from '../../integrations/twilio/twilio-verify.service';
+import { Msg91Service } from '../../integrations/msg91/msg91.service';
 import {
   JwtPayload,
   AuthTokens,
@@ -31,7 +31,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private configService: ConfigService,
-    private twilioVerifyService: TwilioVerifyService,
+    private msg91Service: Msg91Service,
   ) {}
 
   // Admin and Manager login
@@ -71,7 +71,7 @@ export class AuthService {
       )) as UserDocument | null;
 
     if (userDoc) {
-      await this.twilioVerifyService.sendOtp(normPhone);
+      await this.msg91Service.sendOtp(normPhone);
       return { message: 'OTP sent successfully to your phone number' };
     }
 
@@ -79,7 +79,7 @@ export class AuthService {
       phoneNumber: normPhone,
       role: UserRole.USER,
     });
-    await this.twilioVerifyService.sendOtp(normPhone);
+    await this.msg91Service.sendOtp(normPhone);
     return { message: 'OTP sent successfully to your phone number' };
   }
 
@@ -89,7 +89,7 @@ export class AuthService {
     if (!normPhone) {
       throw new UnauthorizedException('Invalid OTP');
     }
-    await this.twilioVerifyService.verifyOtp(normPhone, verifyOtpDto.otp);
+    await this.msg91Service.verifyOtp(normPhone, verifyOtpDto.otp);
 
     // 2. Find or Create User (by userId if provided, else by phoneNumber)
     let userDoc: UserDocument;

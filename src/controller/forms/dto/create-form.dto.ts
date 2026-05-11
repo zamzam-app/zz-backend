@@ -48,6 +48,10 @@ export class QuestionDto {
   @IsNumber()
   @IsOptional()
   starStep?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  isDefault?: boolean;
 }
 
 export class CreateFormDto {

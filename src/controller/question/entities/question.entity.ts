@@ -40,6 +40,9 @@ export class Question extends BaseEntity {
 
   @Prop({ required: false })
   hint?: string;
+
+  @Prop({ required: false, type: Boolean, default: false })
+  isDefault?: boolean;
 }
 
 export const QuestionSchema = SchemaFactory.createForClass(Question);

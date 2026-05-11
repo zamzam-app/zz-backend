@@ -184,6 +184,7 @@ export class FormService {
         maxRatings: 5,
         starStep: 1,
         hint: 'Please rate your overall experience',
+        isDefault: true,
       },
       {
         type: QuestionType.StarRating,
@@ -192,6 +193,7 @@ export class FormService {
         maxRatings: 5,
         starStep: 1,
         hint: 'Please rate our staff',
+        isDefault: true,
       },
       {
         type: QuestionType.StarRating,
@@ -200,6 +202,7 @@ export class FormService {
         maxRatings: 5,
         starStep: 1,
         hint: 'Please rate our speed of service',
+        isDefault: true,
       },
       {
         type: QuestionType.StarRating,
@@ -208,6 +211,7 @@ export class FormService {
         maxRatings: 5,
         starStep: 1,
         hint: 'Please rate our cleanliness',
+        isDefault: true,
       },
       {
         type: QuestionType.StarRating,
@@ -216,12 +220,14 @@ export class FormService {
         maxRatings: 5,
         starStep: 1,
         hint: 'Please rate our quality',
+        isDefault: true,
       },
       {
         type: QuestionType.Paragraph,
         title: 'Overall experience at the store',
         isRequired: false,
         hint: 'Tell us about your overall experience at the store',
+        isDefault: true,
       },
     ];
   }
