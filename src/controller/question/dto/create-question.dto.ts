@@ -47,4 +47,8 @@ export class CreateQuestionDto {
   @IsNumber()
   @IsOptional()
   maxRatings?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  isDefault?: boolean;
 }
