@@ -150,9 +150,31 @@ export class ReviewService {
             })
           : null;
 
-      const form = await this.formModel.findById(createReviewDto.formId);
+      const form = await this.formModel
+        .findById(createReviewDto.formId)
+        .populate('questions');
       if (!form) {
         throw new NotFoundException('Form not found');
+      }
+
+      const providedAnswers = new Map(
+        createReviewDto.response.map((r) => [r.questionId, r.answer]),
+      );
+
+      for (const question of form.questions as unknown as QuestionDocument[]) {
+        if (question.isRequired) {
+          const answer = providedAnswers.get(question._id.toString());
+          if (
+            answer === undefined ||
+            answer === null ||
+            answer === '' ||
+            (Array.isArray(answer) && answer.length === 0)
+          ) {
+            throw new BadRequestException(
+              `Response for required question '${question.title}' cannot be empty`,
+            );
+          }
+        }
       }
 
       const userResponses: UserResponse[] = createReviewDto.response.map(
@@ -834,7 +856,7 @@ export class ReviewService {
 
   // to compute overall rating from user responses
   private async computeOverallRatingFromResponses(
-    response: { questionId: string; answer: string | string[] | number }[],
+    response: { questionId: string; answer?: string | string[] | number }[],
   ): Promise<number> {
     if (!response?.length) return OVERALL_RATING_SCALE.min;
 
@@ -857,9 +879,13 @@ export class ReviewService {
       const question = questionMap.get(r.questionId);
       if (
         !question ||
-        (question.type as QuestionType) !== QuestionType.StarRating
-      )
+        (question.type as QuestionType) !== QuestionType.StarRating ||
+        r.answer === undefined ||
+        r.answer === null ||
+        r.answer === ''
+      ) {
         continue;
+      }
 
       let maxRatings = question.maxRatings;
       if (maxRatings == null || !VALID_MAX_RATINGS.has(maxRatings)) {
@@ -870,6 +896,7 @@ export class ReviewService {
       if (typeof r.answer === 'number') {
         num = r.answer;
       } else if (Array.isArray(r.answer)) {
+        if (r.answer.length === 0) continue;
         num = Number(r.answer[0]);
       } else {
         num = Number(r.answer);

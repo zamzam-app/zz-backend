@@ -40,8 +40,6 @@ export class Msg91Service {
     }
 
     try {
-      // MSG91 expects the mobile number with the country code (e.g., 91XXXXXXXXXX)
-      // Strip any non-numeric characters from the phone number
       const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
 
       const response = await firstValueFrom(

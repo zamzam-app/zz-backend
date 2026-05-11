@@ -19,8 +19,8 @@ export class UserResponse {
   })
   questionId: Types.ObjectId;
 
-  @Prop({ type: MongooseSchema.Types.Mixed, required: true })
-  answer: string | string[] | number;
+  @Prop({ type: MongooseSchema.Types.Mixed, required: false })
+  answer?: string | string[] | number;
 }
 
 export const UserResponseSchema = SchemaFactory.createForClass(UserResponse);
