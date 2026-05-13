@@ -34,6 +34,12 @@ type GlobalCsatResult = {
   averageOverallRating: number;
   totalRatings: number;
   totalScore: number;
+  breakdown?: {
+    questionId: string;
+    title: string;
+    score: number;
+    totalRatings: number;
+  }[];
   period?: AnalyticsPeriod;
   startDate?: string;
   endDate?: string;
@@ -140,41 +146,154 @@ export class AnalyticsService {
 
       const [summary] = await this.reviewModel
         .aggregate<{
-          totalRatings: number;
-          totalScore: number;
-          averageOverallRating: number;
+          overall: {
+            totalRatings: number;
+            totalScore: number;
+            averageOverallRating: number;
+          } | null;
+          breakdown: {
+            questionId: string;
+            title: string;
+            score: number;
+            totalRatings: number;
+          }[];
         }>([
           { $match: matchStage },
           {
-            $group: {
-              _id: null,
-              totalRatings: { $sum: 1 },
-              totalScore: { $sum: '$overallRating' },
-              averageOverallRating: { $avg: '$overallRating' },
+            $facet: {
+              overall: [
+                {
+                  $group: {
+                    _id: null,
+                    totalRatings: { $sum: 1 },
+                    totalScore: { $sum: '$overallRating' },
+                    averageOverallRating: { $avg: '$overallRating' },
+                  },
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    totalRatings: 1,
+                    totalScore: 1,
+                    averageOverallRating: 1,
+                  },
+                },
+              ],
+              breakdown: [
+                { $unwind: '$userResponses' },
+                {
+                  $lookup: {
+                    from: 'questions',
+                    localField: 'userResponses.questionId',
+                    foreignField: '_id',
+                    as: 'q',
+                  },
+                },
+                { $unwind: '$q' },
+                {
+                  $match: {
+                    'q.isRequired': true,
+                    'q.type': 'rating',
+                    'userResponses.answer': { $nin: [null, ''] },
+                  },
+                },
+                {
+                  $addFields: {
+                    answerValue: {
+                      $cond: [
+                        { $isArray: '$userResponses.answer' },
+                        { $arrayElemAt: ['$userResponses.answer', 0] },
+                        '$userResponses.answer',
+                      ],
+                    },
+                    maxRatingsRaw: { $ifNull: ['$q.maxRatings', 5] },
+                  },
+                },
+                {
+                  $addFields: {
+                    answerNum: {
+                      $convert: {
+                        input: '$answerValue',
+                        to: 'double',
+                        onError: null,
+                        onNull: null,
+                      },
+                    },
+                    maxRatings: { $max: [2, '$maxRatingsRaw'] },
+                  },
+                },
+                { $match: { answerNum: { $ne: null } } },
+                {
+                  $addFields: {
+                    clamped: {
+                      $min: ['$maxRatings', { $max: [1, '$answerNum'] }],
+                    },
+                  },
+                },
+                {
+                  $addFields: {
+                    normalized: {
+                      $add: [
+                        1,
+                        {
+                          $multiply: [
+                            {
+                              $divide: [
+                                { $subtract: ['$clamped', 1] },
+                                { $subtract: ['$maxRatings', 1] },
+                              ],
+                            },
+                            4,
+                          ],
+                        },
+                      ],
+                    },
+                  },
+                },
+                {
+                  $group: {
+                    _id: { questionId: '$q._id', title: '$q.title' },
+                    totalRatings: { $sum: 1 },
+                    avg: { $avg: '$normalized' },
+                  },
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    questionId: { $toString: '$_id.questionId' },
+                    title: '$_id.title',
+                    totalRatings: 1,
+                    score: { $round: ['$avg', 1] },
+                  },
+                },
+                { $sort: { title: 1 } },
+              ],
             },
           },
           {
             $project: {
-              _id: 0,
-              totalRatings: 1,
-              totalScore: 1,
-              averageOverallRating: 1,
+              overall: { $ifNull: [{ $arrayElemAt: ['$overall', 0] }, null] },
+              breakdown: 1,
             },
           },
         ])
         .exec();
 
-      const totalRatings = summary?.totalRatings ?? 0;
-      const totalScore = summary?.totalScore ?? 0;
-      const averageOverallRatingRaw = summary?.averageOverallRating ?? 0;
+      const overall = summary?.overall;
+      const totalRatings = overall?.totalRatings ?? 0;
+      const totalScore = overall?.totalScore ?? 0;
+      const averageOverallRatingRaw = overall?.averageOverallRating ?? 0;
       const averageOverallRating =
         Math.round(averageOverallRatingRaw * 10) / 10;
+
+      const breakdown = summary?.breakdown ?? [];
 
       return {
         globalCsatScore: averageOverallRating,
         averageOverallRating,
         totalRatings,
         totalScore: Math.round(totalScore * 10) / 10,
+        breakdown,
         ...(period ? { period } : {}),
         ...(appliedStartDate
           ? { startDate: appliedStartDate.toISOString() }
