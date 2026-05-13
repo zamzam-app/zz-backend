@@ -36,7 +36,12 @@ export class GlobalCsatResponseSwagger {
       },
     ],
   })
-  breakdown: { questionId: string; title: string; score: number; totalRatings: number }[];
+  breakdown: {
+    questionId: string;
+    title: string;
+    score: number;
+    totalRatings: number;
+  }[];
 
   @ApiPropertyOptional({
     example: AnalyticsPeriod.MONTHLY,

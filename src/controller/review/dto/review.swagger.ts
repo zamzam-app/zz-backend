@@ -285,7 +285,12 @@ export class GlobalCsatResponseSwagger {
       },
     ],
   })
-  breakdown: { questionId: string; title: string; score: number; totalRatings: number }[];
+  breakdown: {
+    questionId: string;
+    title: string;
+    score: number;
+    totalRatings: number;
+  }[];
 
   @ApiPropertyOptional({
     example: '2026-02-10T00:00:00.000Z',
