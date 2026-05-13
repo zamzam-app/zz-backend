@@ -22,7 +22,7 @@ import {
 import { Outlet, OutletDocument } from '../outlet/entities/outlet.entity';
 import { FranchiseAnalyticsResponseDto } from '../review/dto/franchise-analytics-response.dto';
 
-const PERIOD_DAYS_MAP: Record<AnalyticsPeriod, number> = {
+const PERIOD_DAYS_MAP: Partial<Record<AnalyticsPeriod, number>> = {
   [AnalyticsPeriod.DAILY]: 1,
   [AnalyticsPeriod.WEEKLY]: 7,
   [AnalyticsPeriod.MONTHLY]: 30,
@@ -954,10 +954,12 @@ export class AnalyticsService {
       appliedEndDate = new Date(endDate);
     } else if (period) {
       const days = PERIOD_DAYS_MAP[period];
-      appliedEndDate = new Date();
-      appliedStartDate = new Date(appliedEndDate);
-      appliedStartDate.setUTCDate(appliedStartDate.getUTCDate() - (days - 1));
-      appliedStartDate.setUTCHours(0, 0, 0, 0);
+      if (days) {
+        appliedEndDate = new Date();
+        appliedStartDate = new Date(appliedEndDate);
+        appliedStartDate.setUTCDate(appliedStartDate.getUTCDate() - (days - 1));
+        appliedStartDate.setUTCHours(0, 0, 0, 0);
+      }
     }
 
     if (

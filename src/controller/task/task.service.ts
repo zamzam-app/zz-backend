@@ -350,6 +350,7 @@ export class TaskService {
         ])
         .exec();
 
+      const totalOpenTasks = result?.totalOpenTasks ?? 0;
       const dueTodayTasks = result?.dueTodayTasks ?? 0;
       const dueThisWeekTasks = result?.dueThisWeekTasks ?? 0;
       const dueThisMonthTasks = result?.dueThisMonthTasks ?? 0;
@@ -358,10 +359,12 @@ export class TaskService {
           ? dueTodayTasks
           : period === TaskOverviewPeriod.MONTHLY
             ? dueThisMonthTasks
-            : dueThisWeekTasks;
+            : period === TaskOverviewPeriod.ALL_TIME
+              ? totalOpenTasks
+              : dueThisWeekTasks;
 
       return {
-        totalOpenTasks: result?.totalOpenTasks ?? 0,
+        totalOpenTasks,
         completedTasks: result?.completedTasks ?? 0,
         dueTodayTasks,
         criticalOpenTasks: result?.criticalOpenTasks ?? 0,
