@@ -1,5 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiUploadController, ApiUploadSignature } from './dto/upload.swagger';
+import { UploadSignatureQueryDto } from './dto/upload-signature-query.dto';
 import { UploadService } from './upload.service';
 
 @ApiUploadController()
@@ -9,9 +10,7 @@ export class UploadController {
 
   @Get('signature')
   @ApiUploadSignature()
-  getSignature(@Query('folder') folder?: string) {
-    return this.uploadService.getSignedUploadParams(
-      folder ? { folder } : undefined,
-    );
+  getSignature(@Query() query: UploadSignatureQueryDto) {
+    return this.uploadService.getSignedUploadParams(query);
   }
 }
