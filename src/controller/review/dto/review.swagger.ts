@@ -274,6 +274,24 @@ export class GlobalCsatResponseSwagger {
   @ApiProperty({ example: 520.3, description: 'Sum of overall ratings' })
   totalScore: number;
 
+  @ApiProperty({
+    description: 'Per-question CSAT breakdown for required rating questions',
+    example: [
+      {
+        questionId: '65a1b2c3d4e5f67890123456',
+        title: 'Food quality',
+        score: 4.3,
+        totalRatings: 120,
+      },
+    ],
+  })
+  breakdown: {
+    questionId: string;
+    title: string;
+    score: number;
+    totalRatings: number;
+  }[];
+
   @ApiPropertyOptional({
     example: '2026-02-10T00:00:00.000Z',
     description: 'Applied date range start',

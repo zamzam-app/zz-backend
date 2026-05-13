@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
+import { UploadKind } from './dto/upload-signature-query.dto';
 import { CloudinaryApi } from './interfaces/cloudinary-api.interface';
 
 const cloudinaryApi = cloudinary as CloudinaryApi;
@@ -32,9 +33,29 @@ export class UploadService {
    * Returns signed upload params for the client. Client will send these
    * + the file to Cloudinary.
    */
-  getSignedUploadParams(options?: { folder?: string }) {
+  getSignedUploadParams(options?: { folder?: string; kind?: UploadKind }) {
     const folder = options?.folder ?? 'zam-zam';
+    const kind = options?.kind ?? UploadKind.IMAGE;
     const timestamp = Math.round(new Date().getTime() / 1000);
+
+    // Map kind to resource_type
+    let resource_type = 'auto';
+    switch (kind) {
+      case UploadKind.IMAGE:
+        resource_type = 'image';
+        break;
+      case UploadKind.VIDEO:
+        resource_type = 'video';
+        break;
+      case UploadKind.AUDIO:
+        resource_type = 'video'; // Cloudinary stores audio as video
+        break;
+      case UploadKind.FILE:
+        resource_type = 'raw';
+        break;
+    }
+
+    const type = 'upload';
     const paramsToSign: Record<string, unknown> = {
       timestamp,
       folder,
@@ -49,6 +70,8 @@ export class UploadService {
       cloudName: this.cloudName,
       apiKey: this.apiKey,
       folder,
+      type,
+      resourceType: resource_type,
     };
   }
 }

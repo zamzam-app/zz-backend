@@ -22,6 +22,7 @@ export interface TaskBoardItem {
   priority: TaskPriority;
   status: TaskStatus;
   dueDate: Date;
+  dueTime: string;
   adminSubmission?: TaskSubmission;
   managerSubmission?: TaskSubmission;
   outlet: { _id: string; name: string } | null;

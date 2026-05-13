@@ -6,6 +6,7 @@ export enum TaskOverviewPeriod {
   DAILY = 'daily',
   WEEKLY = 'weekly',
   MONTHLY = 'monthly',
+  ALL_TIME = 'all-time',
 }
 
 export class QueryTaskOverviewDto {
