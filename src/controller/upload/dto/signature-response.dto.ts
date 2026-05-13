@@ -31,4 +31,17 @@ export class SignatureResponseDto {
     example: 'uploads',
   })
   folder: string;
+
+  @ApiProperty({
+    description:
+      'Cloudinary delivery type (e.g. upload, private, authenticated)',
+    example: 'upload',
+  })
+  type: string;
+
+  @ApiProperty({
+    description: 'Cloudinary resource type (e.g. image, video, raw, auto)',
+    example: 'image',
+  })
+  resourceType: string;
 }

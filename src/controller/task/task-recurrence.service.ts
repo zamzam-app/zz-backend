@@ -94,6 +94,7 @@ export class TaskRecurrenceService {
         priority: template.priority,
         status: TaskStatus.OPEN,
         dueDate: now, // Set to today
+        dueTime: template.dueTime, // Inherit template due time
         isRecurring: false,
         outletId: template.outletId,
         assigneeIds: template.assigneeIds,

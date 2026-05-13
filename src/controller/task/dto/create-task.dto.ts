@@ -13,6 +13,7 @@ import {
   MaxLength,
   ValidateNested,
   IsNumber,
+  Matches,
 } from 'class-validator';
 import { TaskPriority, TaskStatus, TaskRecurrenceType } from '../task.enums';
 
@@ -81,6 +82,17 @@ export class CreateTaskDto {
   @ApiProperty({ description: 'Due date (ISO 8601)' })
   @IsDateString()
   dueDate: string;
+
+  @ApiProperty({
+    description: 'Due time in HH:mm format (IST)',
+    example: '14:30',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+    message: 'dueTime must be in HH:mm 24-hour format',
+  })
+  dueTime: string;
 
   @ApiPropertyOptional({ description: 'Is the task recurring?' })
   @IsOptional()

@@ -97,6 +97,7 @@ export class TaskService {
         priority: dto.priority ?? undefined,
         status,
         dueDate: new Date(dto.dueDate),
+        dueTime: dto.dueTime,
         isRecurring: dto.isRecurring ?? false,
         recurrenceType: dto.recurrenceType,
         recurrenceDays: dto.recurrenceDays,
@@ -178,7 +179,7 @@ export class TaskService {
             },
           },
         },
-        { $sort: { _completedSort: 1, dueDate: 1, createdAt: -1 } },
+        { $sort: { _completedSort: 1, dueDate: 1, dueTime: 1, createdAt: -1 } },
         { $project: { _completedSort: 0 } },
       ];
 
@@ -349,6 +350,7 @@ export class TaskService {
         ])
         .exec();
 
+      const totalOpenTasks = result?.totalOpenTasks ?? 0;
       const dueTodayTasks = result?.dueTodayTasks ?? 0;
       const dueThisWeekTasks = result?.dueThisWeekTasks ?? 0;
       const dueThisMonthTasks = result?.dueThisMonthTasks ?? 0;
@@ -357,10 +359,12 @@ export class TaskService {
           ? dueTodayTasks
           : period === TaskOverviewPeriod.MONTHLY
             ? dueThisMonthTasks
-            : dueThisWeekTasks;
+            : period === TaskOverviewPeriod.ALL_TIME
+              ? totalOpenTasks
+              : dueThisWeekTasks;
 
       return {
-        totalOpenTasks: result?.totalOpenTasks ?? 0,
+        totalOpenTasks,
         completedTasks: result?.completedTasks ?? 0,
         dueTodayTasks,
         criticalOpenTasks: result?.criticalOpenTasks ?? 0,
@@ -459,6 +463,7 @@ export class TaskService {
       }
       if (dto.priority !== undefined) $set.priority = dto.priority;
       if (dto.dueDate !== undefined) $set.dueDate = new Date(dto.dueDate);
+      if (dto.dueTime !== undefined) $set.dueTime = dto.dueTime;
       if (dto.isRecurring !== undefined) $set.isRecurring = dto.isRecurring;
       if (dto.recurrenceType !== undefined)
         $set.recurrenceType = dto.recurrenceType;

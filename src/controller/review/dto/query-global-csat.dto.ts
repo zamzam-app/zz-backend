@@ -5,6 +5,7 @@ export enum AnalyticsPeriod {
   DAILY = 'daily',
   WEEKLY = 'weekly',
   MONTHLY = 'monthly',
+  ALL_TIME = 'all-time',
 }
 
 export class QueryGlobalCsatDto {

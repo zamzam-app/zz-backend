@@ -20,6 +20,12 @@ export function ApiUploadSignature() {
       required: false,
       description: 'Cloudinary folder (e.g. products, outlets, avatars)',
     }),
+    ApiQuery({
+      name: 'kind',
+      required: false,
+      enum: ['image', 'video', 'audio', 'file'],
+      description: 'Kind of upload to determine resource type',
+    }),
     ApiOkResponse({
       description:
         'Signed upload params for the client to upload to Cloudinary.',
