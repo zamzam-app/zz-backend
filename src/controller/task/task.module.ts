@@ -10,6 +10,7 @@ import { Task, TaskSchema } from './entities/task.entity';
 import { TaskController } from './task.controller';
 import { TaskService } from './task.service';
 import { TaskRecurrenceService } from './task-recurrence.service';
+import { TaskReminderService } from './task-reminder.service';
 import { NotificationsModule } from '../../notifications/notifications.module';
 
 @Module({
@@ -23,7 +24,7 @@ import { NotificationsModule } from '../../notifications/notifications.module';
     NotificationsModule,
   ],
   controllers: [TaskController],
-  providers: [TaskService, TaskRecurrenceService],
+  providers: [TaskService, TaskRecurrenceService, TaskReminderService],
   exports: [TaskService],
 })
 export class TaskModule {}

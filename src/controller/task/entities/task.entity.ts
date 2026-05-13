@@ -67,6 +67,14 @@ export class Task extends BaseEntity {
   @Prop({ type: Date, required: true })
   dueDate!: Date;
 
+  @Prop({
+    type: String,
+    required: true,
+    trim: true,
+    match: /^([01]\d|2[0-3]):([0-5]\d)$/,
+  })
+  dueTime!: string;
+
   @Prop({ type: Boolean, default: false })
   isRecurring!: boolean;
 
