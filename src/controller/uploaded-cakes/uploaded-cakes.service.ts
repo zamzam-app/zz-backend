@@ -32,6 +32,15 @@ export class UploadedCakesService {
       if (!dto.phone?.trim()) {
         throw new BadRequestException('phone is required');
       }
+      const prompt = dto.prompt?.trim() || dto.description?.trim();
+      if (!prompt) {
+        throw new BadRequestException('prompt is required');
+      }
+
+      const imageUrl = dto.imageUrl?.trim() || dto.referenceImageUrl?.trim();
+      if (!imageUrl) {
+        throw new BadRequestException('imageUrl is required');
+      }
 
       const normalizedPhone = normalizePhoneNumber(dto.phone);
       if (!normalizedPhone) {
@@ -48,8 +57,10 @@ export class UploadedCakesService {
         )._id.toString();
       } else {
         const createdUser = await this.usersService.create({
-          name: dto.name.trim(),
+          ...(dto.name?.trim() && { name: dto.name.trim() }),
           phoneNumber: normalizedPhone,
+          ...(dto.dob?.trim() && { dob: dto.dob.trim() }),
+          ...(dto.gender?.trim() && { gender: dto.gender.trim() }),
           role: UserRole.USER,
         } as CreateUserDto);
         userId = (
@@ -59,10 +70,16 @@ export class UploadedCakesService {
 
       const doc = new this.uploadedCakeModel({
         userId: new Types.ObjectId(userId),
-        name: dto.name.trim(),
+        prompt,
         phone: normalizedPhone,
-        referenceImageUrl: dto.referenceImageUrl.trim(),
-        description: dto.description.trim(),
+        imageUrl,
+        ...(dto.dob?.trim() && { dob: new Date(dto.dob.trim()) }),
+        ...(dto.gender?.trim() && { gender: dto.gender.trim() }),
+        ...(dto.name?.trim() && { name: dto.name.trim() }),
+        ...(dto.referenceImageUrl?.trim() && {
+          referenceImageUrl: dto.referenceImageUrl.trim(),
+        }),
+        ...(dto.description?.trim() && { description: dto.description.trim() }),
       });
 
       const saved = await doc.save();
