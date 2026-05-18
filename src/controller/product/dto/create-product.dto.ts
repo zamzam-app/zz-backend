@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
+  ArrayMinSize,
   IsBoolean,
   IsNotEmpty,
   IsNumber,
@@ -62,6 +63,7 @@ export class CreateProductDto {
     ],
   })
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => PricingOptionDto)
   pricing: PricingOptionDto[];
