@@ -17,10 +17,13 @@ export class UploadedCake extends BaseEntity {
   name: string;
 
   @Prop({ type: String, required: true, trim: true })
-  phone: string;
+  phoneNumber: string;
+
+  @Prop({ type: Date, required: true })
+  dob: Date;
 
   @Prop({ type: String, required: true, trim: true })
-  referenceImageUrl: string;
+  imageUrl: string;
 
   @Prop({ type: String, required: true, trim: true })
   description: string;
