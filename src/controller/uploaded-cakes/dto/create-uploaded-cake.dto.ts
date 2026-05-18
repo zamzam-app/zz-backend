@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUrl, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsNotEmpty,
+  IsString,
+  IsUrl,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateUploadedCakeDto {
   @ApiProperty({
@@ -17,7 +23,15 @@ export class CreateUploadedCakeDto {
   })
   @IsString()
   @IsNotEmpty()
-  phone: string;
+  phoneNumber: string;
+
+  @ApiProperty({
+    description: 'Customer date of birth (ISO date string)',
+    example: '1995-08-17',
+  })
+  @IsDateString()
+  @IsNotEmpty()
+  dob: string;
 
   @ApiProperty({
     description: 'Reference image URL uploaded by client',
@@ -27,7 +41,7 @@ export class CreateUploadedCakeDto {
   @IsString()
   @IsNotEmpty()
   @IsUrl()
-  referenceImageUrl: string;
+  imageUrl: string;
 
   @ApiProperty({
     description: 'Customization request details from customer',

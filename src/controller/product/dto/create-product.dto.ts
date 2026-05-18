@@ -1,13 +1,28 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsArray,
+  ArrayMinSize,
   IsBoolean,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  Min,
+  ValidateNested,
 } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+
+export class PricingOptionDto {
+  @ApiProperty({ example: 1, description: 'Quantity value' })
+  @IsNumber()
+  @Min(0.00001)
+  quantityValue: number;
+
+  @ApiProperty({ example: 150, description: 'Pricing amount' })
+  @IsNumber()
+  @Min(0)
+  amount: number;
+}
 
 export class CreateProductDto {
   @ApiProperty({ example: 'Wireless Headphones', description: 'Product name' })
@@ -15,10 +30,20 @@ export class CreateProductDto {
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ example: 99.99, description: 'Product price' })
-  @IsNumber()
-  @IsNotEmpty()
-  price: number;
+  @ApiProperty({
+    type: [PricingOptionDto],
+    description:
+      'Pricing options for the product. Note: quantityUnit defaults to "kg" and currency defaults to "INR" automatically backend-side.',
+    example: [
+      { quantityValue: 0.5, amount: 200 },
+      { quantityValue: 1, amount: 380 },
+    ],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => PricingOptionDto)
+  pricing: PricingOptionDto[];
 
   @ApiProperty({
     example: 'High-quality wireless headphones with noise cancellation.',

@@ -1,7 +1,14 @@
+export interface PricingOption {
+  quantityValue: number;
+  quantityUnit: string;
+  amount: number;
+  currency: string;
+}
+
 export interface ProductDb {
   _id: string;
   name: string;
-  price: number;
+  pricing: PricingOption[];
   description: string;
   images: string[];
   categoryList: string[];

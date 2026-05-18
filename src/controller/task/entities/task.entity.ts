@@ -6,6 +6,15 @@ import { TaskPriority, TaskStatus, TaskRecurrenceType } from '../task.enums';
 export type TaskDocument = HydratedDocument<Task>;
 
 @Schema({ _id: false })
+export class TaskReminderNotifications {
+  @Prop({ type: Date, default: null })
+  oneHourSentAt?: Date | null;
+
+  @Prop({ type: Date, default: null })
+  thirtyMinutesSentAt?: Date | null;
+}
+
+@Schema({ _id: false })
 export class TaskAttachments {
   @Prop({ type: [String], default: [] })
   images!: string[];
@@ -120,6 +129,9 @@ export class Task extends BaseEntity {
 
   @Prop({ type: TaskSubmission, required: false })
   managerSubmission?: TaskSubmission;
+
+  @Prop({ type: TaskReminderNotifications, default: () => ({}) })
+  reminderNotifications?: TaskReminderNotifications;
 }
 
 export const TaskSchema = SchemaFactory.createForClass(Task);
