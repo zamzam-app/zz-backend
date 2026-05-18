@@ -10,6 +10,7 @@ import { CreateProductDto, PricingOptionDto } from './dto/create-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product, ProductDocument } from './entities/product.entity';
+import { PricingOption } from './interfaces/product.interface';
 import { FindAllProductsResult } from './interfaces/query-product.interface';
 
 @Injectable()
@@ -19,8 +20,8 @@ export class ProductService {
   ) {}
 
   private normalizePricing(
-    pricing?: Partial<PricingOptionDto>[],
-  ): PricingOptionDto[] | undefined {
+    pricing?: PricingOptionDto[],
+  ): PricingOption[] | undefined {
     if (!pricing) return undefined;
     return pricing.map((item) => {
       const quantityValue = Number(item.quantityValue);
@@ -47,12 +48,11 @@ export class ProductService {
 
   async create(createProductDto: CreateProductDto): Promise<Product> {
     try {
-      if (createProductDto.pricing) {
-        createProductDto.pricing = this.normalizePricing(
-          createProductDto.pricing,
-        ) as PricingOptionDto[];
-      }
-      const createdProduct = new this.productModel(createProductDto);
+      const normalizedPricing = this.normalizePricing(createProductDto.pricing);
+      const createdProduct = new this.productModel({
+        ...createProductDto,
+        ...(normalizedPricing && { pricing: normalizedPricing }),
+      });
       return await createdProduct.save();
     } catch (err) {
       if (err instanceof HttpException) throw err;
@@ -136,15 +136,15 @@ export class ProductService {
     updateProductDto: UpdateProductDto,
   ): Promise<Product> {
     try {
-      if (updateProductDto.pricing) {
-        updateProductDto.pricing = this.normalizePricing(
-          updateProductDto.pricing,
-        ) as PricingOptionDto[];
-      }
+      const normalizedPricing = this.normalizePricing(updateProductDto.pricing);
+      const updateData = {
+        ...updateProductDto,
+        ...(normalizedPricing && { pricing: normalizedPricing }),
+      };
       const existingProduct = await this.productModel
         .findOneAndUpdate(
           { _id: new Types.ObjectId(id), isDeleted: false },
-          { $set: updateProductDto },
+          { $set: updateData },
           { new: true, runValidators: true },
         )
         .exec();

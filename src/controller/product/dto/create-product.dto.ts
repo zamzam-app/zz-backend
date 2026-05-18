@@ -32,10 +32,11 @@ export class CreateProductDto {
 
   @ApiProperty({
     type: [PricingOptionDto],
-    description: 'Pricing options for the product',
+    description:
+      'Pricing options for the product. Note: quantityUnit defaults to "kg" and currency defaults to "INR" automatically backend-side.',
     example: [
-      { quantityValue: 0.5, quantityUnit: 'kg', amount: 200, currency: 'INR' },
-      { quantityValue: 1, quantityUnit: 'kg', amount: 380, currency: 'INR' },
+      { quantityValue: 0.5, amount: 200 },
+      { quantityValue: 1, amount: 380 },
     ],
   })
   @IsArray()
