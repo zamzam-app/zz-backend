@@ -14,28 +14,19 @@ export class UploadedCake extends BaseEntity {
   userId: string;
 
   @Prop({ type: String, required: true, trim: true })
-  prompt: string;
+  name: string;
 
   @Prop({ type: String, required: true, trim: true })
-  phone: string;
+  phoneNumber: string;
+
+  @Prop({ type: Date, required: true })
+  dob: Date;
 
   @Prop({ type: String, required: true, trim: true })
   imageUrl: string;
 
-  @Prop({ type: Date, required: false })
-  dob?: Date;
-
-  @Prop({ type: String, required: false, trim: true })
-  gender?: string;
-
-  @Prop({ type: String, required: false, trim: true })
-  name?: string;
-
-  @Prop({ type: String, required: false, trim: true })
-  referenceImageUrl?: string;
-
-  @Prop({ type: String, required: false, trim: true })
-  description?: string;
+  @Prop({ type: String, required: true, trim: true })
+  description: string;
 }
 
 export const UploadedCakeSchema = SchemaFactory.createForClass(UploadedCake);

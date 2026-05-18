@@ -29,21 +29,12 @@ export class UploadedCakesService {
 
   async create(dto: CreateUploadedCakeDto): Promise<UploadedCakeDocument> {
     try {
-      if (!dto.phone?.trim()) {
-        throw new BadRequestException('phone is required');
-      }
-      const prompt = dto.prompt?.trim() || dto.description?.trim();
-      if (!prompt) {
-        throw new BadRequestException('prompt is required');
+      if (dto.phoneNumber == null || dto.phoneNumber.trim() === '') {
+        throw new BadRequestException('phoneNumber is required');
       }
 
-      const imageUrl = dto.imageUrl?.trim() || dto.referenceImageUrl?.trim();
-      if (!imageUrl) {
-        throw new BadRequestException('imageUrl is required');
-      }
-
-      const normalizedPhone = normalizePhoneNumber(dto.phone);
-      if (!normalizedPhone) {
+      const normalizedPhone = normalizePhoneNumber(dto.phoneNumber);
+      if (normalizedPhone == null || normalizedPhone === '') {
         throw new BadRequestException('Invalid phone number');
       }
 
@@ -57,11 +48,10 @@ export class UploadedCakesService {
         )._id.toString();
       } else {
         const createdUser = await this.usersService.create({
-          ...(dto.name?.trim() && { name: dto.name.trim() }),
+          name: dto.name.trim(),
           phoneNumber: normalizedPhone,
-          ...(dto.dob?.trim() && { dob: dto.dob.trim() }),
-          ...(dto.gender?.trim() && { gender: dto.gender.trim() }),
           role: UserRole.USER,
+          dob: dto.dob,
         } as CreateUserDto);
         userId = (
           createdUser as unknown as { _id: Types.ObjectId }
@@ -70,16 +60,11 @@ export class UploadedCakesService {
 
       const doc = new this.uploadedCakeModel({
         userId: new Types.ObjectId(userId),
-        prompt,
-        phone: normalizedPhone,
-        imageUrl,
-        ...(dto.dob?.trim() && { dob: new Date(dto.dob.trim()) }),
-        ...(dto.gender?.trim() && { gender: dto.gender.trim() }),
-        ...(dto.name?.trim() && { name: dto.name.trim() }),
-        ...(dto.referenceImageUrl?.trim() && {
-          referenceImageUrl: dto.referenceImageUrl.trim(),
-        }),
-        ...(dto.description?.trim() && { description: dto.description.trim() }),
+        name: dto.name.trim(),
+        phoneNumber: normalizedPhone,
+        dob: new Date(dto.dob),
+        imageUrl: dto.imageUrl.trim(),
+        description: dto.description.trim(),
       });
 
       const saved = await doc.save();
@@ -147,7 +132,7 @@ export class UploadedCakesService {
       .populate('userId')
       .exec();
 
-    if (!doc) {
+    if (doc == null) {
       throw new NotFoundException(`Uploaded cake with ID ${id} not found`);
     }
 
