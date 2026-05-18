@@ -1,4 +1,9 @@
-import { TaskPriority, TaskStatus } from '../task.enums';
+import {
+  TaskPriority,
+  TaskRecurrenceType,
+  TaskStatus,
+} from '../task.enums';
+import { TaskBadge } from '../task-badge.util';
 
 export interface TaskAttachments {
   images: string[];
@@ -23,6 +28,10 @@ export interface TaskBoardItem {
   status: TaskStatus;
   dueDate: Date;
   dueTime: string;
+  isRecurring?: boolean;
+  recurrenceType?: TaskRecurrenceType;
+  recurrenceDays?: number[];
+  badges: TaskBadge[];
   adminSubmission?: TaskSubmission;
   managerSubmission?: TaskSubmission;
   outlet: { _id: string; name: string } | null;
