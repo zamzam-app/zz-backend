@@ -16,10 +16,11 @@ export class PricingOption {
 
   @ApiProperty({
     example: 'kg',
-    description: 'Quantity unit (e.g. kg, pcs, g)',
+    description: 'Quantity unit (must be kg)',
     default: 'kg',
+    enum: ['kg'],
   })
-  @Prop({ required: true, default: 'kg', lowercase: true })
+  @Prop({ required: true, default: 'kg', enum: ['kg'], lowercase: true })
   quantityUnit: string;
 
   @ApiProperty({ example: 150, description: 'Pricing amount' })
@@ -29,8 +30,13 @@ export class PricingOption {
   })
   amount: number;
 
-  @ApiProperty({ example: 'INR', description: 'Currency code', default: 'INR' })
-  @Prop({ required: true, default: 'INR', uppercase: true })
+  @ApiProperty({
+    example: 'INR',
+    description: 'Currency code (must be INR)',
+    default: 'INR',
+    enum: ['INR'],
+  })
+  @Prop({ required: true, default: 'INR', enum: ['INR'], uppercase: true })
   currency: string;
 }
 

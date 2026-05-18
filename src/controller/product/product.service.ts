@@ -38,15 +38,9 @@ export class ProductService {
 
       return {
         quantityValue,
-        quantityUnit:
-          typeof item.quantityUnit === 'string' && item.quantityUnit.trim()
-            ? item.quantityUnit.toLowerCase().trim()
-            : 'kg',
+        quantityUnit: 'kg',
         amount,
-        currency:
-          typeof item.currency === 'string' && item.currency.trim()
-            ? item.currency.toUpperCase().trim()
-            : 'INR',
+        currency: 'INR',
       };
     });
   }

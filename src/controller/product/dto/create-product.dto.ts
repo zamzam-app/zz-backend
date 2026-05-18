@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import {
   IsArray,
   ArrayMinSize,
@@ -18,34 +18,10 @@ export class PricingOptionDto {
   @Min(0.00001)
   quantityValue: number;
 
-  @ApiPropertyOptional({
-    example: 'kg',
-    description: 'Quantity unit (e.g., kg, g, pcs)',
-    default: 'kg',
-  })
-  @IsString()
-  @IsOptional()
-  @Transform(({ value }) =>
-    typeof value === 'string' ? value.toLowerCase().trim() : (value as string),
-  )
-  quantityUnit?: string = 'kg';
-
   @ApiProperty({ example: 150, description: 'Pricing amount' })
   @IsNumber()
   @Min(0)
   amount: number;
-
-  @ApiPropertyOptional({
-    example: 'INR',
-    description: 'Currency code',
-    default: 'INR',
-  })
-  @IsString()
-  @IsOptional()
-  @Transform(({ value }) =>
-    typeof value === 'string' ? value.toUpperCase().trim() : (value as string),
-  )
-  currency?: string = 'INR';
 }
 
 export class CreateProductDto {
