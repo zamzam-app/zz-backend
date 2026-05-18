@@ -29,12 +29,12 @@ export class UploadedCakesService {
 
   async create(dto: CreateUploadedCakeDto): Promise<UploadedCakeDocument> {
     try {
-      if (!dto.phone?.trim()) {
-        throw new BadRequestException('phone is required');
+      if (dto.phoneNumber == null || dto.phoneNumber.trim() === '') {
+        throw new BadRequestException('phoneNumber is required');
       }
 
-      const normalizedPhone = normalizePhoneNumber(dto.phone);
-      if (!normalizedPhone) {
+      const normalizedPhone = normalizePhoneNumber(dto.phoneNumber);
+      if (normalizedPhone == null || normalizedPhone === '') {
         throw new BadRequestException('Invalid phone number');
       }
 
@@ -51,6 +51,7 @@ export class UploadedCakesService {
           name: dto.name.trim(),
           phoneNumber: normalizedPhone,
           role: UserRole.USER,
+          dob: dto.dob,
         } as CreateUserDto);
         userId = (
           createdUser as unknown as { _id: Types.ObjectId }
@@ -60,8 +61,9 @@ export class UploadedCakesService {
       const doc = new this.uploadedCakeModel({
         userId: new Types.ObjectId(userId),
         name: dto.name.trim(),
-        phone: normalizedPhone,
-        referenceImageUrl: dto.referenceImageUrl.trim(),
+        phoneNumber: normalizedPhone,
+        dob: new Date(dto.dob),
+        imageUrl: dto.imageUrl.trim(),
         description: dto.description.trim(),
       });
 
@@ -130,7 +132,7 @@ export class UploadedCakesService {
       .populate('userId')
       .exec();
 
-    if (!doc) {
+    if (doc == null) {
       throw new NotFoundException(`Uploaded cake with ID ${id} not found`);
     }
 
