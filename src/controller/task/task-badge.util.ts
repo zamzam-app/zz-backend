@@ -1,6 +1,11 @@
 import { TaskPriority, TaskRecurrenceType } from './task.enums';
 
-export type TaskBadgeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+export type TaskBadgeTone =
+  | 'neutral'
+  | 'info'
+  | 'success'
+  | 'warning'
+  | 'danger';
 
 export interface TaskBadge {
   key: string;

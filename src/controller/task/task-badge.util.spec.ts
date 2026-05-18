@@ -28,6 +28,8 @@ describe('buildTaskBadges', () => {
       { key: 'category:cat-2', label: 'Inventory', tone: 'success' },
       { key: 'priority', label: 'Medium Priority', tone: 'info' },
     ]);
-    expect((badges as Array<{ badge?: string }>).every((badge) => !badge.badge)).toBe(true);
+    expect(
+      (badges as Array<{ badge?: string }>).every((badge) => !badge.badge),
+    ).toBe(true);
   });
 });

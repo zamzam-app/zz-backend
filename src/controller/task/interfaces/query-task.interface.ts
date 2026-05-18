@@ -1,8 +1,4 @@
-import {
-  TaskPriority,
-  TaskRecurrenceType,
-  TaskStatus,
-} from '../task.enums';
+import { TaskPriority, TaskRecurrenceType, TaskStatus } from '../task.enums';
 import { TaskBadge } from '../task-badge.util';
 
 export interface TaskAttachments {
