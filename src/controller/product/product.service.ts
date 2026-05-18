@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { CreateProductDto } from './dto/create-product.dto';
+import { CreateProductDto, PricingOptionDto } from './dto/create-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product, ProductDocument } from './entities/product.entity';
@@ -18,8 +18,46 @@ export class ProductService {
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
   ) {}
 
+  private normalizePricing(
+    pricing?: Partial<PricingOptionDto>[],
+  ): PricingOptionDto[] | undefined {
+    if (!pricing) return undefined;
+    return pricing.map((item) => {
+      const quantityValue = Number(item.quantityValue);
+      const amount = Number(item.amount);
+
+      if (isNaN(quantityValue) || quantityValue <= 0) {
+        throw new HttpException('quantityValue must be greater than 0', 400);
+      }
+      if (isNaN(amount) || amount < 0) {
+        throw new HttpException(
+          'amount must be greater than or equal to 0',
+          400,
+        );
+      }
+
+      return {
+        quantityValue,
+        quantityUnit:
+          typeof item.quantityUnit === 'string' && item.quantityUnit.trim()
+            ? item.quantityUnit.toLowerCase().trim()
+            : 'kg',
+        amount,
+        currency:
+          typeof item.currency === 'string' && item.currency.trim()
+            ? item.currency.toUpperCase().trim()
+            : 'INR',
+      };
+    });
+  }
+
   async create(createProductDto: CreateProductDto): Promise<Product> {
     try {
+      if (createProductDto.pricing) {
+        createProductDto.pricing = this.normalizePricing(
+          createProductDto.pricing,
+        ) as PricingOptionDto[];
+      }
       const createdProduct = new this.productModel(createProductDto);
       return await createdProduct.save();
     } catch (err) {
@@ -104,11 +142,16 @@ export class ProductService {
     updateProductDto: UpdateProductDto,
   ): Promise<Product> {
     try {
+      if (updateProductDto.pricing) {
+        updateProductDto.pricing = this.normalizePricing(
+          updateProductDto.pricing,
+        ) as PricingOptionDto[];
+      }
       const existingProduct = await this.productModel
         .findOneAndUpdate(
           { _id: new Types.ObjectId(id), isDeleted: false },
-          [{ $set: updateProductDto as Record<string, unknown> }],
-          { new: true, updatePipeline: true },
+          { $set: updateProductDto },
+          { new: true, runValidators: true },
         )
         .exec();
 
