@@ -1,4 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -6,8 +7,45 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Min,
+  ValidateNested,
 } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+
+export class PricingOptionDto {
+  @ApiProperty({ example: 1, description: 'Quantity value' })
+  @IsNumber()
+  @Min(0.00001)
+  quantityValue: number;
+
+  @ApiPropertyOptional({
+    example: 'kg',
+    description: 'Quantity unit (e.g., kg, g, pcs)',
+    default: 'kg',
+  })
+  @IsString()
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toLowerCase().trim() : (value as string),
+  )
+  quantityUnit?: string = 'kg';
+
+  @ApiProperty({ example: 150, description: 'Pricing amount' })
+  @IsNumber()
+  @Min(0)
+  amount: number;
+
+  @ApiPropertyOptional({
+    example: 'INR',
+    description: 'Currency code',
+    default: 'INR',
+  })
+  @IsString()
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toUpperCase().trim() : (value as string),
+  )
+  currency?: string = 'INR';
+}
 
 export class CreateProductDto {
   @ApiProperty({ example: 'Wireless Headphones', description: 'Product name' })
@@ -15,10 +53,18 @@ export class CreateProductDto {
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ example: 99.99, description: 'Product price' })
-  @IsNumber()
-  @IsNotEmpty()
-  price: number;
+  @ApiProperty({
+    type: [PricingOptionDto],
+    description: 'Pricing options for the product',
+    example: [
+      { quantityValue: 0.5, quantityUnit: 'kg', amount: 200, currency: 'INR' },
+      { quantityValue: 1, quantityUnit: 'kg', amount: 380, currency: 'INR' },
+    ],
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PricingOptionDto)
+  pricing: PricingOptionDto[];
 
   @ApiProperty({
     example: 'High-quality wireless headphones with noise cancellation.',
