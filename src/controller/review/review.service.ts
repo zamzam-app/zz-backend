@@ -82,6 +82,16 @@ export class ReviewService {
     private notificationsService: NotificationsService,
   ) {}
 
+  private buildOpenComplaintMatch(): Record<string, unknown> {
+    return {
+      $or: [
+        { complaintStatus: ComplaintStatus.PENDING },
+        { complaintStatus: { $exists: false } },
+        { complaintStatus: null },
+      ],
+    };
+  }
+
   async submitWithOtp(
     dto: SubmitReviewWithOtpDto,
   ): Promise<{ overallRating: number }> {
@@ -316,6 +326,22 @@ export class ReviewService {
       }
       if (query.userId) {
         matchStage.userId = new Types.ObjectId(query.userId);
+      }
+      if (typeof query.isComplaint === 'boolean') {
+        matchStage.isComplaint = query.isComplaint;
+      }
+      if (query.complaintStatus === 'open') {
+        Object.assign(matchStage, this.buildOpenComplaintMatch());
+      } else if (query.complaintStatus) {
+        matchStage.complaintStatus = query.complaintStatus;
+      }
+      if (query.unresolvedOnly || query.excludeResolved) {
+        Object.assign(matchStage, this.buildOpenComplaintMatch());
+      }
+      if (query.severity === 'critical') {
+        matchStage.overallRating = { $lt: 2 };
+      } else if (query.severity === 'concern') {
+        matchStage.overallRating = { $gte: 2, $lt: 3.5 };
       }
 
       const lookupStages = [
