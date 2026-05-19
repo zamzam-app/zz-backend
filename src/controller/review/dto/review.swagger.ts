@@ -9,6 +9,7 @@ import {
   ApiBadRequestResponse,
   ApiBody,
 } from '@nestjs/swagger';
+import { ReviewBadgeStatusDto } from './review-badge-status.dto';
 
 /** Explicit return type for Swagger decorator factories so ESLint can resolve the decorator type */
 export type ApiDecorator = MethodDecorator;
@@ -194,6 +195,42 @@ export function ApiReviewResolveComplaint(): ApiDecorator {
     }),
     ApiNotFoundResponse({
       description: 'Review not found or not a complaint.',
+    }),
+  );
+}
+
+export function ApiReviewBadgeStatus(): ApiDecorator {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get unread review badge status for a user',
+    }),
+    ApiOkResponse({
+      description: 'Unread review badge status fetched successfully.',
+      type: ReviewBadgeStatusDto,
+    }),
+    ApiBadRequestResponse({
+      description: 'Invalid user ID.',
+    }),
+    ApiNotFoundResponse({
+      description: 'User not found.',
+    }),
+  );
+}
+
+export function ApiReviewMarkRead(): ApiDecorator {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Mark a review as read for a user',
+    }),
+    ApiOkResponse({
+      description: 'Review marked as read and badge status updated.',
+      type: ReviewBadgeStatusDto,
+    }),
+    ApiBadRequestResponse({
+      description: 'Invalid review ID or user ID.',
+    }),
+    ApiNotFoundResponse({
+      description: 'Review or user not found.',
     }),
   );
 }
