@@ -5,6 +5,7 @@ import {
   NotFoundException,
   BadRequestException,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -58,8 +59,16 @@ type RatingsSummaryResult = {
   ratingBreakdown: RatingsSummaryBreakdownItem[];
 };
 
+type ReviewBadgeStatus = {
+  unreadCount: number;
+  pendingCount: number;
+  hasUnread: boolean;
+};
+
 @Injectable()
 export class ReviewService {
+  private readonly logger = new Logger(ReviewService.name);
+
   constructor(
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     @InjectModel(Form.name) private formModel: Model<FormDocument>,
@@ -72,6 +81,16 @@ export class ReviewService {
     private msg91Service: Msg91Service,
     private notificationsService: NotificationsService,
   ) {}
+
+  private buildOpenComplaintMatch(): Record<string, unknown> {
+    return {
+      $or: [
+        { complaintStatus: ComplaintStatus.PENDING },
+        { complaintStatus: { $exists: false } },
+        { complaintStatus: null },
+      ],
+    };
+  }
 
   async submitWithOtp(
     dto: SubmitReviewWithOtpDto,
@@ -308,6 +327,22 @@ export class ReviewService {
       if (query.userId) {
         matchStage.userId = new Types.ObjectId(query.userId);
       }
+      if (typeof query.isComplaint === 'boolean') {
+        matchStage.isComplaint = query.isComplaint;
+      }
+      if (query.complaintStatus === 'open') {
+        Object.assign(matchStage, this.buildOpenComplaintMatch());
+      } else if (query.complaintStatus) {
+        matchStage.complaintStatus = query.complaintStatus;
+      }
+      if (query.unresolvedOnly || query.excludeResolved) {
+        Object.assign(matchStage, this.buildOpenComplaintMatch());
+      }
+      if (query.severity === 'critical') {
+        matchStage.overallRating = { $lt: 2 };
+      } else if (query.severity === 'concern') {
+        matchStage.overallRating = { $gte: 2, $lt: 3.5 };
+      }
 
       const lookupStages = [
         {
@@ -460,6 +495,45 @@ export class ReviewService {
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch reviews',
+      );
+    }
+  }
+
+  async getBadgeStatus(userId: string): Promise<ReviewBadgeStatus> {
+    try {
+      const badgeScope = await this.getBadgeScopeForUser(userId);
+      if (badgeScope.scopeType === 'none') {
+        return { unreadCount: 0, pendingCount: 0, hasUnread: false };
+      }
+
+      const pendingMatch = this.buildPendingBadgeMatch(badgeScope.outletIds);
+      const unreadMatch = {
+        ...pendingMatch,
+        readBy: {
+          $not: {
+            $elemMatch: {
+              userId: new Types.ObjectId(userId),
+            },
+          },
+        },
+      };
+
+      const [pendingCount, unreadCount] = await Promise.all([
+        this.reviewModel.countDocuments(pendingMatch).exec(),
+        this.reviewModel.countDocuments(unreadMatch).exec(),
+      ]);
+
+      return {
+        unreadCount,
+        pendingCount,
+        hasUnread: unreadCount > 0,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.error('Failed to fetch review badge status', error);
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch review badge status',
       );
     }
   }
@@ -686,6 +760,69 @@ export class ReviewService {
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch review',
+      );
+    }
+  }
+
+  async markReviewAsRead(
+    reviewId: string,
+    userId: string,
+  ): Promise<ReviewBadgeStatus> {
+    try {
+      if (!Types.ObjectId.isValid(reviewId)) {
+        throw new BadRequestException('Invalid review ID');
+      }
+
+      const badgeScope = await this.getBadgeScopeForUser(userId);
+      if (badgeScope.scopeType === 'none') {
+        return { unreadCount: 0, pendingCount: 0, hasUnread: false };
+      }
+
+      const accessMatch = this.buildAccessibleReviewMatch(
+        reviewId,
+        badgeScope.outletIds,
+      );
+      const existing = await this.reviewModel
+        .findOne(accessMatch)
+        .select('_id')
+        .lean()
+        .exec();
+      if (!existing) {
+        throw new NotFoundException('Review not found');
+      }
+
+      await this.reviewModel
+        .updateOne(
+          {
+            ...accessMatch,
+            readBy: {
+              $not: {
+                $elemMatch: {
+                  userId: new Types.ObjectId(userId),
+                },
+              },
+            },
+          },
+          {
+            $push: {
+              readBy: {
+                userId: new Types.ObjectId(userId),
+                readAt: new Date(),
+              },
+            },
+          },
+        )
+        .exec();
+
+      this.logger.log(`Marked review ${reviewId} as read for user ${userId}.`);
+
+      return this.getBadgeStatus(userId);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.error('Failed to mark review as read', error);
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to mark review as read',
       );
     }
   }
@@ -986,5 +1123,74 @@ export class ReviewService {
           'Failed to resolve complaint',
       );
     }
+  }
+
+  private async getBadgeScopeForUser(userId: string): Promise<{
+    scopeType: 'global' | 'outlets' | 'none';
+    outletIds: Types.ObjectId[];
+  }> {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    const user = await this.userModel
+      .findOne({ _id: new Types.ObjectId(userId), isDeleted: false })
+      .select('_id role outlets')
+      .lean()
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role === UserRole.ADMIN) {
+      return { scopeType: 'global', outletIds: [] };
+    }
+
+    if (user.role !== UserRole.MANAGER) {
+      return { scopeType: 'none', outletIds: [] };
+    }
+
+    const outletIds = new Set<string>(
+      (user.outlets ?? []).map((id) => id.toString()),
+    );
+
+    const managerOutlets = await this.outletModel
+      .find({
+        isDeleted: false,
+        managerIds: new Types.ObjectId(userId),
+      } as Record<string, unknown>)
+      .select('_id')
+      .lean()
+      .exec();
+
+    managerOutlets.forEach((outlet) => outletIds.add(outlet._id.toString()));
+
+    return {
+      scopeType: outletIds.size > 0 ? 'outlets' : 'none',
+      outletIds: Array.from(outletIds).map((id) => new Types.ObjectId(id)),
+    };
+  }
+
+  private buildPendingBadgeMatch(
+    outletIds: Types.ObjectId[],
+  ): Record<string, unknown> {
+    return {
+      isDeleted: false,
+      isComplaint: true,
+      complaintStatus: ComplaintStatus.PENDING,
+      ...(outletIds.length > 0 ? { outletId: { $in: outletIds } } : {}),
+    };
+  }
+
+  private buildAccessibleReviewMatch(
+    reviewId: string,
+    outletIds: Types.ObjectId[],
+  ): Record<string, unknown> {
+    return {
+      _id: new Types.ObjectId(reviewId),
+      isDeleted: false,
+      ...(outletIds.length > 0 ? { outletId: { $in: outletIds } } : {}),
+    };
   }
 }
