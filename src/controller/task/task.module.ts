@@ -20,6 +20,7 @@ import {
 import { TaskController } from './task.controller';
 import { TaskService } from './task.service';
 import { TaskEventService } from './services/task-event.service';
+import { TaskThreadQueryService } from './services/task-thread-query.service';
 import { TaskRecurrenceService } from './task-recurrence.service';
 import { TaskReminderService } from './task-reminder.service';
 import { NotificationsModule } from '../../notifications/notifications.module';
@@ -42,9 +43,10 @@ import { NotificationsModule } from '../../notifications/notifications.module';
   providers: [
     TaskService,
     TaskEventService,
+    TaskThreadQueryService,
     TaskRecurrenceService,
     TaskReminderService,
   ],
-  exports: [TaskService, TaskEventService],
+  exports: [TaskService, TaskEventService, TaskThreadQueryService],
 })
 export class TaskModule {}
