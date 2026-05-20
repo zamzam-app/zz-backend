@@ -19,6 +19,7 @@ import {
 } from './entities/task-attachment.entity';
 import { TaskController } from './task.controller';
 import { TaskService } from './task.service';
+import { TaskEventService } from './services/task-event.service';
 import { TaskRecurrenceService } from './task-recurrence.service';
 import { TaskReminderService } from './task-reminder.service';
 import { NotificationsModule } from '../../notifications/notifications.module';
@@ -38,7 +39,12 @@ import { NotificationsModule } from '../../notifications/notifications.module';
     NotificationsModule,
   ],
   controllers: [TaskController],
-  providers: [TaskService, TaskRecurrenceService, TaskReminderService],
-  exports: [TaskService],
+  providers: [
+    TaskService,
+    TaskEventService,
+    TaskRecurrenceService,
+    TaskReminderService,
+  ],
+  exports: [TaskService, TaskEventService],
 })
 export class TaskModule {}
