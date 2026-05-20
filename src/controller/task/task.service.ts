@@ -31,6 +31,7 @@ import {
   FindAllTasksResult,
   TaskBoardItem,
 } from './interfaces/query-task.interface';
+import { buildTaskBadges } from './task-badge.util';
 
 const TASK_STATUS_OPEN = TaskStatus.OPEN;
 const TASK_STATUS_COMPLETED = TaskStatus.COMPLETED;
@@ -219,7 +220,7 @@ export class TaskService {
 
       const total = result.totalCount[0]?.count ?? 0;
       return {
-        data: result.data,
+        data: result.data.map((task) => this.decorateTaskBoardItem(task)),
         meta: {
           total,
           currentPage: page,
@@ -1112,6 +1113,13 @@ export class TaskService {
       .aggregate<TaskBoardItem>(pipeline)
       .exec();
 
-    return raw ?? null;
+    return raw ? this.decorateTaskBoardItem(raw) : null;
+  }
+
+  private decorateTaskBoardItem(task: TaskBoardItem): TaskBoardItem {
+    return {
+      ...task,
+      badges: buildTaskBadges(task),
+    };
   }
 }
