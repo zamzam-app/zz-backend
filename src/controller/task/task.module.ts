@@ -23,6 +23,7 @@ import { TaskEventService } from './services/task-event.service';
 import { TaskThreadQueryService } from './services/task-thread-query.service';
 import { TaskDelegationService } from './services/task-delegation.service';
 import { TaskViewService } from './services/task-view.service';
+import { TaskAttachmentService } from './services/task-attachment.service';
 import { TaskRecurrenceService } from './task-recurrence.service';
 import { TaskReminderService } from './task-reminder.service';
 import { NotificationsModule } from '../../notifications/notifications.module';
@@ -48,9 +49,17 @@ import { NotificationsModule } from '../../notifications/notifications.module';
     TaskThreadQueryService,
     TaskDelegationService,
     TaskViewService,
+    TaskAttachmentService,
     TaskRecurrenceService,
     TaskReminderService,
   ],
-  exports: [TaskService, TaskEventService, TaskThreadQueryService, TaskDelegationService, TaskViewService],
+  exports: [
+    TaskService,
+    TaskEventService,
+    TaskThreadQueryService,
+    TaskDelegationService,
+    TaskViewService,
+    TaskAttachmentService,
+  ],
 })
 export class TaskModule {}

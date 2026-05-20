@@ -2,10 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Task, TaskDocument } from '../entities/task.entity';
-import {
-  TaskView,
-  TaskViewDocument,
-} from '../entities/task-view.entity';
+import { TaskView, TaskViewDocument } from '../entities/task-view.entity';
 import { User, UserDocument } from '../../users/entities/user.entity';
 
 // ---------------------------------------------------------------------------
@@ -349,9 +346,7 @@ export class TaskViewService {
    * only needs to know *which* tasks have unread (e.g., to highlight them
    * in a task list) without the actual counts.
    */
-  async getUnreadTaskIds(
-    userId: Types.ObjectId | string,
-  ): Promise<string[]> {
+  async getUnreadTaskIds(userId: Types.ObjectId | string): Promise<string[]> {
     const userIdStr = new Types.ObjectId(userId).toString();
 
     const tasks = await this.taskModel
@@ -365,8 +360,8 @@ export class TaskViewService {
       .lean()
       .exec();
 
-    return (tasks as unknown as Array<Record<string, unknown>>).map(
-      (task) => (task._id as Types.ObjectId).toString(),
+    return (tasks as unknown as Array<Record<string, unknown>>).map((task) =>
+      (task._id as Types.ObjectId).toString(),
     );
   }
 
@@ -430,9 +425,7 @@ export class TaskViewService {
 
     const tasks = await this.taskModel
       .find({ _id: { $in: taskIds } } as Record<string, unknown>)
-      .select(
-        '_id description status priority dueDate dueTime unreadMap',
-      )
+      .select('_id description status priority dueDate dueTime unreadMap')
       .lean()
       .exec();
 

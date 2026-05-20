@@ -226,7 +226,9 @@ export class TaskDelegationService {
       actorId,
     );
 
-    return { event: result as unknown as { event: unknown; task: TaskDocument } };
+    return {
+      event: result as unknown as { event: unknown; task: TaskDocument },
+    };
   }
 
   /**
@@ -275,7 +277,9 @@ export class TaskDelegationService {
       actorId,
     );
 
-    return { event: result as unknown as { event: unknown; task: TaskDocument } };
+    return {
+      event: result as unknown as { event: unknown; task: TaskDocument },
+    };
   }
 
   // -----------------------------------------------------------------------
@@ -346,8 +350,7 @@ export class TaskDelegationService {
     return tasks.map((t) => ({
       taskId: t._id.toString(),
       delegatedBy: t.activeDelegation?.delegatedBy?.toString() ?? '',
-      delegatedAt:
-        t.activeDelegation?.delegatedAt?.toISOString?.() ?? '',
+      delegatedAt: t.activeDelegation?.delegatedAt?.toISOString?.() ?? '',
     }));
   }
 
@@ -406,9 +409,7 @@ export class TaskDelegationService {
     // 1. Prevent self-delegation
     // --------------------------------------------------
     if (delegatedBy.toString() === delegatedTo.toString()) {
-      throw new BadRequestException(
-        'Cannot delegate a task to yourself',
-      );
+      throw new BadRequestException('Cannot delegate a task to yourself');
     }
 
     // --------------------------------------------------
@@ -440,11 +441,7 @@ export class TaskDelegationService {
     // 4. Validate outlet access (if task belongs to an outlet)
     // --------------------------------------------------
     if (task.outletId) {
-      await this.validateOutletAccess(
-        delegatedTo,
-        task.outletId,
-        targetUser,
-      );
+      await this.validateOutletAccess(delegatedTo, task.outletId, targetUser);
     }
   }
 
@@ -484,9 +481,7 @@ export class TaskDelegationService {
       .exec();
 
     if (outlet) {
-      const managerIds = (outlet.managerIds ?? []).map((id) =>
-        id.toString(),
-      );
+      const managerIds = (outlet.managerIds ?? []).map((id) => id.toString());
       if (managerIds.includes(userId.toString())) {
         return;
       }
