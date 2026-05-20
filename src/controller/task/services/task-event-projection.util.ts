@@ -195,30 +195,36 @@ export function computeProjection(
 
     case TaskEventType.REASSIGNED: {
       const toId = data.to as string;
+      const hasDelegationMeta = !!data.delegatedTo && !!data.delegatedBy;
+      const isRevoke = data.revokeDelegation === true;
+
       if (toId) {
         $set['activeOwner'] = new Types.ObjectId(toId);
       }
 
-      // If delegation details are in the event data, set activeDelegation
-      // sub-document atomically (used by delegateTask).
-      if (data.delegatedTo && data.delegatedBy) {
+      if (hasDelegationMeta) {
+        // Delegation: set activeOwner to the delegatee AND populate
+        // activeDelegation sub-document.
         $set['activeDelegation'] = {
           delegatedTo: new Types.ObjectId(data.delegatedTo as string),
           delegatedBy: new Types.ObjectId(data.delegatedBy as string),
           delegatedAt: now,
         };
-      }
-
-      // If the delegation is being revoked, clear activeDelegation
-      // and restore the activeOwner to the original delegator or
-      // the task creator.
-      if (data.revokeDelegation === true) {
+      } else if (isRevoke) {
+        // Revocation: clear activeDelegation and restore activeOwner to
+        // the original delegator (or task creator if no delegator).
         $unset['activeDelegation'] = '';
         const restoreTo =
           currentTask.activeDelegation?.delegatedBy ?? currentTask.createdBy;
         if (restoreTo) {
           $set['activeOwner'] = restoreTo;
         }
+      } else if (toId) {
+        // Full reassignment (ownership transfer, no delegation):
+        // Set activeOwner to the new owner and clear any existing
+        // activeDelegation, since the previous delegator is no longer
+        // responsible for this task.
+        $unset['activeDelegation'] = '';
       }
       break;
     }
