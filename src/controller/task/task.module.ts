@@ -7,6 +7,16 @@ import {
 } from '../task-category/entities/task-category.entity';
 import { User, UserSchema } from '../users/entities/user.entity';
 import { Task, TaskSchema } from './entities/task.entity';
+import { TaskEvent, TaskEventSchema } from './entities/task-event.entity';
+import {
+  TaskDelegation,
+  TaskDelegationSchema,
+} from './entities/task-delegation.entity';
+import { TaskView, TaskViewSchema } from './entities/task-view.entity';
+import {
+  TaskAttachment,
+  TaskAttachmentSchema,
+} from './entities/task-attachment.entity';
 import { TaskController } from './task.controller';
 import { TaskService } from './task.service';
 import { TaskRecurrenceService } from './task-recurrence.service';
@@ -17,6 +27,10 @@ import { NotificationsModule } from '../../notifications/notifications.module';
   imports: [
     MongooseModule.forFeature([
       { name: Task.name, schema: TaskSchema },
+      { name: TaskEvent.name, schema: TaskEventSchema },
+      { name: TaskDelegation.name, schema: TaskDelegationSchema },
+      { name: TaskView.name, schema: TaskViewSchema },
+      { name: TaskAttachment.name, schema: TaskAttachmentSchema },
       { name: Outlet.name, schema: OutletSchema },
       { name: TaskCategory.name, schema: TaskCategorySchema },
       { name: User.name, schema: UserSchema },
