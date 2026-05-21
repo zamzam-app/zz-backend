@@ -439,17 +439,14 @@ export class AnalyticsService {
             $facet: {
               totalOpenIncidents: [
                 {
-                  $match: this.buildOpenComplaintReviewMatch(
-                    selectedRangeMatch,
-                  ),
+                  $match:
+                    this.buildOpenComplaintReviewMatch(selectedRangeMatch),
                 },
                 { $count: 'count' },
               ],
               criticalIssues: [
                 {
-                  $match: this.buildOpenCriticalReviewMatch(
-                    selectedRangeMatch,
-                  ),
+                  $match: this.buildOpenCriticalReviewMatch(selectedRangeMatch),
                 },
                 { $count: 'count' },
               ],

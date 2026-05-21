@@ -1,10 +1,16 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { TaskPriority, TaskStatus, TaskRecurrenceType } from '../task.enums';
+import {
+  TaskPriority,
+  TaskStatus,
+  TaskRecurrenceType,
+  TaskEventType,
+} from '../task.enums';
 
 export type TaskDocument = HydratedDocument<Task>;
 
+// To avoid duplicate push notifications when cron job runs.
 @Schema({ _id: false })
 export class TaskReminderNotifications {
   @Prop({ type: Date, default: null })
@@ -47,6 +53,49 @@ export class TaskSubmission {
   updatedAt!: Date;
 }
 
+// ---------------------------------------------------------------------------
+// Thread summary sub-document (denormalized read-model fields)
+// ---------------------------------------------------------------------------
+
+@Schema({ _id: false })
+export class TaskThreadStats {
+  @Prop({ type: Number, default: 0, min: 0 })
+  eventCount!: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  attachmentCount!: number;
+
+  @Prop({ type: Date, default: null })
+  lastEventAt?: Date | null;
+}
+
+@Schema({ _id: false })
+export class TaskLastEvent {
+  @Prop({ type: String, enum: TaskEventType, required: true })
+  type!: TaskEventType;
+
+  @Prop({ type: String, trim: true, default: '' })
+  description?: string;
+
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
+  by!: Types.ObjectId;
+
+  @Prop({ type: Date, required: true })
+  at!: Date;
+}
+
+@Schema({ _id: false })
+export class TaskActiveDelegation {
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
+  delegatedTo!: Types.ObjectId;
+
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
+  delegatedBy!: Types.ObjectId;
+
+  @Prop({ type: Date, required: true })
+  delegatedAt!: Date;
+}
+
 @Schema({ timestamps: true })
 export class Task extends BaseEntity {
   @Prop({ type: String, required: true, trim: true })
@@ -57,7 +106,7 @@ export class Task extends BaseEntity {
     ref: 'TaskCategory',
     required: true,
   })
-  taskCategoryId!: string;
+  taskCategoryId!: Types.ObjectId;
 
   @Prop({
     type: String,
@@ -106,23 +155,25 @@ export class Task extends BaseEntity {
     required: false,
     default: null,
   })
-  outletId!: string;
+  outletId!: Types.ObjectId | null;
 
   @Prop({
     type: [{ type: MongooseSchema.Types.ObjectId, ref: 'User' }],
     default: [],
   })
-  assigneeIds!: string[];
+  assigneeIds!: Types.ObjectId[];
 
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'User',
     required: true,
   })
-  createdBy!: string;
+  createdBy!: Types.ObjectId;
 
   @Prop({ type: Date, required: false, default: null })
   completedAt?: Date | null;
+
+  // -- v1 submission fields (kept for backward compat; migrated to events over time) --
 
   @Prop({ type: TaskSubmission, required: false })
   adminSubmission?: TaskSubmission;
@@ -132,10 +183,63 @@ export class Task extends BaseEntity {
 
   @Prop({ type: TaskReminderNotifications, default: () => ({}) })
   reminderNotifications?: TaskReminderNotifications;
+
+  // --------------------------------------------------
+  // v2 — Thread / Event-based fields
+  // --------------------------------------------------
+
+  /** The current "owner" (the user primarily responsible for this task). */
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    required: false,
+    default: null,
+  })
+  activeOwner?: Types.ObjectId | null;
+
+  /** Active delegation information (null when not delegated). */
+  @Prop({ type: TaskActiveDelegation, required: false, default: null })
+  activeDelegation?: TaskActiveDelegation | null;
+
+  /** Denormalized thread statistics updated by event projections. */
+  @Prop({ type: TaskThreadStats, default: () => ({}) })
+  threadStats!: TaskThreadStats;
+
+  /** Snapshot of the most recent event (used for timeline previews). */
+  @Prop({ type: TaskLastEvent, required: false })
+  lastEvent?: TaskLastEvent;
+
+  /**
+   * Optimistic concurrency version.
+   * Incremented on every event write to prevent stale updates.
+   * Clients should read the version before mutating and pass it back.
+   */
+  @Prop({ type: Number, default: 0, min: 0 })
+  version!: number;
+
+  /**
+   * Per-user unread event count.
+   * Key: User ObjectId as string, Value: number of unseen events.
+   * Cleared when a user creates a TaskView record for this task.
+   */
+  @Prop({ type: Map, of: Number, default: new Map() })
+  unreadMap!: Map<string, number>;
 }
 
 export const TaskSchema = SchemaFactory.createForClass(Task);
 
+// -- Indexes --
+// v1 indexes (preserved)
 TaskSchema.index({ isDeleted: 1, outletId: 1, status: 1, dueDate: 1 });
 TaskSchema.index({ isDeleted: 1, assigneeIds: 1, status: 1, dueDate: 1 });
 TaskSchema.index({ isDeleted: 1, taskCategoryId: 1, priority: 1 });
+
+// v2 indexes
+TaskSchema.index({ isDeleted: 1, activeOwner: 1, status: 1 });
+TaskSchema.index({
+  isDeleted: 1,
+  'activeDelegation.delegatedTo': 1,
+  status: 1,
+});
+TaskSchema.index({ isDeleted: 1, 'threadStats.lastEventAt': -1 });
+TaskSchema.index({ version: 1 });
