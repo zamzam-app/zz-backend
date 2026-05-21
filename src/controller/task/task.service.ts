@@ -199,17 +199,7 @@ export class TaskService {
 
       const lookupStages = this.taskLookupStages();
 
-      const sortStages: PipelineStage[] = [
-        {
-          $addFields: {
-            _completedSort: {
-              $cond: [{ $eq: ['$status', TASK_STATUS_COMPLETED] }, 1, 0],
-            },
-          },
-        },
-        { $sort: { _completedSort: 1, dueDate: 1, dueTime: 1, createdAt: -1 } },
-        { $project: { _completedSort: 0 } },
-      ];
+      const sortStages: PipelineStage[] = [{ $sort: { createdAt: -1 } }];
 
       const dataPipeline: PipelineStage[] = [
         ...sortStages,
