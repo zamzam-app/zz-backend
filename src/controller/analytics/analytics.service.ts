@@ -3,6 +3,7 @@ import {
   HttpException,
   Injectable,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -126,10 +127,52 @@ type AnalyticsRangeQuery = {
 
 @Injectable()
 export class AnalyticsService {
+  private readonly logger = new Logger(AnalyticsService.name);
+
   constructor(
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     @InjectModel(Outlet.name) private outletModel: Model<OutletDocument>,
   ) {}
+
+  private buildUnresolvedComplaintStatusMatch(): Record<string, unknown> {
+    return {
+      $or: [
+        { complaintStatus: { $exists: false } },
+        { complaintStatus: null },
+        {
+          complaintStatus: {
+            $nin: [
+              ComplaintStatus.RESOLVED,
+              ComplaintStatus.DISMISSED,
+              'closed',
+              'completed',
+            ],
+          },
+        },
+      ],
+    };
+  }
+
+  private buildOpenComplaintReviewMatch(
+    rangeMatch: Record<string, unknown>,
+    extraMatch: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      isDeleted: false,
+      isComplaint: true,
+      ...rangeMatch,
+      ...extraMatch,
+      ...this.buildUnresolvedComplaintStatusMatch(),
+    };
+  }
+
+  private buildOpenCriticalReviewMatch(
+    rangeMatch: Record<string, unknown>,
+  ): Record<string, unknown> {
+    return this.buildOpenComplaintReviewMatch(rangeMatch, {
+      overallRating: { $lt: 2 },
+    });
+  }
 
   async getGlobalCsat(query: QueryGlobalCsatDto): Promise<GlobalCsatResult> {
     try {
@@ -302,6 +345,10 @@ export class AnalyticsService {
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
+      this.logger.error(
+        'Failed to fetch global CSAT',
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch global CSAT',
@@ -346,6 +393,10 @@ export class AnalyticsService {
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
+      this.logger.error(
+        'Failed to fetch CSAT trendline',
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch CSAT trendline',
@@ -362,7 +413,6 @@ export class AnalyticsService {
 
       const selectedRangeMatch: Record<string, unknown> = {
         isDeleted: false,
-        isComplaint: true,
       };
 
       if (appliedStartDate && appliedEndDate) {
@@ -389,20 +439,14 @@ export class AnalyticsService {
             $facet: {
               totalOpenIncidents: [
                 {
-                  $match: {
-                    ...selectedRangeMatch,
-                    complaintStatus: ComplaintStatus.PENDING,
-                  },
+                  $match:
+                    this.buildOpenComplaintReviewMatch(selectedRangeMatch),
                 },
                 { $count: 'count' },
               ],
               criticalIssues: [
                 {
-                  $match: {
-                    ...selectedRangeMatch,
-                    complaintStatus: ComplaintStatus.PENDING,
-                    overallRating: { $lt: 2 },
-                  },
+                  $match: this.buildOpenCriticalReviewMatch(selectedRangeMatch),
                 },
                 { $count: 'count' },
               ],
@@ -438,6 +482,10 @@ export class AnalyticsService {
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
+      this.logger.error(
+        'Failed to fetch incidents overview',
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch incidents overview',
@@ -479,22 +527,19 @@ export class AnalyticsService {
                 {
                   $facet: {
                     totalFeedbacks: [
-                      ...(createdAtMatch
-                        ? [{ $match: { createdAt: createdAtMatch } }]
-                        : []),
+                      {
+                        $match: this.buildOpenComplaintReviewMatch(
+                          createdAtMatch ? { createdAt: createdAtMatch } : {},
+                        ),
+                      },
                       { $count: 'count' },
                     ],
                     negativeFeedbacks: [
                       {
-                        $match: {
-                          $or: [
-                            { isComplaint: true },
-                            { overallRating: { $lt: 2.5 } },
-                          ],
-                          ...(createdAtMatch
-                            ? { createdAt: createdAtMatch }
-                            : {}),
-                        },
+                        $match: this.buildOpenComplaintReviewMatch(
+                          createdAtMatch ? { createdAt: createdAtMatch } : {},
+                          { overallRating: { $lt: 2.5 } },
+                        ),
                       },
                       { $count: 'count' },
                     ],
@@ -604,6 +649,10 @@ export class AnalyticsService {
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
+      this.logger.error(
+        'Failed to fetch outlet feedback summary',
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch outlet feedback summary',
@@ -653,6 +702,10 @@ export class AnalyticsService {
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
+      this.logger.error(
+        'Failed to fetch quick insights',
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch quick insights',
@@ -1046,6 +1099,10 @@ export class AnalyticsService {
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
+      this.logger.error(
+        'Failed to fetch franchise analytics',
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new InternalServerErrorException(
         (error instanceof Error ? error.message : undefined) ??
           'Failed to fetch franchise analytics',
@@ -1324,11 +1381,9 @@ export class AnalyticsService {
     const rows = await this.reviewModel
       .aggregate<{ window: number; count: number }>([
         {
-          $match: {
-            isDeleted: false,
-            $or: [{ isComplaint: true }, { overallRating: { $lt: 2.5 } }],
-            ...rangeMatch,
-          },
+          $match: this.buildOpenComplaintReviewMatch(rangeMatch, {
+            overallRating: { $lt: 2.5 },
+          }),
         },
         {
           $project: {
@@ -1558,12 +1613,7 @@ export class AnalyticsService {
         criticalIssues: number;
       }>([
         {
-          $match: {
-            isDeleted: false,
-            isComplaint: true,
-            overallRating: { $lt: 2 },
-            ...rangeMatch,
-          },
+          $match: this.buildOpenCriticalReviewMatch(rangeMatch),
         },
         {
           $group: {

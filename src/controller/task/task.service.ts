@@ -26,11 +26,14 @@ import {
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { Task, TaskDocument } from './entities/task.entity';
-import { TaskPriority, TaskStatus } from './task.enums';
+import { TaskPriority, TaskStatus, TaskEventType } from './task.enums';
 import {
   FindAllTasksResult,
   TaskBoardItem,
 } from './interfaces/query-task.interface';
+import { buildTaskBadges } from './task-badge.util';
+import { TaskDelegationService } from './services/task-delegation.service';
+import { TaskEventService } from './services/task-event.service';
 
 const TASK_STATUS_OPEN = TaskStatus.OPEN;
 const TASK_STATUS_COMPLETED = TaskStatus.COMPLETED;
@@ -58,6 +61,8 @@ export class TaskService {
     private taskCategoryModel: Model<TaskCategoryDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private notificationsService: NotificationsService,
+    private taskDelegationService: TaskDelegationService,
+    private taskEventService: TaskEventService,
   ) {}
 
   async create(
@@ -124,6 +129,29 @@ export class TaskService {
       });
 
       const saved = await doc.save();
+
+      if (assigneeIds.length > 0) {
+        try {
+          await this.taskDelegationService.delegateTask(
+            saved._id.toString(),
+            createdByUserId,
+            assigneeIds[0],
+            'Initial delegation',
+          );
+        } catch (delegationError) {
+          await this.taskModel.deleteOne({ _id: saved._id }).exec();
+          if (delegationError instanceof HttpException) {
+            throw delegationError;
+          }
+          throw new InternalServerErrorException(
+            'Task created but initial delegation failed: ' +
+              (delegationError instanceof Error
+                ? delegationError.message
+                : String(delegationError)),
+          );
+        }
+      }
+
       const one = await this.findOneTaskById(saved._id.toString(), jwtUser);
       if (!one) {
         throw new InternalServerErrorException('Failed to load created task');
@@ -171,17 +199,7 @@ export class TaskService {
 
       const lookupStages = this.taskLookupStages();
 
-      const sortStages: PipelineStage[] = [
-        {
-          $addFields: {
-            _completedSort: {
-              $cond: [{ $eq: ['$status', TASK_STATUS_COMPLETED] }, 1, 0],
-            },
-          },
-        },
-        { $sort: { _completedSort: 1, dueDate: 1, dueTime: 1, createdAt: -1 } },
-        { $project: { _completedSort: 0 } },
-      ];
+      const sortStages: PipelineStage[] = [{ $sort: { createdAt: -1 } }];
 
       const dataPipeline: PipelineStage[] = [
         ...sortStages,
@@ -219,7 +237,7 @@ export class TaskService {
 
       const total = result.totalCount[0]?.count ?? 0;
       return {
-        data: result.data,
+        data: result.data.map((task) => this.decorateTaskBoardItem(task)),
         meta: {
           total,
           currentPage: page,
@@ -536,15 +554,10 @@ export class TaskService {
         }
       }
 
-      let nextStatus = existing.status;
-      if (dto.status !== undefined) {
-        $set.status = dto.status;
-        nextStatus = dto.status;
-        $set.completedAt =
-          nextStatus === TASK_STATUS_COMPLETED ? new Date() : null;
-      }
+      const statusChanged =
+        dto.status !== undefined && dto.status !== existing.status;
 
-      if (Object.keys($set).length === 0) {
+      if (Object.keys($set).length === 0 && !statusChanged) {
         const current = await this.findOneTaskById(id, jwtUser);
         if (!current) {
           throw new NotFoundException('Task not found');
@@ -552,9 +565,35 @@ export class TaskService {
         return current;
       }
 
-      await this.taskModel
-        .updateOne({ _id: id, isDeleted: false }, { $set })
-        .exec();
+      if (Object.keys($set).length > 0) {
+        await this.taskModel
+          .updateOne({ _id: id, isDeleted: false }, { $set })
+          .exec();
+      }
+
+      if (statusChanged) {
+        const eventType =
+          dto.status === TaskStatus.COMPLETED
+            ? TaskEventType.COMPLETED
+            : dto.status === TaskStatus.OPEN &&
+                existing.status === TaskStatus.COMPLETED
+              ? TaskEventType.REOPENED
+              : TaskEventType.STATUS_CHANGED;
+
+        const eventData =
+          eventType === TaskEventType.COMPLETED
+            ? { completedAt: new Date() }
+            : eventType === TaskEventType.REOPENED
+              ? { previousStatus: existing.status }
+              : { from: existing.status, to: dto.status };
+
+        await this.taskEventService.appendEvent(
+          id,
+          eventType,
+          eventData,
+          jwtUser.sub,
+        );
+      }
 
       const updated = await this.findOneTaskById(id, jwtUser);
       if (!updated) {
@@ -1112,6 +1151,13 @@ export class TaskService {
       .aggregate<TaskBoardItem>(pipeline)
       .exec();
 
-    return raw ?? null;
+    return raw ? this.decorateTaskBoardItem(raw) : null;
+  }
+
+  private decorateTaskBoardItem(task: TaskBoardItem): TaskBoardItem {
+    return {
+      ...task,
+      badges: buildTaskBadges(task),
+    };
   }
 }
