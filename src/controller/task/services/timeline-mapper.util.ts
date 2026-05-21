@@ -276,6 +276,16 @@ export function extractUserIdsFromEvents(
     if (event.createdBy) {
       userIds.add(event.createdBy.toString());
     }
+    if (event.data) {
+      const data = event.data;
+      if (data.delegatedTo)
+        userIds.add((data.delegatedTo as { toString(): string }).toString());
+      if (data.delegatedBy)
+        userIds.add((data.delegatedBy as { toString(): string }).toString());
+      if (data.to) userIds.add((data.to as { toString(): string }).toString());
+      if (data.from)
+        userIds.add((data.from as { toString(): string }).toString());
+    }
   }
   return Array.from(userIds);
 }

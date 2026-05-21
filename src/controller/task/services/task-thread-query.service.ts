@@ -234,6 +234,7 @@ export class TaskThreadQueryService {
   async getTaskDetailWithTimeline(
     taskId: Types.ObjectId | string,
     initialTimelineLimit: number = 20,
+    userId?: Types.ObjectId | string,
   ): Promise<TaskDetailTimelineResponse> {
     const taskIdObj = new Types.ObjectId(taskId);
     const limit = Math.min(initialTimelineLimit, 50);
@@ -317,11 +318,11 @@ export class TaskThreadQueryService {
       );
     }
 
-    // --------------------------------------------------
-    // 5. Serialize
-    // --------------------------------------------------
-    // unreadCount will be resolved by the controller using the current user's ID
-    const unreadCount = 0;
+    const unreadMap = task.unreadMap as unknown as
+      | Record<string, number>
+      | undefined;
+    const unreadCount =
+      userId && unreadMap ? (unreadMap[userId.toString()] ?? 0) : 0;
 
     const serializedEvents = eventDocs.map((event) =>
       serializeTimelineEvent(event, actorMap, attachmentMap),

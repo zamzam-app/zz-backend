@@ -161,12 +161,19 @@ export class TaskEventService {
       unreadIncrements[`unreadMap.${uid}`] = 1;
     }
 
+    const updateQuery: Record<string, any> = { _id: taskIdObj };
+    if (!task.version) {
+      updateQuery.$or = [{ version: 0 }, { version: { $exists: false } }];
+    } else {
+      updateQuery.version = task.version;
+    }
+
     // --------------------------------------------------
     // 7. Atomically update the Task read-model
     // --------------------------------------------------
     const updatedTask = await this.taskModel
       .findOneAndUpdate(
-        { _id: taskIdObj, version: task.version },
+        updateQuery,
         {
           $set: {
             ...projection.$set,
