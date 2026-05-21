@@ -12,9 +12,12 @@ import { ReviewService } from './review.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
 import { QueryRatingsSummaryDto } from './dto/query-ratings-summary.dto';
+import { MarkReviewReadDto } from './dto/mark-review-read.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import {
+  ApiReviewBadgeStatus,
+  ApiReviewMarkRead,
   ApiReviewRatingsSummary,
   ApiReviewResolveComplaint,
 } from './dto/review.swagger';
@@ -44,6 +47,12 @@ export class ReviewController {
     return this.reviewService.findAll(query);
   }
 
+  @Get('badge-status/:userId')
+  @ApiReviewBadgeStatus()
+  getBadgeStatus(@Param('userId') userId: string) {
+    return this.reviewService.getBadgeStatus(userId);
+  }
+
   @Public()
   @Get('ratings-summary')
   @ApiReviewRatingsSummary()
@@ -58,6 +67,15 @@ export class ReviewController {
     @Body() body: ResolveComplaintDto,
   ) {
     return this.reviewService.resolveComplaint(reviewId, body);
+  }
+
+  @Post(':reviewId/mark-read')
+  @ApiReviewMarkRead()
+  markRead(
+    @Param('reviewId') reviewId: string,
+    @Body() body: MarkReviewReadDto,
+  ) {
+    return this.reviewService.markReviewAsRead(reviewId, body.userId);
   }
 
   @Get(':id')

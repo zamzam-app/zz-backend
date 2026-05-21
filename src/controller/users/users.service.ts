@@ -11,7 +11,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserDocument } from './entities/user.entity';
-import { Model, Types } from 'mongoose';
+import { Model, Types, PipelineStage } from 'mongoose';
 import { FindAllUsersResult } from './interfaces/query-user.interface';
 import { UserRole } from './interfaces/user.interface';
 import * as bcrypt from 'bcrypt';
@@ -123,7 +123,35 @@ export class UsersService {
       const limit = query.limit;
       const skip = limit ? (page - 1) * limit : 0;
 
-      const dataPipeline = limit ? [{ $skip: skip }, { $limit: limit }] : [];
+      const dataPipeline: PipelineStage.FacetPipelineStage[] = [];
+      if (limit) {
+        dataPipeline.push({ $skip: skip }, { $limit: limit });
+      }
+      dataPipeline.push(
+        {
+          $lookup: {
+            from: 'outlets',
+            localField: '_id',
+            foreignField: 'managerIds',
+            as: 'associatedOutlets',
+          },
+        },
+        {
+          $addFields: {
+            outlets: {
+              $setUnion: [
+                { $ifNull: ['$outlets', []] },
+                { $ifNull: ['$associatedOutlets._id', []] },
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            associatedOutlets: 0,
+          },
+        },
+      );
 
       const matchStage: Record<string, unknown> = { isDeleted: false };
       if (query.role != null) {

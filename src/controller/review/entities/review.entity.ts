@@ -26,6 +26,19 @@ export class UserResponse {
 export const UserResponseSchema = SchemaFactory.createForClass(UserResponse);
 
 @Schema({ _id: false })
+export class ReviewReadReceipt {
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  })
+  userId!: Types.ObjectId;
+
+  @Prop({ type: Date, required: true })
+  readAt!: Date;
+}
+
+@Schema({ _id: false })
 export class ResolutionAttachments {
   @Prop({ type: [String], default: [] })
   images!: string[];
@@ -107,6 +120,9 @@ export class Review extends BaseEntity {
 
   @Prop({ type: ResolutionAttachments, required: false })
   resolutionAttachments?: ResolutionAttachments;
+
+  @Prop({ type: [ReviewReadReceipt], default: [] })
+  readBy!: ReviewReadReceipt[];
 }
 
 export const ReviewSchema = SchemaFactory.createForClass(Review);
