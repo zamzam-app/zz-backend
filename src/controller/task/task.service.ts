@@ -27,7 +27,10 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { Task, TaskDocument } from './entities/task.entity';
 import { TaskPriority, TaskStatus, TaskEventType } from './task.enums';
-import { FindAllTasksResult, TaskBoardItem } from './interfaces/query-task.interface';
+import {
+  FindAllTasksResult,
+  TaskBoardItem,
+} from './interfaces/query-task.interface';
 import { buildTaskBadges } from './task-badge.util';
 import { TaskDelegationService } from './services/task-delegation.service';
 import { TaskEventService } from './services/task-event.service';
@@ -142,7 +145,9 @@ export class TaskService {
           }
           throw new InternalServerErrorException(
             'Task created but initial delegation failed: ' +
-              (delegationError instanceof Error ? delegationError.message : String(delegationError)),
+              (delegationError instanceof Error
+                ? delegationError.message
+                : String(delegationError)),
           );
         }
       }
@@ -580,16 +585,17 @@ export class TaskService {
         const eventType =
           dto.status === TaskStatus.COMPLETED
             ? TaskEventType.COMPLETED
-            : dto.status === TaskStatus.OPEN && existing.status === TaskStatus.COMPLETED
-            ? TaskEventType.REOPENED
-            : TaskEventType.STATUS_CHANGED;
+            : dto.status === TaskStatus.OPEN &&
+                existing.status === TaskStatus.COMPLETED
+              ? TaskEventType.REOPENED
+              : TaskEventType.STATUS_CHANGED;
 
         const eventData =
           eventType === TaskEventType.COMPLETED
             ? { completedAt: new Date() }
             : eventType === TaskEventType.REOPENED
-            ? { previousStatus: existing.status }
-            : { from: existing.status, to: dto.status };
+              ? { previousStatus: existing.status }
+              : { from: existing.status, to: dto.status };
 
         await this.taskEventService.appendEvent(
           id,

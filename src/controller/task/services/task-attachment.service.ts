@@ -118,6 +118,8 @@ export interface SerializedTaskAttachment {
     _id: string;
     name?: string;
   };
+  size?: number;
+  mimeType?: string;
   createdAt: string;
 }
 
@@ -248,6 +250,8 @@ export class TaskAttachmentService {
         uploadedBy: userIdObj,
         type: v.type,
         url: v.url,
+        size: v.size,
+        mimeType: v.mimeType,
         isDeleted: false,
       })),
     );
@@ -290,6 +294,8 @@ export class TaskAttachmentService {
         _id: doc._id.toString(),
         type: file.type,
         url: file.url,
+        size: doc.size,
+        mimeType: doc.mimeType,
         uploadedBy: {
           _id: userIdObj.toString(),
           name: 'User',
@@ -421,7 +427,7 @@ export class TaskAttachmentService {
       .find(filter)
       .sort({ createdAt: -1 })
       .limit(limit + 1)
-      .select('_id type url uploadedBy createdAt')
+      .select('_id type url uploadedBy size mimeType createdAt')
       .lean()
       .exec();
 
@@ -470,6 +476,8 @@ export class TaskAttachmentService {
         _id: (attDoc._id as Types.ObjectId).toString(),
         type: attDoc.type as string,
         url: attDoc.url as string,
+        size: attDoc.size as number | undefined,
+        mimeType: attDoc.mimeType as string | undefined,
         uploadedBy: {
           _id: uploadedById,
           name: uploader?.name ?? 'User',

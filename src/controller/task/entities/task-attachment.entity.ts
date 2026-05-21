@@ -38,6 +38,12 @@ export class TaskAttachment {
   @Prop({ type: String, required: true })
   url!: string;
 
+  @Prop({ type: Number, required: false })
+  size?: number;
+
+  @Prop({ type: String, required: false })
+  mimeType?: string;
+
   @Prop({ type: Boolean, default: false })
   isDeleted!: boolean;
 
