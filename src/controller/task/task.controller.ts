@@ -40,7 +40,8 @@ import {
   TaskAttachmentService,
   AttachmentFileInput,
 } from './services/task-attachment.service';
-import { AttachmentType } from './task.enums';
+import { TaskEventService } from './services/task-event.service';
+import { AttachmentType, TaskEventType } from './task.enums';
 import { QueryTimelineDto, QueryTaskDetailDto } from './dto/timeline-query.dto';
 
 @ApiTags('tasks')
@@ -54,6 +55,7 @@ export class TaskController {
     private readonly taskViewService: TaskViewService,
     private readonly taskDelegationService: TaskDelegationService,
     private readonly taskAttachmentService: TaskAttachmentService,
+    private readonly taskEventService: TaskEventService,
   ) {}
 
   @Post()
@@ -299,6 +301,24 @@ export class TaskController {
       limit: limit ? Number(limit) : undefined,
       skip: skip ? Number(skip) : undefined,
     });
+  }
+
+  @Post(':id/comment')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async addComment(
+    @Param('id') id: string,
+    @Body() body: { text: string; attachmentIds?: string[] },
+    @Request() req: ExpressRequest & { user: JwtPayload },
+  ) {
+    return this.taskEventService.appendEvent(
+      id,
+      TaskEventType.COMMENTED,
+      {
+        text: body.text,
+        attachmentIds: body.attachmentIds || [],
+      },
+      req.user.sub,
+    );
   }
 
   // ─── Attachment Endpoints ─────────────────────────────────────────────────
