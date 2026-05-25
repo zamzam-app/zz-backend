@@ -807,6 +807,7 @@ export class TaskService {
       const allowed = await this.managerOutletObjectIds(jwtUser.sub);
       const managerDefaultFilters = [
         { outletId: { $in: allowed } },
+        { 'activeDelegation.delegatedTo': new Types.ObjectId(jwtUser.sub) },
         { assigneeIds: new Types.ObjectId(jwtUser.sub) },
         { createdBy: new Types.ObjectId(jwtUser.sub) },
       ];
@@ -831,7 +832,16 @@ export class TaskService {
       if (!Types.ObjectId.isValid(query.assigneeId)) {
         throw new BadRequestException('Invalid assignee ID filter');
       }
-      baseAnd.push({ assigneeIds: new Types.ObjectId(query.assigneeId) });
+      baseAnd.push({
+        $or: [
+          { assigneeIds: new Types.ObjectId(query.assigneeId) },
+          {
+            'activeDelegation.delegatedTo': new Types.ObjectId(
+              query.assigneeId,
+            ),
+          },
+        ],
+      });
     }
 
     const dueDateCond: Record<string, Date> = {};
