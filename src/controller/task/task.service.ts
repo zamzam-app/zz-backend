@@ -401,6 +401,45 @@ export class TaskService {
     }
   }
 
+  async getUnreadTaskIdsFiltered(
+    query: QueryTaskDto,
+    jwtUser: JwtPayload,
+  ): Promise<string[]> {
+    try {
+      const { baseMatchStage, postLookupSearchMatchStage } =
+        await this.buildListMatchStages(query, jwtUser);
+
+      const userIdStr = new Types.ObjectId(jwtUser.sub).toString();
+
+      const lookupStages = this.taskLookupStages();
+      const unreadMatch: Record<string, unknown> = {
+        [`unreadMap.${userIdStr}`]: { $exists: true, $gt: 0 },
+      };
+
+      const ids = await this.taskModel
+        .aggregate<{
+          _id: Types.ObjectId;
+        }>([
+          { $match: baseMatchStage },
+          ...lookupStages,
+          ...(postLookupSearchMatchStage
+            ? [{ $match: postLookupSearchMatchStage }]
+            : []),
+          { $match: unreadMatch },
+          { $project: { _id: 1 } },
+        ])
+        .exec();
+
+      return ids.map((task) => task._id.toString());
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error instanceof Error ? error.message : undefined) ??
+          'Failed to fetch unread task IDs',
+      );
+    }
+  }
+
   async findOne(id: string, jwtUser: JwtPayload): Promise<TaskBoardItem> {
     try {
       if (!Types.ObjectId.isValid(id)) {
@@ -827,6 +866,9 @@ export class TaskService {
     }
     if (query.priority) {
       baseAnd.push({ priority: query.priority });
+    }
+    if (query.isRecurring !== undefined) {
+      baseAnd.push({ isRecurring: query.isRecurring });
     }
     if (query.assigneeId) {
       if (!Types.ObjectId.isValid(query.assigneeId)) {
