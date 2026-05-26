@@ -123,8 +123,11 @@ export class TaskController {
 
   @Get('unread-ids')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  async getUnreadIds(@Request() req: ExpressRequest & { user: JwtPayload }) {
-    return this.taskViewService.getUnreadTaskIds(req.user.sub);
+  async getUnreadIds(
+    @Request() req: ExpressRequest & { user: JwtPayload },
+    @Query() query: QueryTaskDto,
+  ) {
+    return this.taskService.getUnreadTaskIdsFiltered(query, req.user);
   }
 
   @Get('recently-viewed')
