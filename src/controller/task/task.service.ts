@@ -26,7 +26,12 @@ import {
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { Task, TaskDocument } from './entities/task.entity';
-import { TaskPriority, TaskStatus, TaskEventType } from './task.enums';
+import {
+  TaskPriority,
+  TaskStatus,
+  TaskEventType,
+  AttachmentType,
+} from './task.enums';
 import {
   FindAllTasksResult,
   TaskBoardItem,
@@ -34,6 +39,10 @@ import {
 import { buildTaskBadges } from './task-badge.util';
 import { TaskDelegationService } from './services/task-delegation.service';
 import { TaskEventService } from './services/task-event.service';
+import {
+  TaskAttachmentService,
+  AttachmentFileInput,
+} from './services/task-attachment.service';
 
 const TASK_STATUS_OPEN = TaskStatus.OPEN;
 const TASK_STATUS_COMPLETED = TaskStatus.COMPLETED;
@@ -63,6 +72,7 @@ export class TaskService {
     private notificationsService: NotificationsService,
     private taskDelegationService: TaskDelegationService,
     private taskEventService: TaskEventService,
+    private taskAttachmentService: TaskAttachmentService,
   ) {}
 
   async create(
@@ -130,6 +140,47 @@ export class TaskService {
 
       const saved = await doc.save();
 
+      // Register initial attachments as proper TaskAttachment records
+      // so they appear as real ATTACHMENT_ADDED timeline events.
+      if (dto.adminSubmission?.attachments) {
+        const files: AttachmentFileInput[] = [];
+        const att = dto.adminSubmission.attachments;
+        if (att.images?.length)
+          att.images.forEach((url) =>
+            files.push({ url, type: AttachmentType.IMAGE }),
+          );
+        if (att.videos?.length)
+          att.videos.forEach((url) =>
+            files.push({ url, type: AttachmentType.VIDEO }),
+          );
+        if (att.audios?.length)
+          att.audios.forEach((url) =>
+            files.push({ url, type: AttachmentType.AUDIO }),
+          );
+        if (att.files?.length)
+          att.files.forEach((url) =>
+            files.push({ url, type: AttachmentType.FILE }),
+          );
+
+        if (files.length > 0) {
+          try {
+            await this.taskAttachmentService.addAttachments(
+              saved._id,
+              files,
+              createdByUserId,
+            );
+          } catch (attachmentError) {
+            // Don't fail task creation if attachment registration fails.
+            // Attachments can be re-uploaded from the task detail screen.
+            console.error(
+              'Failed to register initial task attachments:',
+              attachmentError instanceof Error
+                ? attachmentError.message
+                : String(attachmentError),
+            );
+          }
+        }
+      }
       if (assigneeIds.length > 0) {
         try {
           await this.taskDelegationService.delegateTask(
