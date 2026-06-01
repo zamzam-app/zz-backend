@@ -3,6 +3,7 @@ import {
   NotFoundException,
   HttpException,
   InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import { CreateFormDto } from './dto/create-form.dto';
 import { UpdateFormDto } from './dto/update-form.dto';
@@ -106,6 +107,9 @@ export class FormService {
   }
 
   async findOne(id: string): Promise<Form> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid form id');
+    }
     const result = await this.formModel
       .aggregate<Form>([
         { $match: { _id: new Types.ObjectId(id), isDeleted: false } },
@@ -120,6 +124,9 @@ export class FormService {
   }
 
   async update(id: string, updateFormDto: UpdateFormDto): Promise<Form> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid form id');
+    }
     const { questions, ...formData } = updateFormDto;
     const updateData: UpdateQuery<Form> = { ...formData };
 
@@ -153,6 +160,9 @@ export class FormService {
   }
 
   async remove(id: string): Promise<{ message: string }> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid form id');
+    }
     const result = await this.formModel
       .findOneAndUpdate(
         { _id: new Types.ObjectId(id), isDeleted: false },
