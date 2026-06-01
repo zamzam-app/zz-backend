@@ -3,6 +3,7 @@ import {
   NotFoundException,
   HttpException,
   InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import { CreateFormDto } from './dto/create-form.dto';
 import { UpdateFormDto } from './dto/update-form.dto';
@@ -14,7 +15,7 @@ import {
   QuestionDocument,
   QuestionType,
 } from '../question/entities/question.entity';
-import { Model, Types, UpdateQuery } from 'mongoose';
+import { Model, PipelineStage, Types, UpdateQuery } from 'mongoose';
 import { FindAllFormsResult } from './interfaces/find-all-forms.interface';
 
 @Injectable()
@@ -30,23 +31,22 @@ export class FormService {
       this.sanitizeQuestionsOptions(questions),
     );
 
-    // Create all questions first
-    const questionIds = await Promise.all(
-      mergedQuestions.map(async (q) => {
+    // Create all questions and build refs with contiguous order
+    const questionRefs = await Promise.all(
+      mergedQuestions.map(async (q, index) => {
         const newQuestion = new this.questionModel(q);
         const savedQ = await newQuestion.save();
-        return savedQ._id;
+        return { question: savedQ._id, order: index };
       }),
     );
 
     const createdForm = new this.formModel({
       ...formData,
-      questions: questionIds,
+      questions: questionRefs,
       userId: createFormDto.userId || userId,
     });
     const savedForm = await createdForm.save();
-    const populatedForm = await savedForm.populate('questions');
-    return populatedForm.toObject() as Form;
+    return this.findOne(savedForm._id.toString());
   }
 
   async findAll(query: QueryFormDto): Promise<FindAllFormsResult> {
@@ -55,29 +55,18 @@ export class FormService {
       const limit = query.limit;
       const skip = limit ? (page - 1) * limit : 0;
 
-      const dataPipeline = limit
+      const orderedQuestionStages = this.getOrderedQuestionStages();
+
+      const sortStage: PipelineStage = { $sort: { createdAt: -1, _id: 1 } };
+
+      const dataPipeline: PipelineStage[] = limit
         ? [
+            sortStage,
             { $skip: skip },
             { $limit: limit },
-            {
-              $lookup: {
-                from: 'questions',
-                localField: 'questions',
-                foreignField: '_id',
-                as: 'questions',
-              },
-            },
+            ...orderedQuestionStages,
           ]
-        : [
-            {
-              $lookup: {
-                from: 'questions',
-                localField: 'questions',
-                foreignField: '_id',
-                as: 'questions',
-              },
-            },
-          ];
+        : [sortStage, ...orderedQuestionStages];
 
       const [result] = await this.formModel
         .aggregate<{
@@ -87,8 +76,10 @@ export class FormService {
           { $match: { isDeleted: false } },
           {
             $facet: {
-              data: dataPipeline,
-              totalCount: [{ $count: 'count' }],
+              data: dataPipeline as PipelineStage.FacetPipelineStage[],
+              totalCount: [
+                { $count: 'count' },
+              ] as PipelineStage.FacetPipelineStage[],
             },
           },
         ])
@@ -116,19 +107,26 @@ export class FormService {
   }
 
   async findOne(id: string): Promise<Form> {
-    const form = await this.formModel
-      .findOne({ _id: new Types.ObjectId(id), isDeleted: false })
-      .populate('questions')
-      .lean()
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid form id');
+    }
+    const result = await this.formModel
+      .aggregate<Form>([
+        { $match: { _id: new Types.ObjectId(id), isDeleted: false } },
+        ...this.getOrderedQuestionStages(),
+      ])
       .exec();
+    const form = result[0];
     if (!form) {
       throw new NotFoundException(`Form with ID ${id} not found`);
     }
-
     return form;
   }
 
   async update(id: string, updateFormDto: UpdateFormDto): Promise<Form> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid form id');
+    }
     const { questions, ...formData } = updateFormDto;
     const updateData: UpdateQuery<Form> = { ...formData };
 
@@ -136,14 +134,14 @@ export class FormService {
       const mergedQuestions = this.mergeWithDefaultQuestions(
         this.sanitizeQuestionsOptions(questions),
       );
-      const questionIds = await Promise.all(
-        mergedQuestions.map(async (q) => {
+      const questionRefs = await Promise.all(
+        mergedQuestions.map(async (q, index) => {
           const newQuestion = new this.questionModel(q);
           const savedQ = await newQuestion.save();
-          return savedQ._id;
+          return { question: savedQ._id, order: index };
         }),
       );
-      updateData.questions = questionIds;
+      updateData.questions = questionRefs;
     }
 
     const updatedForm = await this.formModel
@@ -152,17 +150,19 @@ export class FormService {
         updateData,
         { new: true },
       )
-      .populate('questions')
       .lean()
       .exec();
 
     if (!updatedForm) {
       throw new NotFoundException(`Form with ID ${id} not found`);
     }
-    return updatedForm as unknown as Form;
+    return this.findOne(updatedForm._id.toString());
   }
 
   async remove(id: string): Promise<{ message: string }> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid form id');
+    }
     const result = await this.formModel
       .findOneAndUpdate(
         { _id: new Types.ObjectId(id), isDeleted: false },
@@ -173,6 +173,69 @@ export class FormService {
       throw new NotFoundException(`Form with ID ${id} not found`);
     }
     return { message: 'Form deleted successfully' };
+  }
+
+  private getOrderedQuestionStages(): PipelineStage[] {
+    return [
+      {
+        $unwind: {
+          path: '$questions',
+          includeArrayIndex: 'questionIndex',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          questionLookupId: { $ifNull: ['$questions.question', '$questions'] },
+          questionOrder: { $ifNull: ['$questions.order', '$questionIndex'] },
+        },
+      },
+      {
+        $lookup: {
+          from: 'questions',
+          localField: 'questionLookupId',
+          foreignField: '_id',
+          as: 'questionDoc',
+        },
+      },
+      {
+        $unwind: { path: '$questionDoc', preserveNullAndEmptyArrays: true },
+      },
+      { $addFields: { 'questionDoc.order': '$questionOrder' } },
+      { $sort: { 'questionDoc.order': 1 } },
+      {
+        $group: {
+          _id: '$_id',
+          doc: { $first: '$$ROOT' },
+          questions: { $push: '$questionDoc' },
+        },
+      },
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: ['$doc', { questions: '$questions' }],
+          },
+        },
+      },
+      {
+        $addFields: {
+          questions: {
+            $filter: {
+              input: '$questions',
+              cond: { $ne: ['$$this', null] },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          questionDoc: 0,
+          questionIndex: 0,
+          questionLookupId: 0,
+          questionOrder: 0,
+        },
+      },
+    ];
   }
 
   private buildDefaultQuestions(): CreateFormDto['questions'] {

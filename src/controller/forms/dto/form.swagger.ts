@@ -61,6 +61,13 @@ export class QuestionDtoSwagger {
     required: false,
   })
   maxRatings?: number;
+
+  @ApiProperty({
+    example: 0,
+    description: 'Question order within the form response',
+    required: false,
+  })
+  order?: number;
 }
 
 export class CreateFormDtoSwagger {
