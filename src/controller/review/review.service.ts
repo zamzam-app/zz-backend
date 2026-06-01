@@ -233,7 +233,9 @@ export class ReviewService {
           : null;
 
       const [form] = await this.formModel
-        .aggregate<{ questions: QuestionDocument[] }>([
+        .aggregate<{
+          questions: QuestionDocument[];
+        }>([
           { $match: { _id: new Types.ObjectId(createReviewDto.formId) } },
           ...this.getOrderedQuestionStages(),
         ])

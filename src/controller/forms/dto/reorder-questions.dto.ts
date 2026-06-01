@@ -1,11 +1,18 @@
-import { IsArray, IsMongoId, IsNumber, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsMongoId,
+  IsInt,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ReorderQuestionDto {
   @IsMongoId()
   questionId: string;
 
-  @IsNumber()
+  @IsInt()
+  @Min(0)
   order: number;
 }
 
