@@ -56,9 +56,16 @@ export class FormService {
 
       const orderedQuestionStages = this.getOrderedQuestionStages();
 
+      const sortStage: PipelineStage = { $sort: { createdAt: -1, _id: 1 } };
+
       const dataPipeline: PipelineStage[] = limit
-        ? [{ $skip: skip }, { $limit: limit }, ...orderedQuestionStages]
-        : [...orderedQuestionStages];
+        ? [
+            sortStage,
+            { $skip: skip },
+            { $limit: limit },
+            ...orderedQuestionStages,
+          ]
+        : [sortStage, ...orderedQuestionStages];
 
       const [result] = await this.formModel
         .aggregate<{
