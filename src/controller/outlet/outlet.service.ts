@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, PipelineStage, Types } from 'mongoose';
 import { CreateOutletDto } from './dto/create-outlet.dto';
 import { UpdateOutletDto } from './dto/update-outlet.dto';
 import { Outlet, OutletDocument } from './entities/outlet.entity';
@@ -30,6 +30,69 @@ export class OutletService {
     @InjectModel(OutletTable.name)
     private outletTableModel: Model<OutletTableDocument>,
   ) {}
+
+  private getOrderedQuestionStages(): PipelineStage[] {
+    return [
+      {
+        $unwind: {
+          path: '$questions',
+          includeArrayIndex: 'questionIndex',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          questionLookupId: { $ifNull: ['$questions.question', '$questions'] },
+          questionOrder: { $ifNull: ['$questions.order', '$questionIndex'] },
+        },
+      },
+      {
+        $lookup: {
+          from: 'questions',
+          localField: 'questionLookupId',
+          foreignField: '_id',
+          as: 'questionDoc',
+        },
+      },
+      {
+        $unwind: { path: '$questionDoc', preserveNullAndEmptyArrays: true },
+      },
+      { $addFields: { 'questionDoc.order': '$questionOrder' } },
+      { $sort: { 'questionDoc.order': 1 } },
+      {
+        $group: {
+          _id: '$_id',
+          doc: { $first: '$$ROOT' },
+          questions: { $push: '$questionDoc' },
+        },
+      },
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: ['$doc', { questions: '$questions' }],
+          },
+        },
+      },
+      {
+        $addFields: {
+          questions: {
+            $filter: {
+              input: '$questions',
+              cond: { $ne: ['$$this', null] },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          questionDoc: 0,
+          questionIndex: 0,
+          questionLookupId: 0,
+          questionOrder: 0,
+        },
+      },
+    ];
+  }
 
   async create(createOutletDto: CreateOutletDto): Promise<Outlet> {
     const _id = new Types.ObjectId();
@@ -282,14 +345,7 @@ export class OutletService {
               isDeleted: false,
             },
           },
-          {
-            $lookup: {
-              from: 'questions',
-              localField: 'questions',
-              foreignField: '_id',
-              as: 'questions',
-            },
-          },
+          ...this.getOrderedQuestionStages(),
         ])
         .exec();
       form = (forms[0] as unknown as FormDocument) ?? null;

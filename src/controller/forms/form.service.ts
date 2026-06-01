@@ -45,8 +45,7 @@ export class FormService {
       userId: createFormDto.userId || userId,
     });
     const savedForm = await createdForm.save();
-    const form = savedForm.toObject() as Form;
-    return form;
+    return this.findOne(savedForm._id.toString());
   }
 
   async findAll(query: QueryFormDto): Promise<FindAllFormsResult> {
@@ -143,7 +142,7 @@ export class FormService {
     if (!updatedForm) {
       throw new NotFoundException(`Form with ID ${id} not found`);
     }
-    return updatedForm as unknown as Form;
+    return this.findOne(updatedForm._id.toString());
   }
 
   async remove(id: string): Promise<{ message: string }> {
@@ -162,12 +161,22 @@ export class FormService {
   private getOrderedQuestionStages(): PipelineStage[] {
     return [
       {
-        $unwind: { path: '$questions', preserveNullAndEmptyArrays: true },
+        $unwind: {
+          path: '$questions',
+          includeArrayIndex: 'questionIndex',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          questionLookupId: { $ifNull: ['$questions.question', '$questions'] },
+          questionOrder: { $ifNull: ['$questions.order', '$questionIndex'] },
+        },
       },
       {
         $lookup: {
           from: 'questions',
-          localField: 'questions.question',
+          localField: 'questionLookupId',
           foreignField: '_id',
           as: 'questionDoc',
         },
@@ -175,7 +184,7 @@ export class FormService {
       {
         $unwind: { path: '$questionDoc', preserveNullAndEmptyArrays: true },
       },
-      { $addFields: { 'questionDoc.order': '$questions.order' } },
+      { $addFields: { 'questionDoc.order': '$questionOrder' } },
       { $sort: { 'questionDoc.order': 1 } },
       {
         $group: {
@@ -201,7 +210,14 @@ export class FormService {
           },
         },
       },
-      { $project: { questionDoc: 0 } },
+      {
+        $project: {
+          questionDoc: 0,
+          questionIndex: 0,
+          questionLookupId: 0,
+          questionOrder: 0,
+        },
+      },
     ];
   }
 

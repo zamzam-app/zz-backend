@@ -8,7 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, PipelineStage, Types } from 'mongoose';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
@@ -92,6 +92,69 @@ export class ReviewService {
     };
   }
 
+  private getOrderedQuestionStages(): PipelineStage[] {
+    return [
+      {
+        $unwind: {
+          path: '$questions',
+          includeArrayIndex: 'questionIndex',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          questionLookupId: { $ifNull: ['$questions.question', '$questions'] },
+          questionOrder: { $ifNull: ['$questions.order', '$questionIndex'] },
+        },
+      },
+      {
+        $lookup: {
+          from: 'questions',
+          localField: 'questionLookupId',
+          foreignField: '_id',
+          as: 'questionDoc',
+        },
+      },
+      {
+        $unwind: { path: '$questionDoc', preserveNullAndEmptyArrays: true },
+      },
+      { $addFields: { 'questionDoc.order': '$questionOrder' } },
+      { $sort: { 'questionDoc.order': 1 } },
+      {
+        $group: {
+          _id: '$_id',
+          doc: { $first: '$$ROOT' },
+          questions: { $push: '$questionDoc' },
+        },
+      },
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: ['$doc', { questions: '$questions' }],
+          },
+        },
+      },
+      {
+        $addFields: {
+          questions: {
+            $filter: {
+              input: '$questions',
+              cond: { $ne: ['$$this', null] },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          questionDoc: 0,
+          questionIndex: 0,
+          questionLookupId: 0,
+          questionOrder: 0,
+        },
+      },
+    ];
+  }
+
   async submitWithOtp(
     dto: SubmitReviewWithOtpDto,
   ): Promise<{ overallRating: number }> {
@@ -169,9 +232,12 @@ export class ReviewService {
             })
           : null;
 
-      const form = await this.formModel
-        .findById(createReviewDto.formId)
-        .populate('questions');
+      const [form] = await this.formModel
+        .aggregate<{ questions: QuestionDocument[] }>([
+          { $match: { _id: new Types.ObjectId(createReviewDto.formId) } },
+          ...this.getOrderedQuestionStages(),
+        ])
+        .exec();
       if (!form) {
         throw new NotFoundException('Form not found');
       }
@@ -180,7 +246,7 @@ export class ReviewService {
         createReviewDto.response.map((r) => [r.questionId, r.answer]),
       );
 
-      for (const question of form.questions as unknown as QuestionDocument[]) {
+      for (const question of form.questions) {
         if (question.isRequired) {
           const answer = providedAnswers.get(question._id.toString());
           if (
