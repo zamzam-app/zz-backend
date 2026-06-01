@@ -7,14 +7,19 @@ export type FormDocument = HydratedDocument<Form>;
 
 @Schema({ _id: false })
 export class FormQuestionRef {
-  @Prop({ required: true, type: MongooseSchema.Types.ObjectId, ref: 'Question' })
+  @Prop({
+    required: true,
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Question',
+  })
   question: Question;
 
   @Prop({ required: true, type: Number })
   order: number;
 }
 
-export const FormQuestionRefSchema = SchemaFactory.createForClass(FormQuestionRef);
+export const FormQuestionRefSchema =
+  SchemaFactory.createForClass(FormQuestionRef);
 
 @Schema({ timestamps: true })
 export class Form extends BaseEntity {

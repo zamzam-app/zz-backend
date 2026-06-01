@@ -14,7 +14,7 @@ import {
   QuestionDocument,
   QuestionType,
 } from '../question/entities/question.entity';
-import { Model, Types, UpdateQuery } from 'mongoose';
+import { Model, PipelineStage, Types, UpdateQuery } from 'mongoose';
 import { FindAllFormsResult } from './interfaces/find-all-forms.interface';
 
 @Injectable()
@@ -30,23 +30,23 @@ export class FormService {
       this.sanitizeQuestionsOptions(questions),
     );
 
-    // Create all questions first
-    const questionIds = await Promise.all(
-      mergedQuestions.map(async (q) => {
+    // Create all questions and build refs with contiguous order
+    const questionRefs = await Promise.all(
+      mergedQuestions.map(async (q, index) => {
         const newQuestion = new this.questionModel(q);
         const savedQ = await newQuestion.save();
-        return savedQ._id;
+        return { question: savedQ._id, order: index };
       }),
     );
 
     const createdForm = new this.formModel({
       ...formData,
-      questions: questionIds,
+      questions: questionRefs,
       userId: createFormDto.userId || userId,
     });
     const savedForm = await createdForm.save();
-    const populatedForm = await savedForm.populate('questions');
-    return populatedForm.toObject() as Form;
+    const form = savedForm.toObject() as Form;
+    return form;
   }
 
   async findAll(query: QueryFormDto): Promise<FindAllFormsResult> {
@@ -55,29 +55,11 @@ export class FormService {
       const limit = query.limit;
       const skip = limit ? (page - 1) * limit : 0;
 
-      const dataPipeline = limit
-        ? [
-            { $skip: skip },
-            { $limit: limit },
-            {
-              $lookup: {
-                from: 'questions',
-                localField: 'questions',
-                foreignField: '_id',
-                as: 'questions',
-              },
-            },
-          ]
-        : [
-            {
-              $lookup: {
-                from: 'questions',
-                localField: 'questions',
-                foreignField: '_id',
-                as: 'questions',
-              },
-            },
-          ];
+      const orderedQuestionStages = this.getOrderedQuestionStages();
+
+      const dataPipeline: PipelineStage[] = limit
+        ? [{ $skip: skip }, { $limit: limit }, ...orderedQuestionStages]
+        : [...orderedQuestionStages];
 
       const [result] = await this.formModel
         .aggregate<{
@@ -87,8 +69,10 @@ export class FormService {
           { $match: { isDeleted: false } },
           {
             $facet: {
-              data: dataPipeline,
-              totalCount: [{ $count: 'count' }],
+              data: dataPipeline as PipelineStage.FacetPipelineStage[],
+              totalCount: [
+                { $count: 'count' },
+              ] as PipelineStage.FacetPipelineStage[],
             },
           },
         ])
@@ -116,15 +100,16 @@ export class FormService {
   }
 
   async findOne(id: string): Promise<Form> {
-    const form = await this.formModel
-      .findOne({ _id: new Types.ObjectId(id), isDeleted: false })
-      .populate('questions')
-      .lean()
+    const result = await this.formModel
+      .aggregate<Form>([
+        { $match: { _id: new Types.ObjectId(id), isDeleted: false } },
+        ...this.getOrderedQuestionStages(),
+      ])
       .exec();
+    const form = result[0];
     if (!form) {
       throw new NotFoundException(`Form with ID ${id} not found`);
     }
-
     return form;
   }
 
@@ -136,14 +121,14 @@ export class FormService {
       const mergedQuestions = this.mergeWithDefaultQuestions(
         this.sanitizeQuestionsOptions(questions),
       );
-      const questionIds = await Promise.all(
-        mergedQuestions.map(async (q) => {
+      const questionRefs = await Promise.all(
+        mergedQuestions.map(async (q, index) => {
           const newQuestion = new this.questionModel(q);
           const savedQ = await newQuestion.save();
-          return savedQ._id;
+          return { question: savedQ._id, order: index };
         }),
       );
-      updateData.questions = questionIds;
+      updateData.questions = questionRefs;
     }
 
     const updatedForm = await this.formModel
@@ -152,7 +137,6 @@ export class FormService {
         updateData,
         { new: true },
       )
-      .populate('questions')
       .lean()
       .exec();
 
@@ -173,6 +157,52 @@ export class FormService {
       throw new NotFoundException(`Form with ID ${id} not found`);
     }
     return { message: 'Form deleted successfully' };
+  }
+
+  private getOrderedQuestionStages(): PipelineStage[] {
+    return [
+      {
+        $unwind: { path: '$questions', preserveNullAndEmptyArrays: true },
+      },
+      {
+        $lookup: {
+          from: 'questions',
+          localField: 'questions.question',
+          foreignField: '_id',
+          as: 'questionDoc',
+        },
+      },
+      {
+        $unwind: { path: '$questionDoc', preserveNullAndEmptyArrays: true },
+      },
+      { $addFields: { 'questionDoc.order': '$questions.order' } },
+      { $sort: { 'questionDoc.order': 1 } },
+      {
+        $group: {
+          _id: '$_id',
+          doc: { $first: '$$ROOT' },
+          questions: { $push: '$questionDoc' },
+        },
+      },
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: ['$doc', { questions: '$questions' }],
+          },
+        },
+      },
+      {
+        $addFields: {
+          questions: {
+            $filter: {
+              input: '$questions',
+              cond: { $ne: ['$$this', null] },
+            },
+          },
+        },
+      },
+      { $project: { questionDoc: 0 } },
+    ];
   }
 
   private buildDefaultQuestions(): CreateFormDto['questions'] {
