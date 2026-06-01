@@ -139,7 +139,7 @@ export class ReviewService {
           questions: {
             $filter: {
               input: '$questions',
-              cond: { $ne: ['$$this', null] },
+              cond: { $ne: [{ $ifNull: ['$$this._id', null] }, null] },
             },
           },
         },
