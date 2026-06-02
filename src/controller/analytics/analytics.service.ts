@@ -429,12 +429,43 @@ export class AnalyticsService {
       todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
       todayEnd.setMilliseconds(todayEnd.getMilliseconds() - 1);
 
+      const hiddenOutletTypeIds = (process.env.HIDDEN_OUTLET_TYPE_IDS || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0 && Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id));
+
       const [result] = await this.reviewModel
         .aggregate<{
           totalOpenIncidents: { count: number }[];
           criticalIssues: { count: number }[];
           incidentsResolvedToday: { count: number }[];
         }>([
+          {
+            $lookup: {
+              from: 'outlets',
+              let: { oid: { $toObjectId: { $toString: '$outletId' } } },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ['$_id', '$$oid'] },
+                    isDeleted: false,
+                    ...(hiddenOutletTypeIds.length > 0
+                      ? { outletType: { $nin: hiddenOutletTypeIds } }
+                      : {}),
+                  },
+                },
+                { $project: { _id: 1 } },
+              ],
+              as: 'outletLookup',
+            },
+          },
+          {
+            $addFields: {
+              outletInfo: { $arrayElemAt: ['$outletLookup', 0] },
+            },
+          },
+          { $match: { outletInfo: { $ne: null } } },
           {
             $facet: {
               totalOpenIncidents: [
