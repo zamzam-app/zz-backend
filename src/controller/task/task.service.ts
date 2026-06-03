@@ -561,28 +561,103 @@ export class TaskService {
       }
 
       const $set: Record<string, unknown> = {};
+      const changes: Record<string, { from: unknown; to: unknown }> = {};
 
       if (dto.description !== undefined) {
-        $set.description = dto.description.trim();
+        const newDesc = dto.description.trim();
+        if (existing.description !== newDesc) {
+          $set.description = newDesc;
+          changes.description = { from: existing.description, to: newDesc };
+        }
       }
       if (dto.taskCategoryId !== undefined) {
-        await this.assertTaskCategoryExists(dto.taskCategoryId);
-        $set.taskCategoryId = new Types.ObjectId(dto.taskCategoryId);
+        const oldCat = existing.taskCategoryId?.toString();
+        if (dto.taskCategoryId !== oldCat) {
+          await this.assertTaskCategoryExists(dto.taskCategoryId);
+          const newCatDoc = await this.taskCategoryModel.findById(
+            dto.taskCategoryId,
+          );
+          const oldCatDoc = oldCat
+            ? await this.taskCategoryModel.findById(oldCat)
+            : null;
+          $set.taskCategoryId = new Types.ObjectId(dto.taskCategoryId);
+          changes.taskCategory = {
+            from: oldCatDoc?.name || oldCat,
+            to: newCatDoc?.name || dto.taskCategoryId,
+          };
+        }
       }
-      if (dto.priority !== undefined) $set.priority = dto.priority;
-      if (dto.dueDate !== undefined) $set.dueDate = new Date(dto.dueDate);
-      if (dto.dueTime !== undefined) $set.dueTime = dto.dueTime;
-      if (dto.isRecurring !== undefined) $set.isRecurring = dto.isRecurring;
-      if (dto.recurrenceType !== undefined)
+      if (dto.priority !== undefined && dto.priority !== existing.priority) {
+        $set.priority = dto.priority;
+        changes.priority = { from: existing.priority, to: dto.priority };
+      }
+      if (dto.dueDate !== undefined) {
+        const newDate = new Date(dto.dueDate);
+        if (existing.dueDate?.getTime() !== newDate.getTime()) {
+          $set.dueDate = newDate;
+          changes.dueDate = { from: existing.dueDate, to: newDate };
+        }
+      }
+      if (dto.dueTime !== undefined && dto.dueTime !== existing.dueTime) {
+        $set.dueTime = dto.dueTime;
+        changes.dueTime = { from: existing.dueTime, to: dto.dueTime };
+      }
+      if (
+        dto.isRecurring !== undefined &&
+        dto.isRecurring !== existing.isRecurring
+      ) {
+        $set.isRecurring = dto.isRecurring;
+        changes.isRecurring = {
+          from: existing.isRecurring,
+          to: dto.isRecurring,
+        };
+      }
+      if (
+        dto.recurrenceType !== undefined &&
+        dto.recurrenceType !== existing.recurrenceType
+      ) {
         $set.recurrenceType = dto.recurrenceType;
-      if (dto.recurrenceDays !== undefined)
+        changes.recurrenceType = {
+          from: existing.recurrenceType,
+          to: dto.recurrenceType,
+        };
+      }
+      if (
+        dto.recurrenceDays !== undefined &&
+        JSON.stringify(dto.recurrenceDays) !==
+          JSON.stringify(existing.recurrenceDays)
+      ) {
         $set.recurrenceDays = dto.recurrenceDays;
+        changes.recurrenceDays = {
+          from: existing.recurrenceDays,
+          to: dto.recurrenceDays,
+        };
+      }
       if (dto.outletId !== undefined) {
-        $set.outletId = dto.outletId ? new Types.ObjectId(dto.outletId) : null;
+        const oldOutletId = existing.outletId?.toString() || null;
+        const newOutletId = dto.outletId ? dto.outletId : null;
+        if (oldOutletId !== newOutletId) {
+          $set.outletId = dto.outletId
+            ? new Types.ObjectId(dto.outletId)
+            : null;
+          changes.outletId = { from: oldOutletId, to: newOutletId };
+        }
       }
 
       if (dto.assigneeIds !== undefined) {
-        $set.assigneeIds = dto.assigneeIds.map((id) => new Types.ObjectId(id));
+        const oldAssignees = existing.assigneeIds
+          .map((i) => i.toString())
+          .sort();
+        const newAssignees = [...dto.assigneeIds].sort();
+        if (JSON.stringify(oldAssignees) !== JSON.stringify(newAssignees)) {
+          $set.assigneeIds = dto.assigneeIds.map(
+            (id) => new Types.ObjectId(id),
+          );
+          changes.assigneeIds = {
+            from: existing.assigneeIds.map((i) => i.toString()),
+            to: dto.assigneeIds,
+          };
+        }
       }
 
       if (dto.adminSubmission !== undefined) {
@@ -681,6 +756,15 @@ export class TaskService {
           id,
           eventType,
           eventData,
+          jwtUser.sub,
+        );
+      }
+
+      if (Object.keys(changes).length > 0) {
+        await this.taskEventService.appendEvent(
+          id,
+          TaskEventType.UPDATED,
+          { changes },
           jwtUser.sub,
         );
       }
