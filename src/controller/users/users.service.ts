@@ -363,7 +363,7 @@ export class UsersService {
     return user;
   }
 
-  async updatePushToken(userId: string, pushToken: string) {
+  async updatePushToken(userId: string, pushToken: string | null) {
     try {
       const updatedUser = await this.userModel
         .findByIdAndUpdate(userId, { pushToken }, { new: true })

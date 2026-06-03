@@ -500,7 +500,6 @@ export class AnalyticsService {
         ])
         .exec();
 
-
       return {
         totalOpenIncidents: result?.totalOpenIncidents?.[0]?.count ?? 0,
         criticalIssues: result?.criticalIssues?.[0]?.count ?? 0,

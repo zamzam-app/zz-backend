@@ -69,6 +69,12 @@ export class UsersController {
     return this.usersService.updatePushToken(req.user.sub, dto.pushToken);
   }
 
+  @Delete('push-token')
+  @UseGuards(JwtAuthGuard)
+  removePushToken(@Request() req: { user: JwtPayload }) {
+    return this.usersService.updatePushToken(req.user.sub, null);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
