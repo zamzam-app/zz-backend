@@ -15,6 +15,7 @@ import { Outlet, OutletDocument } from '../../outlet/entities/outlet.entity';
 import { UserRole } from '../../users/interfaces/user.interface';
 import { TaskEventType } from '../task.enums';
 import { TaskEventService } from './task-event.service';
+import { NotificationsService } from '../../../notifications/notifications.service';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,6 +89,7 @@ export class TaskDelegationService {
     @InjectModel(Outlet.name)
     private readonly outletModel: Model<OutletDocument>,
     private readonly taskEventService: TaskEventService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // -----------------------------------------------------------------------
@@ -130,7 +132,9 @@ export class TaskDelegationService {
     // --------------------------------------------------
     const task = await this.taskModel
       .findOne({ _id: taskIdObj, isDeleted: false })
-      .select('outletId activeOwner activeDelegation createdBy version')
+      .select(
+        'description outletId activeOwner activeDelegation createdBy version',
+      )
       .lean()
       .exec();
 
@@ -158,6 +162,21 @@ export class TaskDelegationService {
       toId,
       note,
     );
+
+    const targetUser = await this.userModel
+      .findOne({ _id: toId, isDeleted: false })
+      .select('pushToken')
+      .lean()
+      .exec();
+
+    if (targetUser?.pushToken) {
+      await this.notificationsService.sendPush(
+        [targetUser.pushToken],
+        'Task Delegated',
+        `You have been delegated a task: ${task.description || 'Check the app for details'}`,
+        { type: 'task', taskId: taskIdObj.toString() },
+      );
+    }
 
     return {
       event: result as unknown as { event: unknown; task: TaskDocument },
@@ -199,7 +218,7 @@ export class TaskDelegationService {
     // --------------------------------------------------
     const task = await this.taskModel
       .findOne({ _id: taskIdObj, isDeleted: false })
-      .select('outletId activeOwner createdBy version')
+      .select('description outletId activeOwner createdBy version')
       .lean()
       .exec();
 
@@ -225,6 +244,21 @@ export class TaskDelegationService {
       },
       actorId,
     );
+
+    const targetUser = await this.userModel
+      .findOne({ _id: newOwnerObj, isDeleted: false })
+      .select('pushToken')
+      .lean()
+      .exec();
+
+    if (targetUser?.pushToken) {
+      await this.notificationsService.sendPush(
+        [targetUser.pushToken],
+        'Task Reassigned',
+        `A task has been reassigned to you: ${task.description || 'Check the app for details'}`,
+        { type: 'task', taskId: taskIdObj.toString() },
+      );
+    }
 
     return {
       event: result as unknown as { event: unknown; task: TaskDocument },
