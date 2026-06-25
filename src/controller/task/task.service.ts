@@ -208,23 +208,6 @@ export class TaskService {
         throw new InternalServerErrorException('Failed to load created task');
       }
 
-      if (assigneeIds.length > 0) {
-        const assignees = await this.userModel.find({
-          _id: { $in: assigneeIds.map((id) => new Types.ObjectId(id)) },
-          pushToken: { $ne: null },
-        });
-        const tokens = assignees
-          .map((u) => u.pushToken as string)
-          .filter(Boolean);
-        if (tokens.length > 0) {
-          await this.notificationsService.sendPush(
-            tokens,
-            'New Task Assigned',
-            `You have been assigned a new task: ${dto.description}`,
-            { type: 'task', taskId: saved._id.toString() },
-          );
-        }
-      }
 
       return one;
     } catch (error) {
