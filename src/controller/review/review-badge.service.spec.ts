@@ -20,6 +20,11 @@ describe('ReviewService badge status', () => {
   let outletModel: {
     find: jest.Mock;
   };
+  let pendingComplaintModel: {
+    find: jest.Mock;
+    updateOne: jest.Mock;
+    deleteOne: jest.Mock;
+  };
 
   const createExecMock = <T>(value: T) => ({
     exec: jest.fn().mockResolvedValue(value),
@@ -37,6 +42,11 @@ describe('ReviewService badge status', () => {
     outletModel = {
       find: jest.fn(),
     };
+    pendingComplaintModel = {
+      find: jest.fn(),
+      updateOne: jest.fn(),
+      deleteOne: jest.fn(),
+    };
 
     service = new ReviewService(
       reviewModel as never,
@@ -45,6 +55,7 @@ describe('ReviewService badge status', () => {
       {} as never,
       userModel as never,
       outletModel as never,
+      pendingComplaintModel as never,
       {} as never,
       {} as never,
       {} as never,

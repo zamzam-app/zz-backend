@@ -6,6 +6,7 @@ import {
   BadRequestException,
   UnauthorizedException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage, Types } from 'mongoose';
@@ -40,6 +41,10 @@ import { UsersService } from '../users/users.service';
 import { Msg91Service } from '../../integrations/msg91/msg91.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { User, UserDocument } from '../users/entities/user.entity';
+import {
+  PendingComplaint,
+  PendingComplaintDocument,
+} from './entities/pending-complaint.entity';
 import { Outlet, OutletDocument } from '../outlet/entities/outlet.entity';
 import { UserRole } from '../users/interfaces/user.interface';
 
@@ -76,7 +81,7 @@ type PendingComplaintNotification = {
 };
 
 @Injectable()
-export class ReviewService {
+export class ReviewService implements OnModuleInit {
   private readonly logger = new Logger(ReviewService.name);
 
   private readonly pendingComplaints = new Map<
@@ -92,10 +97,45 @@ export class ReviewService {
     private outletTableModel: Model<OutletTableDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Outlet.name) private outletModel: Model<OutletDocument>,
+    @InjectModel(PendingComplaint.name)
+    private pendingComplaintModel: Model<PendingComplaintDocument>,
     private usersService: UsersService,
     private msg91Service: Msg91Service,
     private notificationsService: NotificationsService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    const pendingDocs = await this.pendingComplaintModel.find().lean().exec();
+
+    if (pendingDocs.length === 0) {
+      return;
+    }
+
+    this.logger.log(
+      `Recovering ${pendingDocs.length} pending complaint notification(s) from the database.`,
+    );
+
+    for (const doc of pendingDocs) {
+      const tokenSet = new Set(doc.tokens);
+
+      const timer = setTimeout(() => {
+        this.flushComplaintNotification(doc.outletId).catch((error) => {
+          this.logger.error(
+            `Failed to flush recovered complaint notification for outlet ${doc.outletId}`,
+            error,
+          );
+        });
+      }, COMPLAINT_NOTIFICATION_DEBOUNCE_MS);
+
+      this.pendingComplaints.set(doc.outletId, {
+        timer,
+        eventCount: doc.eventCount,
+        outletName: doc.outletName,
+        tokens: tokenSet,
+        reviewId: doc.reviewId,
+      });
+    }
+  }
 
   private buildOpenComplaintMatch(): Record<string, unknown> {
     return {
@@ -1198,7 +1238,18 @@ export class ReviewService {
         throw new NotFoundException('Review not found');
       }
 
-      if (dto.complaintStatus === ComplaintStatus.RESOLVED) {
+      // Only notify on an actual transition to RESOLVED, not on re-sends.
+      const previousStatus = await this.reviewModel
+        .findById(reviewId)
+        .select('complaintStatus')
+        .lean()
+        .exec()
+        .then((r) => r?.complaintStatus);
+
+      if (
+        dto.complaintStatus === ComplaintStatus.RESOLVED &&
+        previousStatus !== ComplaintStatus.RESOLVED
+      ) {
         try {
           const admins = await this.userModel.find({
             role: UserRole.ADMIN,
@@ -1335,18 +1386,18 @@ export class ReviewService {
 
     const eventCount = (existing ? existing.eventCount : 0) + 1;
 
-    if (existing?.timer) {
-      clearTimeout(existing.timer);
-    }
+    let timer = existing?.timer;
 
-    const timer = setTimeout(() => {
-      this.flushComplaintNotification(outletId).catch((error) => {
-        this.logger.error(
-          `Failed to flush batched complaint notifications for outlet ${outletId}`,
-          error,
-        );
-      });
-    }, COMPLAINT_NOTIFICATION_DEBOUNCE_MS);
+    if (!timer) {
+      timer = setTimeout(() => {
+        this.flushComplaintNotification(outletId).catch((error) => {
+          this.logger.error(
+            `Failed to flush batched complaint notifications for outlet ${outletId}`,
+            error,
+          );
+        });
+      }, COMPLAINT_NOTIFICATION_DEBOUNCE_MS);
+    }
 
     this.pendingComplaints.set(outletId, {
       timer,
@@ -1355,6 +1406,29 @@ export class ReviewService {
       tokens: tokenSet,
       reviewId,
     });
+
+    // Persist to MongoDB so the notification survives server restarts.
+    this.pendingComplaintModel
+      .updateOne(
+        { outletId },
+        {
+          $set: {
+            outletName,
+            tokens: Array.from(tokenSet),
+            eventCount,
+            reviewId,
+          },
+          $setOnInsert: { outletId },
+        },
+        { upsert: true },
+      )
+      .exec()
+      .catch((err) => {
+        this.logger.warn(
+          `Failed to persist pending complaint notification for outlet ${outletId}`,
+          err,
+        );
+      });
   }
 
   private async flushComplaintNotification(outletId: string) {
@@ -1362,6 +1436,17 @@ export class ReviewService {
     if (!pending) return;
 
     this.pendingComplaints.delete(outletId);
+
+    // Remove the persisted record regardless of send outcome to avoid re-sending on restart.
+    this.pendingComplaintModel
+      .deleteOne({ outletId })
+      .exec()
+      .catch((err) => {
+        this.logger.warn(
+          `Failed to delete persisted pending complaint for outlet ${outletId}`,
+          err,
+        );
+      });
 
     const { eventCount, outletName, tokens, reviewId } = pending;
     if (tokens.size === 0) return;

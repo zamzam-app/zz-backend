@@ -46,8 +46,8 @@ const REMINDER_WINDOWS: ReminderWindowConfig[] = [
   {
     key: 'exactDeadline',
     leadMinutes: 0,
-    title: 'Task Deadline Missed',
-    bodyTemplate: (desc) => `'${desc}' deadline has been missed.`,
+    title: 'Task Due Now',
+    bodyTemplate: (desc) => `'${desc}' is due now.`,
     sentField: 'reminderNotifications.exactDeadlineSentAt',
   },
 ];

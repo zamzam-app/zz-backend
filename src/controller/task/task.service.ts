@@ -844,6 +844,7 @@ export class TaskService {
         'dueTime',
         'isRecurring',
         'recurrenceType',
+        'recurrenceDays',
       ] as const;
       const hasScheduleChange = SCHEDULE_CHANGE_KEYS.some(
         (key) => key in changes,
@@ -871,7 +872,7 @@ export class TaskService {
               await this.notificationsService.sendPush(
                 tokens,
                 'Task Modified',
-                `Admin has updated the details for '${updated.description}'.`,
+                `${jwtUser.role.charAt(0).toUpperCase() + jwtUser.role.slice(1)} has updated the details for '${updated.description}'.`,
                 { type: 'task', taskId: updated._id.toString() },
               );
             }

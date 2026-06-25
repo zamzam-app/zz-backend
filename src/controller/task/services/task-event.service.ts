@@ -35,8 +35,8 @@ type PendingNotification = {
   timer: ReturnType<typeof setTimeout>;
   /** Number of notifiable events accumulated in this window. */
   eventCount: number;
-  /** Most recent task snapshot (used for description & recipient resolution). */
-  latestTask: TaskDocument;
+  /** Stored taskId to re-fetch the freshest version when the debounce timer fires. */
+  taskId: string;
   /** Accumulated actor IDs to exclude from the recipient list. */
   actorIds: Set<string>;
 };
@@ -282,7 +282,6 @@ export class TaskEventService {
       // Reset the debounce window
       clearTimeout(existing.timer);
       existing.eventCount += 1;
-      existing.latestTask = task;
       existing.actorIds.add(actorId.toString());
       existing.timer = setTimeout(
         () => this.flushNotification(taskId),
@@ -300,7 +299,7 @@ export class TaskEventService {
     this.pendingNotifications.set(taskId, {
       timer,
       eventCount: 1,
-      latestTask: task,
+      taskId,
       actorIds,
     });
   }
@@ -319,9 +318,9 @@ export class TaskEventService {
     }
     this.pendingNotifications.delete(taskId);
 
-    const { eventCount, latestTask, actorIds } = pending;
+    const { eventCount, taskId: pendingTaskId, actorIds } = pending;
 
-    this.sendBatchedNotification(latestTask, actorIds, eventCount).catch(
+    this.sendBatchedNotification(pendingTaskId, actorIds, eventCount).catch(
       (err) => {
         this.logger.error(
           `Failed to send batched notification for task ${taskId}`,
@@ -342,10 +341,18 @@ export class TaskEventService {
    * propagated to the caller.
    */
   private async sendBatchedNotification(
-    task: TaskDocument,
+    taskId: string,
     actorIds: Set<string>,
     eventCount: number,
   ): Promise<void> {
+    const task = await this.taskModel
+      .findOne({ _id: new Types.ObjectId(taskId), isDeleted: false })
+      .exec();
+
+    if (!task) {
+      return;
+    }
+
     const recipientIdSet = new Set<string>();
 
     // Task creator
