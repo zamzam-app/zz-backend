@@ -65,9 +65,24 @@ type ReviewBadgeStatus = {
   hasUnread: boolean;
 };
 
+const COMPLAINT_NOTIFICATION_DEBOUNCE_MS = 120_000;
+
+type PendingComplaintNotification = {
+  timer: ReturnType<typeof setTimeout>;
+  eventCount: number;
+  outletName: string;
+  tokens: Set<string>;
+  reviewId: string;
+};
+
 @Injectable()
 export class ReviewService {
   private readonly logger = new Logger(ReviewService.name);
+
+  private readonly pendingComplaints = new Map<
+    string,
+    PendingComplaintNotification
+  >();
 
   constructor(
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
@@ -357,11 +372,11 @@ export class ReviewService {
 
         if (uniqueTokens.length > 0) {
           const outletName = outlet?.name ?? 'an outlet';
-          await this.notificationsService.sendPush(
+          this.scheduleComplaintNotification(
+            savedReview.outletId,
+            outletName,
             uniqueTokens,
-            'New Complaint',
-            `New complaint at ${outletName}`,
-            { type: 'complaint', reviewId: savedReview._id.toString() },
+            savedReview._id.toString(),
           );
         }
       }
@@ -1183,6 +1198,38 @@ export class ReviewService {
         throw new NotFoundException('Review not found');
       }
 
+      if (dto.complaintStatus === ComplaintStatus.RESOLVED) {
+        try {
+          const admins = await this.userModel.find({
+            role: UserRole.ADMIN,
+            pushToken: { $ne: null },
+          });
+
+          const adminTokens = admins
+            .map((a) => a.pushToken as string)
+            .filter(Boolean);
+
+          if (adminTokens.length > 0) {
+            const outlet = await this.outletModel.findById(updated.outletId);
+            const outletName = outlet?.name ?? 'an outlet';
+            const manager = await this.userModel.findById(dto.resolvedBy);
+            const managerName = manager?.name ?? 'a Manager';
+
+            await this.notificationsService.sendPush(
+              adminTokens,
+              'Complaint Resolved',
+              `A complaint at ${outletName} has been resolved by ${managerName}.`,
+              { type: 'complaint', reviewId: updated._id.toString() },
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            'Failed to send push notification for resolved complaint',
+            error,
+          );
+        }
+      }
+
       return this.findOne(reviewId);
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -1273,5 +1320,70 @@ export class ReviewService {
       isDeleted: false,
       ...(outletIds.length > 0 ? { outletId: { $in: outletIds } } : {}),
     };
+  }
+
+  private scheduleComplaintNotification(
+    outletId: string,
+    outletName: string,
+    tokens: string[],
+    reviewId: string,
+  ) {
+    const existing = this.pendingComplaints.get(outletId);
+
+    const tokenSet = existing ? existing.tokens : new Set<string>();
+    tokens.forEach((t) => tokenSet.add(t));
+
+    const eventCount = (existing ? existing.eventCount : 0) + 1;
+
+    if (existing?.timer) {
+      clearTimeout(existing.timer);
+    }
+
+    const timer = setTimeout(() => {
+      this.flushComplaintNotification(outletId).catch((error) => {
+        this.logger.error(
+          `Failed to flush batched complaint notifications for outlet ${outletId}`,
+          error,
+        );
+      });
+    }, COMPLAINT_NOTIFICATION_DEBOUNCE_MS);
+
+    this.pendingComplaints.set(outletId, {
+      timer,
+      eventCount,
+      outletName,
+      tokens: tokenSet,
+      reviewId,
+    });
+  }
+
+  private async flushComplaintNotification(outletId: string) {
+    const pending = this.pendingComplaints.get(outletId);
+    if (!pending) return;
+
+    this.pendingComplaints.delete(outletId);
+
+    const { eventCount, outletName, tokens, reviewId } = pending;
+    if (tokens.size === 0) return;
+
+    const body =
+      eventCount === 1
+        ? `A customer at ${outletName} has raised a complaint.`
+        : `${eventCount} new complaints have been raised at ${outletName}.`;
+
+    try {
+      await this.notificationsService.sendPush(
+        Array.from(tokens),
+        'New Complaint',
+        body,
+        { type: 'complaint', reviewId },
+      );
+
+      this.logger.log(
+        `Sent batched complaint notification (${eventCount} event(s)) for outlet ${outletId} to ${tokens.size} user(s).`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to send batched complaint notification', error);
+    }
   }
 }
