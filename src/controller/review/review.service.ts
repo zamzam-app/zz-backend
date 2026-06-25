@@ -1212,7 +1212,20 @@ export class ReviewService {
     }
 
     if (user.role === UserRole.ADMIN) {
-      return { scopeType: 'global', outletIds: [] };
+      const activeOutlets = await this.outletModel
+        .find({ isDeleted: false })
+        .select('_id')
+        .lean()
+        .exec();
+
+      if (activeOutlets.length === 0) {
+        return { scopeType: 'none', outletIds: [] };
+      }
+
+      return {
+        scopeType: 'global',
+        outletIds: activeOutlets.map((o) => o._id),
+      };
     }
 
     if (user.role !== UserRole.MANAGER) {
