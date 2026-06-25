@@ -3,6 +3,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ReviewService } from './review.service';
 import { ReviewController } from './review.controller';
 import { Review, ReviewSchema } from './entities/review.entity';
+import {
+  PendingComplaint,
+  PendingComplaintSchema,
+} from './entities/pending-complaint.entity';
 import { Form, FormSchema } from '../forms/entities/form.entity';
 import { Question, QuestionSchema } from '../question/entities/question.entity';
 import {
@@ -24,6 +28,10 @@ import { NotificationsModule } from '../../notifications/notifications.module';
       { name: OutletTable.name, schema: OutletTableSchema },
       { name: User.name, schema: UserSchema },
       { name: Outlet.name, schema: OutletSchema },
+      {
+        name: PendingComplaint.name,
+        schema: PendingComplaintSchema,
+      },
     ]),
     UsersModule,
     Msg91Module,

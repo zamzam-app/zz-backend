@@ -203,11 +203,42 @@ export class TaskService {
         }
       }
 
+      // Notify all assignees (excluding the task creator) about the new assignment.
+      if (assigneeIds.length > 0) {
+        try {
+          const notifiableIds = assigneeIds.filter((id) => id !== jwtUser.sub);
+          if (notifiableIds.length > 0) {
+            const assigneeUsers = await this.userModel
+              .find({
+                _id: {
+                  $in: notifiableIds.map((id) => new Types.ObjectId(id)),
+                },
+                isDeleted: false,
+                pushToken: { $nin: [null, ''] },
+              })
+              .lean()
+              .exec();
+            const tokens = assigneeUsers
+              .map((u) => u.pushToken as string)
+              .filter(Boolean);
+            if (tokens.length > 0) {
+              await this.notificationsService.sendPush(
+                tokens,
+                'New Task Assigned',
+                `New Task Assigned: ${doc.description}`,
+                { type: 'task', taskId: saved._id.toString() },
+              );
+            }
+          }
+        } catch {
+          // Non-blocking: notification failure must not roll back task creation.
+        }
+      }
+
       const one = await this.findOneTaskById(saved._id.toString(), jwtUser);
       if (!one) {
         throw new InternalServerErrorException('Failed to load created task');
       }
-
 
       return one;
     } catch (error) {
@@ -804,6 +835,50 @@ export class TaskService {
             `Task '${updated.description}' marked ${dto.status}`,
             { type: 'task', taskId: updated._id.toString() },
           );
+        }
+      }
+
+      // Notify all current assignees (excluding the modifier) when schedule-relevant fields change.
+      const SCHEDULE_CHANGE_KEYS = [
+        'dueDate',
+        'dueTime',
+        'isRecurring',
+        'recurrenceType',
+        'recurrenceDays',
+      ] as const;
+      const hasScheduleChange = SCHEDULE_CHANGE_KEYS.some(
+        (key) => key in changes,
+      );
+      if (hasScheduleChange) {
+        try {
+          const finalAssigneeIds = updated.assignees
+            .map((a) => a._id.toString())
+            .filter((aId) => aId !== jwtUser.sub);
+          if (finalAssigneeIds.length > 0) {
+            const assigneeUsers = await this.userModel
+              .find({
+                _id: {
+                  $in: finalAssigneeIds.map((aId) => new Types.ObjectId(aId)),
+                },
+                isDeleted: false,
+                pushToken: { $nin: [null, ''] },
+              })
+              .lean()
+              .exec();
+            const tokens = assigneeUsers
+              .map((u) => u.pushToken as string)
+              .filter(Boolean);
+            if (tokens.length > 0) {
+              await this.notificationsService.sendPush(
+                tokens,
+                'Task Modified',
+                `${jwtUser.role.charAt(0).toUpperCase() + jwtUser.role.slice(1)} has updated the details for '${updated.description}'.`,
+                { type: 'task', taskId: updated._id.toString() },
+              );
+            }
+          }
+        } catch {
+          // Non-blocking: notification failure must not roll back task update.
         }
       }
 

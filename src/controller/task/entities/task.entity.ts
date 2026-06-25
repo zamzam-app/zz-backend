@@ -18,6 +18,9 @@ export class TaskReminderNotifications {
 
   @Prop({ type: Date, default: null })
   thirtyMinutesSentAt?: Date | null;
+
+  @Prop({ type: Date, default: null })
+  exactDeadlineSentAt?: Date | null;
 }
 
 @Schema({ _id: false })

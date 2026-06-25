@@ -6,6 +6,7 @@ import {
   BadRequestException,
   UnauthorizedException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage, Types } from 'mongoose';
@@ -40,6 +41,10 @@ import { UsersService } from '../users/users.service';
 import { Msg91Service } from '../../integrations/msg91/msg91.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { User, UserDocument } from '../users/entities/user.entity';
+import {
+  PendingComplaint,
+  PendingComplaintDocument,
+} from './entities/pending-complaint.entity';
 import { Outlet, OutletDocument } from '../outlet/entities/outlet.entity';
 import { UserRole } from '../users/interfaces/user.interface';
 
@@ -65,9 +70,24 @@ type ReviewBadgeStatus = {
   hasUnread: boolean;
 };
 
+const COMPLAINT_NOTIFICATION_DEBOUNCE_MS = 120_000;
+
+type PendingComplaintNotification = {
+  timer: ReturnType<typeof setTimeout>;
+  eventCount: number;
+  outletName: string;
+  tokens: Set<string>;
+  reviewId: string;
+};
+
 @Injectable()
-export class ReviewService {
+export class ReviewService implements OnModuleInit {
   private readonly logger = new Logger(ReviewService.name);
+
+  private readonly pendingComplaints = new Map<
+    string,
+    PendingComplaintNotification
+  >();
 
   constructor(
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
@@ -77,10 +97,45 @@ export class ReviewService {
     private outletTableModel: Model<OutletTableDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Outlet.name) private outletModel: Model<OutletDocument>,
+    @InjectModel(PendingComplaint.name)
+    private pendingComplaintModel: Model<PendingComplaintDocument>,
     private usersService: UsersService,
     private msg91Service: Msg91Service,
     private notificationsService: NotificationsService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    const pendingDocs = await this.pendingComplaintModel.find().lean().exec();
+
+    if (pendingDocs.length === 0) {
+      return;
+    }
+
+    this.logger.log(
+      `Recovering ${pendingDocs.length} pending complaint notification(s) from the database.`,
+    );
+
+    for (const doc of pendingDocs) {
+      const tokenSet = new Set(doc.tokens);
+
+      const timer = setTimeout(() => {
+        this.flushComplaintNotification(doc.outletId).catch((error) => {
+          this.logger.error(
+            `Failed to flush recovered complaint notification for outlet ${doc.outletId}`,
+            error,
+          );
+        });
+      }, COMPLAINT_NOTIFICATION_DEBOUNCE_MS);
+
+      this.pendingComplaints.set(doc.outletId, {
+        timer,
+        eventCount: doc.eventCount,
+        outletName: doc.outletName,
+        tokens: tokenSet,
+        reviewId: doc.reviewId,
+      });
+    }
+  }
 
   private buildOpenComplaintMatch(): Record<string, unknown> {
     return {
@@ -357,11 +412,11 @@ export class ReviewService {
 
         if (uniqueTokens.length > 0) {
           const outletName = outlet?.name ?? 'an outlet';
-          await this.notificationsService.sendPush(
+          this.scheduleComplaintNotification(
+            savedReview.outletId,
+            outletName,
             uniqueTokens,
-            'New Complaint',
-            `New complaint at ${outletName}`,
-            { type: 'complaint', reviewId: savedReview._id.toString() },
+            savedReview._id.toString(),
           );
         }
       }
@@ -1183,6 +1238,49 @@ export class ReviewService {
         throw new NotFoundException('Review not found');
       }
 
+      // Only notify on an actual transition to RESOLVED, not on re-sends.
+      const previousStatus = await this.reviewModel
+        .findById(reviewId)
+        .select('complaintStatus')
+        .lean()
+        .exec()
+        .then((r) => r?.complaintStatus);
+
+      if (
+        dto.complaintStatus === ComplaintStatus.RESOLVED &&
+        previousStatus !== ComplaintStatus.RESOLVED
+      ) {
+        try {
+          const admins = await this.userModel.find({
+            role: UserRole.ADMIN,
+            pushToken: { $ne: null },
+          });
+
+          const adminTokens = admins
+            .map((a) => a.pushToken as string)
+            .filter(Boolean);
+
+          if (adminTokens.length > 0) {
+            const outlet = await this.outletModel.findById(updated.outletId);
+            const outletName = outlet?.name ?? 'an outlet';
+            const manager = await this.userModel.findById(dto.resolvedBy);
+            const managerName = manager?.name ?? 'a Manager';
+
+            await this.notificationsService.sendPush(
+              adminTokens,
+              'Complaint Resolved',
+              `A complaint at ${outletName} has been resolved by ${managerName}.`,
+              { type: 'complaint', reviewId: updated._id.toString() },
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            'Failed to send push notification for resolved complaint',
+            error,
+          );
+        }
+      }
+
       return this.findOne(reviewId);
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -1273,5 +1371,104 @@ export class ReviewService {
       isDeleted: false,
       ...(outletIds.length > 0 ? { outletId: { $in: outletIds } } : {}),
     };
+  }
+
+  private scheduleComplaintNotification(
+    outletId: string,
+    outletName: string,
+    tokens: string[],
+    reviewId: string,
+  ) {
+    const existing = this.pendingComplaints.get(outletId);
+
+    const tokenSet = existing ? existing.tokens : new Set<string>();
+    tokens.forEach((t) => tokenSet.add(t));
+
+    const eventCount = (existing ? existing.eventCount : 0) + 1;
+
+    let timer = existing?.timer;
+
+    if (!timer) {
+      timer = setTimeout(() => {
+        this.flushComplaintNotification(outletId).catch((error) => {
+          this.logger.error(
+            `Failed to flush batched complaint notifications for outlet ${outletId}`,
+            error,
+          );
+        });
+      }, COMPLAINT_NOTIFICATION_DEBOUNCE_MS);
+    }
+
+    this.pendingComplaints.set(outletId, {
+      timer,
+      eventCount,
+      outletName,
+      tokens: tokenSet,
+      reviewId,
+    });
+
+    // Persist to MongoDB so the notification survives server restarts.
+    this.pendingComplaintModel
+      .updateOne(
+        { outletId },
+        {
+          $set: {
+            outletName,
+            tokens: Array.from(tokenSet),
+            eventCount,
+            reviewId,
+          },
+          $setOnInsert: { outletId },
+        },
+        { upsert: true },
+      )
+      .exec()
+      .catch((err) => {
+        this.logger.warn(
+          `Failed to persist pending complaint notification for outlet ${outletId}`,
+          err,
+        );
+      });
+  }
+
+  private async flushComplaintNotification(outletId: string) {
+    const pending = this.pendingComplaints.get(outletId);
+    if (!pending) return;
+
+    this.pendingComplaints.delete(outletId);
+
+    // Remove the persisted record regardless of send outcome to avoid re-sending on restart.
+    this.pendingComplaintModel
+      .deleteOne({ outletId })
+      .exec()
+      .catch((err) => {
+        this.logger.warn(
+          `Failed to delete persisted pending complaint for outlet ${outletId}`,
+          err,
+        );
+      });
+
+    const { eventCount, outletName, tokens, reviewId } = pending;
+    if (tokens.size === 0) return;
+
+    const body =
+      eventCount === 1
+        ? `A customer at ${outletName} has raised a complaint.`
+        : `${eventCount} new complaints have been raised at ${outletName}.`;
+
+    try {
+      await this.notificationsService.sendPush(
+        Array.from(tokens),
+        'New Complaint',
+        body,
+        { type: 'complaint', reviewId },
+      );
+
+      this.logger.log(
+        `Sent batched complaint notification (${eventCount} event(s)) for outlet ${outletId} to ${tokens.size} user(s).`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to send batched complaint notification', error);
+    }
   }
 }
