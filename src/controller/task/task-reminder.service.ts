@@ -12,13 +12,15 @@ const TASK_REMINDER_TIMEZONE = 'Asia/Kolkata';
 const REMINDER_JOB_INTERVAL_MS = 60_000;
 
 type ReminderWindowConfig = {
-  key: 'oneHour' | 'thirtyMinutes';
+  key: 'oneHour' | 'thirtyMinutes' | 'exactDeadline';
   leadMinutes: number;
   title: string;
-  bodySuffix: string;
+  /** Receives the task description and returns the full notification body. */
+  bodyTemplate: (description: string) => string;
   sentField:
     | 'reminderNotifications.oneHourSentAt'
-    | 'reminderNotifications.thirtyMinutesSentAt';
+    | 'reminderNotifications.thirtyMinutesSentAt'
+    | 'reminderNotifications.exactDeadlineSentAt';
 };
 
 type ReminderWindow = ReminderWindowConfig & {
@@ -31,15 +33,22 @@ const REMINDER_WINDOWS: ReminderWindowConfig[] = [
     key: 'oneHour',
     leadMinutes: 60,
     title: 'Task Due In 1 Hour',
-    bodySuffix: '1 hour',
+    bodyTemplate: (desc) => `'${desc}' is due in 1 hour.`,
     sentField: 'reminderNotifications.oneHourSentAt',
   },
   {
     key: 'thirtyMinutes',
     leadMinutes: 30,
     title: 'Task Due In 30 Minutes',
-    bodySuffix: '30 minutes',
+    bodyTemplate: (desc) => `'${desc}' is due in 30 minutes.`,
     sentField: 'reminderNotifications.thirtyMinutesSentAt',
+  },
+  {
+    key: 'exactDeadline',
+    leadMinutes: 0,
+    title: 'Task Deadline Missed',
+    bodyTemplate: (desc) => `'${desc}' deadline has been missed.`,
+    sentField: 'reminderNotifications.exactDeadlineSentAt',
   },
 ];
 
@@ -52,6 +61,7 @@ type TaskReminderCandidate = {
   reminderNotifications?: {
     oneHourSentAt?: Date | null;
     thirtyMinutesSentAt?: Date | null;
+    exactDeadlineSentAt?: Date | null;
   };
 };
 
@@ -182,7 +192,7 @@ export class TaskReminderService {
       await this.notificationsService.sendPush(
         tokens,
         reminderWindow.title,
-        `'${task.description ?? 'Task'}' is due in ${reminderWindow.bodySuffix}.`,
+        reminderWindow.bodyTemplate(task.description ?? 'Task'),
         { type: 'task', taskId: task._id.toString() },
       );
 
