@@ -2,10 +2,13 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { NotificationsService } from '../../../notifications/notifications.service';
+import { User, UserDocument } from '../../users/entities/user.entity';
 import { Task, TaskDocument } from '../entities/task.entity';
 import { TaskEvent, TaskEventDocument } from '../entities/task-event.entity';
 import {
@@ -18,6 +21,25 @@ import {
   computeUnreadIncrementUserIds,
   generateSortKey,
 } from './task-event-projection.util';
+
+const NOTIFIABLE_EVENT_TYPES: ReadonlySet<TaskEventType> = new Set([
+  TaskEventType.COMMENTED,
+  TaskEventType.ATTACHMENT_ADDED,
+]);
+
+/** How long to wait before flushing batched notifications for a task. */
+const NOTIFICATION_DEBOUNCE_MS = 3_000;
+
+type PendingNotification = {
+  /** Node.js timer handle — cleared and reset on each new event. */
+  timer: ReturnType<typeof setTimeout>;
+  /** Number of notifiable events accumulated in this window. */
+  eventCount: number;
+  /** Most recent task snapshot (used for description & recipient resolution). */
+  latestTask: TaskDocument;
+  /** Accumulated actor IDs to exclude from the recipient list. */
+  actorIds: Set<string>;
+};
 
 export interface AppendEventResult {
   /** The appended event (immutable record). */
@@ -55,12 +77,28 @@ export interface AppendEventOptions {
  */
 @Injectable()
 export class TaskEventService {
+  private readonly logger = new Logger(TaskEventService.name);
+
+  /**
+   * In-memory debounce buffer keyed by `taskId`.
+   *
+   * When multiple notifiable events fire for the same task within
+   * `NOTIFICATION_DEBOUNCE_MS`, they are collapsed into a single
+   * push notification (e.g. "5 new updates on task '…'").
+   */
+  private readonly pendingNotifications = new Map<
+    string,
+    PendingNotification
+  >();
+
   constructor(
     @InjectModel(Task.name) private readonly taskModel: Model<TaskDocument>,
     @InjectModel(TaskEvent.name)
     private readonly taskEventModel: Model<TaskEventDocument>,
     @InjectModel(TaskDelegation.name)
     private readonly taskDelegationModel: Model<TaskDelegationDocument>,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -208,7 +246,169 @@ export class TaskEventService {
       );
     }
 
+    // --------------------------------------------------
+    // 8. Non-blocking push notification for timeline activity
+    //    (debounced per task to avoid notification spam)
+    // --------------------------------------------------
+    if (NOTIFIABLE_EVENT_TYPES.has(type)) {
+      this.scheduleNotification(updatedTask, actorId);
+    }
+
     return { event, task: updatedTask };
+  }
+
+  // ------------------------------------------------------------------
+  // Push notification helpers (debounced)
+  // ------------------------------------------------------------------
+
+  /**
+   * Buffers a notifiable event for the given task.
+   *
+   * If no pending notification exists for this `taskId`, a new debounce
+   * timer is started. If one already exists, the timer is reset to
+   * `NOTIFICATION_DEBOUNCE_MS` and the event count is incremented.
+   *
+   * When the timer finally fires, `flushNotification` sends a single
+   * push with the accumulated count.
+   */
+  private scheduleNotification(
+    task: TaskDocument,
+    actorId: Types.ObjectId,
+  ): void {
+    const taskId = task._id.toString();
+    const existing = this.pendingNotifications.get(taskId);
+
+    if (existing) {
+      // Reset the debounce window
+      clearTimeout(existing.timer);
+      existing.eventCount += 1;
+      existing.latestTask = task;
+      existing.actorIds.add(actorId.toString());
+      existing.timer = setTimeout(
+        () => this.flushNotification(taskId),
+        NOTIFICATION_DEBOUNCE_MS,
+      );
+      return;
+    }
+
+    const actorIds = new Set<string>([actorId.toString()]);
+    const timer = setTimeout(
+      () => this.flushNotification(taskId),
+      NOTIFICATION_DEBOUNCE_MS,
+    );
+
+    this.pendingNotifications.set(taskId, {
+      timer,
+      eventCount: 1,
+      latestTask: task,
+      actorIds,
+    });
+  }
+
+  /**
+   * Drains the pending notification for a task and sends a single push.
+   *
+   * Body varies by count:
+   *  - 1 event:  "New activity on task '[description]'."
+   *  - N events: "N new updates on task '[description]'."
+   */
+  private flushNotification(taskId: string): void {
+    const pending = this.pendingNotifications.get(taskId);
+    if (!pending) {
+      return;
+    }
+    this.pendingNotifications.delete(taskId);
+
+    const { eventCount, latestTask, actorIds } = pending;
+
+    this.sendBatchedNotification(latestTask, actorIds, eventCount).catch(
+      (err) => {
+        this.logger.error(
+          `Failed to send batched notification for task ${taskId}`,
+          err instanceof Error ? err.message : String(err),
+        );
+      },
+    );
+  }
+
+  /**
+   * Sends a single push notification for batched timeline activity.
+   *
+   * Audience: union of `createdBy`, `assigneeIds`, `activeOwner`, and
+   * `activeDelegation.delegatedTo` — minus all actors who triggered
+   * events in the debounce window.
+   *
+   * This is intentionally fire-and-forget; failures are logged but never
+   * propagated to the caller.
+   */
+  private async sendBatchedNotification(
+    task: TaskDocument,
+    actorIds: Set<string>,
+    eventCount: number,
+  ): Promise<void> {
+    const recipientIdSet = new Set<string>();
+
+    // Task creator
+    if (task.createdBy) {
+      recipientIdSet.add(task.createdBy.toString());
+    }
+
+    // All assignees
+    if (task.assigneeIds?.length) {
+      for (const id of task.assigneeIds) {
+        recipientIdSet.add(id.toString());
+      }
+    }
+
+    // Active owner (v2 delegation)
+    if (task.activeOwner) {
+      recipientIdSet.add(task.activeOwner.toString());
+    }
+
+    // Active delegation target (v2 delegation)
+    if (task.activeDelegation?.delegatedTo) {
+      recipientIdSet.add(task.activeDelegation.delegatedTo.toString());
+    }
+
+    // Exclude all actors from the debounce window
+    for (const actorId of actorIds) {
+      recipientIdSet.delete(actorId);
+    }
+
+    if (recipientIdSet.size === 0) {
+      return;
+    }
+
+    const users = await this.userModel
+      .find({
+        _id: {
+          $in: Array.from(recipientIdSet).map((id) => new Types.ObjectId(id)),
+        },
+        isDeleted: false,
+        pushToken: { $nin: [null, ''] },
+      })
+      .lean()
+      .exec();
+
+    const tokens = users.map((u) => u.pushToken as string).filter(Boolean);
+
+    if (tokens.length === 0) {
+      return;
+    }
+
+    const body =
+      eventCount === 1
+        ? `New activity on task '${task.description}'.`
+        : `${eventCount} new updates on task '${task.description}'.`;
+
+    await this.notificationsService.sendPush(tokens, 'New Activity', body, {
+      type: 'task',
+      taskId: task._id.toString(),
+    });
+
+    this.logger.log(
+      `Sent batched notification (${eventCount} event(s)) for task ${task._id.toString()} to ${tokens.length} user(s).`,
+    );
   }
 
   // ------------------------------------------------------------------
