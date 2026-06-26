@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -81,6 +82,8 @@ export interface DelegationRecord {
  */
 @Injectable()
 export class TaskDelegationService {
+  private readonly logger = new Logger(TaskDelegationService.name);
+
   constructor(
     @InjectModel(Task.name) private readonly taskModel: Model<TaskDocument>,
     @InjectModel(TaskDelegation.name)
@@ -170,12 +173,16 @@ export class TaskDelegationService {
       .exec();
 
     if (targetUser?.pushToken) {
-      await this.notificationsService.sendPush(
-        [targetUser.pushToken],
-        'Task Delegated',
-        `You have been delegated a task: ${task.description || 'Check the app for details'}`,
-        { type: 'task', taskId: taskIdObj.toString() },
-      );
+      try {
+        await this.notificationsService.sendPush(
+          [targetUser.pushToken],
+          'Task Delegated',
+          `You have been delegated a task: ${task.description || 'Check the app for details'}`,
+          { type: 'task', taskId: taskIdObj.toString() },
+        );
+      } catch (err) {
+        this.logger.error('Failed to send push notification', err);
+      }
     }
 
     return {
@@ -252,12 +259,16 @@ export class TaskDelegationService {
       .exec();
 
     if (targetUser?.pushToken) {
-      await this.notificationsService.sendPush(
-        [targetUser.pushToken],
-        'Task Reassigned',
-        `A task has been reassigned to you: ${task.description || 'Check the app for details'}`,
-        { type: 'task', taskId: taskIdObj.toString() },
-      );
+      try {
+        await this.notificationsService.sendPush(
+          [targetUser.pushToken],
+          'Task Reassigned',
+          `A task has been reassigned to you: ${task.description || 'Check the app for details'}`,
+          { type: 'task', taskId: taskIdObj.toString() },
+        );
+      } catch (err) {
+        this.logger.error('Failed to send push notification', err);
+      }
     }
 
     return {

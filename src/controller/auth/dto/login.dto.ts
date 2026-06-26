@@ -12,6 +12,15 @@ export class LoginDto {
   userName?: string;
 
   @ApiProperty({
+    example: 'ExpoPushToken[xxxx]',
+    description: 'Optional push notification token for the device',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  pushToken?: string;
+
+  @ApiProperty({
     example: 'johndoe',
     description: 'Legacy name identifier for login (backward compatibility)',
     required: false,

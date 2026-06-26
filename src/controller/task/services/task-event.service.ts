@@ -408,14 +408,18 @@ export class TaskEventService {
         ? `New activity on task '${task.description}'.`
         : `${eventCount} new updates on task '${task.description}'.`;
 
-    await this.notificationsService.sendPush(tokens, 'New Activity', body, {
-      type: 'task',
-      taskId: task._id.toString(),
-    });
+    try {
+      await this.notificationsService.sendPush(tokens, 'New Activity', body, {
+        type: 'task',
+        taskId: task._id.toString(),
+      });
 
-    this.logger.log(
-      `Sent batched notification (${eventCount} event(s)) for task ${task._id.toString()} to ${tokens.length} user(s).`,
-    );
+      this.logger.log(
+        `Sent batched notification (${eventCount} event(s)) for task ${task._id.toString()} to ${tokens.length} user(s).`,
+      );
+    } catch (err) {
+      this.logger.error('Failed to send push notification', err);
+    }
   }
 
   // ------------------------------------------------------------------

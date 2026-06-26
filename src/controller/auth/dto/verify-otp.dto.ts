@@ -61,4 +61,13 @@ export class VerifyOtpDto {
   @IsDateString()
   @IsOptional()
   dob?: string;
+
+  @ApiProperty({
+    example: 'ExpoPushToken[xxxx]',
+    description: 'Optional push notification token for the device',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  pushToken?: string;
 }

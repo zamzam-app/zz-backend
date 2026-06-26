@@ -1,10 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 
 @Injectable()
 export class NotificationsService {
-  private expo = new Expo();
+  private expo: Expo;
   private readonly logger = new Logger(NotificationsService.name);
+
+  constructor(private configService: ConfigService) {
+    const accessToken = this.configService.get<string>('EXPO_ACCESS_TOKEN');
+    this.expo = new Expo({ accessToken });
+  }
 
   async sendPush(
     tokens: string[],
@@ -21,9 +27,48 @@ export class NotificationsService {
     const chunks = this.expo.chunkPushNotifications(messages);
     for (const chunk of chunks) {
       try {
-        await this.expo.sendPushNotificationsAsync(chunk);
+        const tickets = await this.expo.sendPushNotificationsAsync(chunk);
+
+        tickets.forEach((ticket, index) => {
+          if (ticket.status === 'error') {
+            const messageObj = chunk[index];
+            // 'to' can be a string or string[], but we passed a single string in the map function above.
+            const token = Array.isArray(messageObj.to)
+              ? messageObj.to.join(', ')
+              : messageObj.to;
+
+            this.logger.error(
+              `Push ticket error for ${token}: ${ticket.message}`,
+            );
+
+            const errorType = ticket.details?.error;
+            if (errorType === 'DeviceNotRegistered') {
+              this.logger.warn(
+                `DEAD TOKEN DETECTED: ${token} - Should be removed from DB`,
+              );
+            } else if (errorType) {
+              this.logger.error(
+                `Push ticket error details for ${token}: ${errorType}`,
+              );
+            }
+          }
+        });
       } catch (err) {
-        this.logger.error('Push send failed', err);
+        this.logger.error('Failed to send push notification', err);
+        const errorObj = err as {
+          response?: { body?: unknown; data?: unknown };
+        };
+        if (errorObj?.response?.body) {
+          this.logger.error(
+            'Push notification response body:',
+            errorObj.response.body,
+          );
+        } else if (errorObj?.response?.data) {
+          this.logger.error(
+            'Push notification response data:',
+            errorObj.response.data,
+          );
+        }
       }
     }
   }
