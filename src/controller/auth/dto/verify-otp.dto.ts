@@ -5,6 +5,7 @@ import {
   IsString,
   IsEmail,
   IsDateString,
+  Matches,
 } from 'class-validator';
 
 export class VerifyOtpDto {
@@ -69,5 +70,8 @@ export class VerifyOtpDto {
   })
   @IsString()
   @IsOptional()
+  @Matches(/\S/, {
+    message: 'Push token must not be empty or contain only whitespace',
+  })
   pushToken?: string;
 }

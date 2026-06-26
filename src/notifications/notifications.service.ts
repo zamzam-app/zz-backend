@@ -37,18 +37,23 @@ export class NotificationsService {
               ? messageObj.to.join(', ')
               : messageObj.to;
 
+            const maskedToken =
+              token.length > 12
+                ? `${token.slice(0, 6)}…${token.slice(-4)}`
+                : 'redacted';
+
             this.logger.error(
-              `Push ticket error for ${token}: ${ticket.message}`,
+              `Push ticket error for ${maskedToken}: ${ticket.message}`,
             );
 
             const errorType = ticket.details?.error;
             if (errorType === 'DeviceNotRegistered') {
               this.logger.warn(
-                `DEAD TOKEN DETECTED: ${token} - Should be removed from DB`,
+                `Dead Expo token detected for ${maskedToken} - should be removed from DB`,
               );
             } else if (errorType) {
               this.logger.error(
-                `Push ticket error details for ${token}: ${errorType}`,
+                `Push ticket error details for ${maskedToken}: ${errorType}`,
               );
             }
           }
