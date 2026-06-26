@@ -6,6 +6,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage, Types } from 'mongoose';
@@ -63,6 +64,8 @@ type TaskOverviewResult = {
 
 @Injectable()
 export class TaskService {
+  private readonly logger = new Logger(TaskService.name);
+
   constructor(
     @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
     @InjectModel(Outlet.name) private outletModel: Model<OutletDocument>,
@@ -230,8 +233,8 @@ export class TaskService {
               );
             }
           }
-        } catch {
-          // Non-blocking: notification failure must not roll back task creation.
+        } catch (err) {
+          this.logger.error('Failed to send push notification', err);
         }
       }
 
@@ -802,12 +805,16 @@ export class TaskService {
             .map((u) => u.pushToken as string)
             .filter(Boolean);
           if (tokens.length > 0) {
-            await this.notificationsService.sendPush(
-              tokens,
-              'New Task Assigned',
-              `You've been assigned a task: ${updated.description}`,
-              { type: 'task', taskId: updated._id.toString() },
-            );
+            try {
+              await this.notificationsService.sendPush(
+                tokens,
+                'New Task Assigned',
+                `You've been assigned a task: ${updated.description}`,
+                { type: 'task', taskId: updated._id.toString() },
+              );
+            } catch (err) {
+              this.logger.error('Failed to send push notification', err);
+            }
           }
         }
       }
@@ -829,12 +836,16 @@ export class TaskService {
           .map((u) => u.pushToken as string)
           .filter(Boolean);
         if (tokens.length > 0) {
-          await this.notificationsService.sendPush(
-            tokens,
-            'Task Status Updated',
-            `Task '${updated.description}' marked ${dto.status}`,
-            { type: 'task', taskId: updated._id.toString() },
-          );
+          try {
+            await this.notificationsService.sendPush(
+              tokens,
+              'Task Status Updated',
+              `Task '${updated.description}' marked ${dto.status}`,
+              { type: 'task', taskId: updated._id.toString() },
+            );
+          } catch (err) {
+            this.logger.error('Failed to send push notification', err);
+          }
         }
       }
 
@@ -877,8 +888,8 @@ export class TaskService {
               );
             }
           }
-        } catch {
-          // Non-blocking: notification failure must not roll back task update.
+        } catch (err) {
+          this.logger.error('Failed to send push notification', err);
         }
       }
 

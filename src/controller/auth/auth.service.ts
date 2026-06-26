@@ -55,6 +55,7 @@ export class AuthService {
 
     await this.usersService.update(user._id.toString(), {
       lastLoginAt: new Date().toISOString(),
+      ...(loginDto.pushToken && { pushToken: loginDto.pushToken }),
     });
     return this.login(user);
   }
@@ -126,9 +127,12 @@ export class AuthService {
       name?: string;
       email?: string;
       dob?: string;
+      pushToken?: string;
       lastLoginAt: string;
     } = { lastLoginAt: new Date().toISOString() };
     if (verifyOtpDto.name !== undefined) profileUpdate.name = verifyOtpDto.name;
+    if (verifyOtpDto.pushToken !== undefined)
+      profileUpdate.pushToken = verifyOtpDto.pushToken;
 
     let emailUpdateSkipped = false;
     if (verifyOtpDto.email !== undefined && verifyOtpDto.email !== null) {

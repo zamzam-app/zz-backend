@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({
@@ -10,6 +10,18 @@ export class LoginDto {
   @IsString()
   @IsOptional()
   userName?: string;
+
+  @ApiProperty({
+    example: 'ExpoPushToken[xxxx]',
+    description: 'Optional push notification token for the device',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @Matches(/\S/, {
+    message: 'Push token must not be empty or contain only whitespace',
+  })
+  pushToken?: string;
 
   @ApiProperty({
     example: 'johndoe',
