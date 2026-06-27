@@ -14,6 +14,9 @@ export class UpdatePushTokenDto {
   @IsIn(['ios', 'android', 'unknown'])
   platform?: 'ios' | 'android' | 'unknown';
 
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() || undefined : value,
+  )
   @IsOptional()
   @IsString()
   deviceId?: string;

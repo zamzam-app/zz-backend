@@ -73,7 +73,7 @@ export class User extends BaseEntity {
   @Prop({ type: String, default: null })
   pushToken?: string;
 
-  @Prop({ type: [UserPushTokenSchema], default: [] })
+  @Prop({ type: [UserPushTokenSchema], default: [], select: false })
   pushTokens?: UserPushToken[];
 
   @Prop({ required: false, select: false })
@@ -112,4 +112,4 @@ export class User extends BaseEntity {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ isDeleted: 1, role: 1 });
-UserSchema.index({ 'pushTokens.token': 1 }, { sparse: true });
+UserSchema.index({ 'pushTokens.token': 1 }, { unique: true, sparse: true });

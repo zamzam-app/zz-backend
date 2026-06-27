@@ -21,37 +21,42 @@ export class PushTokenService {
 
     const now = new Date();
 
-    // Pull any existing token that matches the token string or device ID
-    const pullExpr = dto.deviceId
-      ? { $or: [{ token: tokenStr }, { deviceId: dto.deviceId }] }
-      : { token: tokenStr };
-
-    await this.userModel
-      .updateOne(
-        { _id: new Types.ObjectId(userId) },
-
-        { $pull: { pushTokens: pullExpr } },
-      )
-      .exec();
-
     const tokenObj = {
       token: tokenStr,
       platform: dto.platform || 'unknown',
-      deviceId: dto.deviceId,
-      appVersion: dto.appVersion,
+      deviceId: dto.deviceId || null,
+      appVersion: dto.appVersion || null,
       lastSeenAt: now,
       createdAt: now,
     };
 
-    // Push the updated token and mirror to legacy pushToken field
     await this.userModel
-      .updateOne(
-        { _id: new Types.ObjectId(userId) },
+      .updateOne({ _id: new Types.ObjectId(userId) }, [
         {
-          $push: { pushTokens: tokenObj },
-          $set: { pushToken: tokenStr },
+          $set: {
+            pushTokens: {
+              $concatArrays: [
+                {
+                  $filter: {
+                    input: { $ifNull: ['$pushTokens', []] },
+                    as: 'pt',
+                    cond: {
+                      $and: [
+                        { $ne: ['$$pt.token', tokenStr] },
+                        ...(dto.deviceId
+                          ? [{ $ne: ['$$pt.deviceId', dto.deviceId] }]
+                          : []),
+                      ],
+                    },
+                  },
+                },
+                [tokenObj],
+              ],
+            },
+            pushToken: tokenStr,
+          },
         },
-      )
+      ])
       .exec();
   }
 
@@ -65,16 +70,47 @@ export class PushTokenService {
   ): Promise<void> {
     if (!opts.token && !opts.deviceId) return;
 
-    const pullExpr = opts.deviceId
-      ? { deviceId: opts.deviceId }
-      : { token: opts.token };
-
     await this.userModel
-      .updateOne(
-        { _id: new Types.ObjectId(userId) },
-
-        { $pull: { pushTokens: pullExpr } },
-      )
+      .updateOne({ _id: new Types.ObjectId(userId) }, [
+        {
+          $set: {
+            pushTokens: {
+              $filter: {
+                input: { $ifNull: ['$pushTokens', []] },
+                as: 'pt',
+                cond: {
+                  $and: [
+                    ...(opts.token
+                      ? [{ $ne: ['$$pt.token', opts.token] }]
+                      : []),
+                    ...(opts.deviceId
+                      ? [{ $ne: ['$$pt.deviceId', opts.deviceId] }]
+                      : []),
+                  ],
+                },
+              },
+            },
+          },
+        },
+        {
+          $set: {
+            pushToken: {
+              $let: {
+                vars: {
+                  tokens: { $ifNull: ['$pushTokens', []] },
+                },
+                in: {
+                  $cond: {
+                    if: { $gt: [{ $size: '$$tokens' }, 0] },
+                    then: { $arrayElemAt: ['$$tokens.token', -1] },
+                    else: null,
+                  },
+                },
+              },
+            },
+          },
+        },
+      ])
       .exec();
   }
 

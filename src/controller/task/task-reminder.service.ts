@@ -159,8 +159,8 @@ export class TaskReminderService {
       return;
     }
 
-    const creatorId = task.createdBy?.toString();
-    const assigneeIds = (task.assigneeIds ?? [])
+    const creatorId = reservedTask.createdBy?.toString();
+    const assigneeIds = (reservedTask.assigneeIds ?? [])
       .map((id) => id.toString())
       .filter((id) => Types.ObjectId.isValid(id) && id !== creatorId);
 
