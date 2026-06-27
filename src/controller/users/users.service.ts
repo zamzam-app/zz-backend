@@ -9,6 +9,7 @@ import {
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
+import { UpdatePushTokenDto } from './dto/update-push-token.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserDocument } from './entities/user.entity';
 import { Model, Types, PipelineStage } from 'mongoose';
@@ -21,9 +22,14 @@ import {
   normalizePhoneNumber,
 } from '../../util/normalize.util';
 
+import { PushTokenService } from './push-token.service';
+
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<User>) {}
+  constructor(
+    @InjectModel(User.name) private userModel: Model<User>,
+    private pushTokenService: PushTokenService,
+  ) {}
 
   async create(createUserDto: CreateUserDto) {
     try {
@@ -363,21 +369,19 @@ export class UsersService {
     return user;
   }
 
-  async updatePushToken(userId: string, pushToken: string | null) {
-    try {
-      const updatedUser = await this.userModel
-        .findByIdAndUpdate(userId, { pushToken }, { new: true })
-        .exec();
-      if (!updatedUser) {
-        throw new NotFoundException(`User with ID ${userId} not found`);
-      }
-      return updatedUser;
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException(
-        (error as Error)?.message ?? 'Failed to update push token',
-      );
-    }
+  async updatePushToken(userId: string, dto: UpdatePushTokenDto) {
+    return this.pushTokenService.upsertToken(userId, dto);
+  }
+
+  async removePushToken(
+    userId: string,
+    opts: { token?: string; deviceId?: string },
+  ) {
+    return this.pushTokenService.removeToken(userId, opts);
+  }
+
+  async getPushTokensForUsers(userIds: string[]) {
+    return this.pushTokenService.getTokensForUsers(userIds);
   }
 
   async changePassword(
