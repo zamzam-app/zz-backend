@@ -1,13 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
+import { PushTokenService } from '../controller/users/push-token.service';
 
 @Injectable()
 export class NotificationsService {
   private expo: Expo;
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private pushTokenService: PushTokenService,
+  ) {
     const accessToken = this.configService.get<string>('EXPO_ACCESS_TOKEN');
     this.expo = new Expo({ accessToken });
   }
@@ -29,12 +33,12 @@ export class NotificationsService {
       try {
         const tickets = await this.expo.sendPushNotificationsAsync(chunk);
 
-        tickets.forEach((ticket, index) => {
+        for (let i = 0; i < tickets.length; i++) {
+          const ticket = tickets[i];
           if (ticket.status === 'error') {
-            const messageObj = chunk[index];
-            // 'to' can be a string or string[], but we passed a single string in the map function above.
+            const messageObj = chunk[i];
             const token = Array.isArray(messageObj.to)
-              ? messageObj.to.join(', ')
+              ? messageObj.to[0]
               : messageObj.to;
 
             const maskedToken =
@@ -46,18 +50,21 @@ export class NotificationsService {
               `Push ticket error for ${maskedToken}: ${ticket.message}`,
             );
 
-            const errorType = ticket.details?.error;
-            if (errorType === 'DeviceNotRegistered') {
-              this.logger.warn(
-                `Dead Expo token detected for ${maskedToken} - should be removed from DB`,
-              );
-            } else if (errorType) {
+            if (ticket.details?.error === 'DeviceNotRegistered') {
+              this.logger.warn(`Removing dead token: ${maskedToken}`);
+              // Fire-and-forget; don't block the push loop
+              void this.pushTokenService
+                .removeTokenByValue(token)
+                .catch((err) =>
+                  this.logger.error('Failed to remove dead token', err),
+                );
+            } else if (ticket.details?.error) {
               this.logger.error(
-                `Push ticket error details for ${maskedToken}: ${errorType}`,
+                `Push ticket error details for ${maskedToken}: ${ticket.details.error}`,
               );
             }
           }
-        });
+        }
       } catch (err) {
         this.logger.error('Failed to send push notification', err);
         const errorObj = err as {

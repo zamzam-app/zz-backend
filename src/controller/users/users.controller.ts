@@ -66,13 +66,16 @@ export class UsersController {
     @Request() req: { user: JwtPayload },
     @Body() dto: UpdatePushTokenDto,
   ) {
-    return this.usersService.updatePushToken(req.user.sub, dto.pushToken);
+    return this.usersService.updatePushToken(req.user.sub, dto);
   }
 
   @Delete('push-token')
   @UseGuards(JwtAuthGuard)
-  removePushToken(@Request() req: { user: JwtPayload }) {
-    return this.usersService.updatePushToken(req.user.sub, null);
+  removePushToken(
+    @Request() req: { user: JwtPayload },
+    @Body() body?: { token?: string; deviceId?: string },
+  ) {
+    return this.usersService.removePushToken(req.user.sub, body || {});
   }
 
   @Patch(':id')

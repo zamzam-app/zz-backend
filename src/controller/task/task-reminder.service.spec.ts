@@ -15,6 +15,9 @@ describe('TaskReminderService', () => {
   let userModel: {
     find: jest.Mock;
   };
+  let usersService: {
+    getPushTokensForUsers: jest.Mock;
+  };
   let notificationsService: {
     sendPush: jest.Mock;
   };
@@ -46,6 +49,9 @@ describe('TaskReminderService', () => {
     userModel = {
       find: jest.fn(),
     };
+    usersService = {
+      getPushTokensForUsers: jest.fn().mockResolvedValue([]),
+    };
     notificationsService = {
       sendPush: jest.fn().mockResolvedValue(undefined),
     };
@@ -53,6 +59,7 @@ describe('TaskReminderService', () => {
     service = new TaskReminderService(
       taskModel as never,
       userModel as never,
+      usersService as never,
       notificationsService as never,
     );
   });
@@ -68,10 +75,12 @@ describe('TaskReminderService', () => {
         {
           _id: managerId,
           role: UserRole.MANAGER,
-          pushToken: 'ExponentPushToken[manager-hour]',
         },
       ]),
     );
+    usersService.getPushTokensForUsers.mockResolvedValue([
+      'ExponentPushToken[manager-hour]',
+    ]);
 
     await service.handleReminders(new Date('2026-05-18T08:00:00.000Z'));
 
@@ -94,10 +103,12 @@ describe('TaskReminderService', () => {
         {
           _id: managerId,
           role: UserRole.MANAGER,
-          pushToken: 'ExponentPushToken[manager-half-hour]',
         },
       ]),
     );
+    usersService.getPushTokensForUsers.mockResolvedValue([
+      'ExponentPushToken[manager-half-hour]',
+    ]);
 
     await service.handleReminders(new Date('2026-05-18T09:30:00.000Z'));
 
@@ -121,10 +132,12 @@ describe('TaskReminderService', () => {
         {
           _id: managerId,
           role: UserRole.MANAGER,
-          pushToken: 'ExponentPushToken[manager-only]',
         },
       ]),
     );
+    usersService.getPushTokensForUsers.mockResolvedValue([
+      'ExponentPushToken[manager-only]',
+    ]);
 
     await service.handleReminders(new Date('2026-05-18T08:00:00.000Z'));
 
@@ -172,10 +185,12 @@ describe('TaskReminderService', () => {
         {
           _id: managerId,
           role: UserRole.MANAGER,
-          pushToken: 'ExponentPushToken[dedupe]',
         },
       ]),
     );
+    usersService.getPushTokensForUsers.mockResolvedValue([
+      'ExponentPushToken[dedupe]',
+    ]);
 
     const referenceTime = new Date('2026-05-18T08:00:00.000Z');
 

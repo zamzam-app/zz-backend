@@ -8,7 +8,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { NotificationsService } from '../../../notifications/notifications.service';
-import { User, UserDocument } from '../../users/entities/user.entity';
+import { UsersService } from '../../users/users.service';
 import { Task, TaskDocument } from '../entities/task.entity';
 import { TaskEvent, TaskEventDocument } from '../entities/task-event.entity';
 import {
@@ -97,7 +97,7 @@ export class TaskEventService {
     private readonly taskEventModel: Model<TaskEventDocument>,
     @InjectModel(TaskDelegation.name)
     private readonly taskDelegationModel: Model<TaskDelegationDocument>,
-    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly usersService: UsersService,
     private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -386,18 +386,9 @@ export class TaskEventService {
       return;
     }
 
-    const users = await this.userModel
-      .find({
-        _id: {
-          $in: Array.from(recipientIdSet).map((id) => new Types.ObjectId(id)),
-        },
-        isDeleted: false,
-        pushToken: { $nin: [null, ''] },
-      })
-      .lean()
-      .exec();
-
-    const tokens = users.map((u) => u.pushToken as string).filter(Boolean);
+    const tokens = await this.usersService.getPushTokensForUsers(
+      Array.from(recipientIdSet),
+    );
 
     if (tokens.length === 0) {
       return;

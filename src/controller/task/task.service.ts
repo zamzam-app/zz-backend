@@ -18,6 +18,7 @@ import {
   TaskCategoryDocument,
 } from '../task-category/entities/task-category.entity';
 import { User, UserDocument } from '../users/entities/user.entity';
+import { UsersService } from '../users/users.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { QueryTaskDto } from './dto/query-task.dto';
 import {
@@ -76,6 +77,7 @@ export class TaskService {
     private taskDelegationService: TaskDelegationService,
     private taskEventService: TaskEventService,
     private taskAttachmentService: TaskAttachmentService,
+    private usersService: UsersService,
   ) {}
 
   async create(
@@ -211,19 +213,8 @@ export class TaskService {
         try {
           const notifiableIds = assigneeIds.filter((id) => id !== jwtUser.sub);
           if (notifiableIds.length > 0) {
-            const assigneeUsers = await this.userModel
-              .find({
-                _id: {
-                  $in: notifiableIds.map((id) => new Types.ObjectId(id)),
-                },
-                isDeleted: false,
-                pushToken: { $nin: [null, ''] },
-              })
-              .lean()
-              .exec();
-            const tokens = assigneeUsers
-              .map((u) => u.pushToken as string)
-              .filter(Boolean);
+            const tokens =
+              await this.usersService.getPushTokensForUsers(notifiableIds);
             if (tokens.length > 0) {
               await this.notificationsService.sendPush(
                 tokens,
@@ -797,13 +788,8 @@ export class TaskService {
           (aId) => !oldAssigneeIds.includes(aId),
         );
         if (newAssigneeIds.length > 0) {
-          const newAssignees = await this.userModel.find({
-            _id: { $in: newAssigneeIds.map((id) => new Types.ObjectId(id)) },
-            pushToken: { $ne: null },
-          });
-          const tokens = newAssignees
-            .map((u) => u.pushToken as string)
-            .filter(Boolean);
+          const tokens =
+            await this.usersService.getPushTokensForUsers(newAssigneeIds);
           if (tokens.length > 0) {
             try {
               await this.notificationsService.sendPush(
@@ -824,17 +810,9 @@ export class TaskService {
           existing.createdBy.toString(),
           ...updated.assignees.map((a) => a._id.toString()),
         ]);
-        const usersToNotify = await this.userModel.find({
-          _id: {
-            $in: Array.from(userIdsToNotify).map(
-              (uid) => new Types.ObjectId(uid),
-            ),
-          },
-          pushToken: { $ne: null },
-        });
-        const tokens = usersToNotify
-          .map((u) => u.pushToken as string)
-          .filter(Boolean);
+        const tokens = await this.usersService.getPushTokensForUsers(
+          Array.from(userIdsToNotify),
+        );
         if (tokens.length > 0) {
           try {
             await this.notificationsService.sendPush(
@@ -866,19 +844,8 @@ export class TaskService {
             .map((a) => a._id.toString())
             .filter((aId) => aId !== jwtUser.sub);
           if (finalAssigneeIds.length > 0) {
-            const assigneeUsers = await this.userModel
-              .find({
-                _id: {
-                  $in: finalAssigneeIds.map((aId) => new Types.ObjectId(aId)),
-                },
-                isDeleted: false,
-                pushToken: { $nin: [null, ''] },
-              })
-              .lean()
-              .exec();
-            const tokens = assigneeUsers
-              .map((u) => u.pushToken as string)
-              .filter(Boolean);
+            const tokens =
+              await this.usersService.getPushTokensForUsers(finalAssigneeIds);
             if (tokens.length > 0) {
               await this.notificationsService.sendPush(
                 tokens,

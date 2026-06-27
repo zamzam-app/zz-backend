@@ -387,28 +387,27 @@ export class ReviewService implements OnModuleInit {
 
       if (savedReview.isComplaint) {
         // Find Admins
-        const admins = await this.userModel.find({
-          role: UserRole.ADMIN,
-          pushToken: { $ne: null },
-        });
+        const admins = await this.userModel
+          .find(
+            {
+              role: UserRole.ADMIN,
+            },
+            '_id',
+          )
+          .lean();
 
         // Find Outlet Managers
         const outlet = await this.outletModel.findById(savedReview.outletId);
         const managerIds = outlet?.managerIds ?? [];
-        const managers =
-          managerIds.length > 0
-            ? await this.userModel.find({
-                _id: { $in: managerIds },
-                pushToken: { $ne: null },
-              })
-            : [];
 
-        const tokens = [
-          ...admins.map((a) => a.pushToken as string),
-          ...managers.map((m) => m.pushToken as string),
-        ].filter(Boolean);
+        const userIdsToNotify = [
+          ...admins.map((a) => a._id.toString()),
+          ...managerIds.map((id) => id.toString()),
+        ];
 
-        const uniqueTokens = [...new Set(tokens)];
+        const uniqueTokens = await this.usersService.getPushTokensForUsers([
+          ...new Set(userIdsToNotify),
+        ]);
 
         if (uniqueTokens.length > 0) {
           const outletName = outlet?.name ?? 'an outlet';
@@ -1251,14 +1250,18 @@ export class ReviewService implements OnModuleInit {
         previousStatus !== ComplaintStatus.RESOLVED
       ) {
         try {
-          const admins = await this.userModel.find({
-            role: UserRole.ADMIN,
-            pushToken: { $ne: null },
-          });
+          const admins = await this.userModel
+            .find(
+              {
+                role: UserRole.ADMIN,
+              },
+              '_id',
+            )
+            .lean();
 
-          const adminTokens = admins
-            .map((a) => a.pushToken as string)
-            .filter(Boolean);
+          const adminTokens = await this.usersService.getPushTokensForUsers(
+            admins.map((a) => a._id.toString()),
+          );
 
           if (adminTokens.length > 0) {
             const outlet = await this.outletModel.findById(updated.outletId);

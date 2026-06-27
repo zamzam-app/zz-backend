@@ -5,6 +5,34 @@ import { UserRole } from '../interfaces/user.interface';
 
 export type UserDocument = HydratedDocument<User>;
 
+@Schema({ _id: false })
+export class UserPushToken {
+  @Prop({ required: true, type: String })
+  token: string;
+
+  @Prop({
+    required: false,
+    type: String,
+    enum: ['ios', 'android', 'unknown'],
+    default: 'unknown',
+  })
+  platform: 'ios' | 'android' | 'unknown';
+
+  @Prop({ required: false, type: String })
+  deviceId?: string;
+
+  @Prop({ required: false, type: String })
+  appVersion?: string;
+
+  @Prop({ required: true, type: Date, default: () => new Date() })
+  lastSeenAt: Date;
+
+  @Prop({ required: true, type: Date, default: () => new Date() })
+  createdAt: Date;
+}
+
+export const UserPushTokenSchema = SchemaFactory.createForClass(UserPushToken);
+
 @Schema({ timestamps: true })
 export class User extends BaseEntity {
   @Prop({ required: false })
@@ -45,6 +73,9 @@ export class User extends BaseEntity {
   @Prop({ type: String, default: null })
   pushToken?: string;
 
+  @Prop({ type: [UserPushTokenSchema], default: [], select: false })
+  pushTokens?: UserPushToken[];
+
   @Prop({ required: false, select: false })
   otp?: string;
 
@@ -81,3 +112,4 @@ export class User extends BaseEntity {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ isDeleted: 1, role: 1 });
+UserSchema.index({ 'pushTokens.token': 1 }, { unique: true, sparse: true });

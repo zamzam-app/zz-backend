@@ -12,6 +12,7 @@ import {
   TaskDelegationDocument,
 } from '../entities/task-delegation.entity';
 import { User, UserDocument } from '../../users/entities/user.entity';
+import { UsersService } from '../../users/users.service';
 import { Outlet, OutletDocument } from '../../outlet/entities/outlet.entity';
 import { UserRole } from '../../users/interfaces/user.interface';
 import { TaskEventType } from '../task.enums';
@@ -91,6 +92,7 @@ export class TaskDelegationService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Outlet.name)
     private readonly outletModel: Model<OutletDocument>,
+    private readonly usersService: UsersService,
     private readonly taskEventService: TaskEventService,
     private readonly notificationsService: NotificationsService,
   ) {}
@@ -166,16 +168,14 @@ export class TaskDelegationService {
       note,
     );
 
-    const targetUser = await this.userModel
-      .findOne({ _id: toId, isDeleted: false })
-      .select('pushToken')
-      .lean()
-      .exec();
+    const tokens = await this.usersService.getPushTokensForUsers([
+      toId.toString(),
+    ]);
 
-    if (targetUser?.pushToken) {
+    if (tokens.length > 0) {
       try {
         await this.notificationsService.sendPush(
-          [targetUser.pushToken],
+          tokens,
           'Task Delegated',
           `You have been delegated a task: ${task.description || 'Check the app for details'}`,
           { type: 'task', taskId: taskIdObj.toString() },
@@ -252,16 +252,14 @@ export class TaskDelegationService {
       actorId,
     );
 
-    const targetUser = await this.userModel
-      .findOne({ _id: newOwnerObj, isDeleted: false })
-      .select('pushToken')
-      .lean()
-      .exec();
+    const tokens = await this.usersService.getPushTokensForUsers([
+      newOwnerObj.toString(),
+    ]);
 
-    if (targetUser?.pushToken) {
+    if (tokens.length > 0) {
       try {
         await this.notificationsService.sendPush(
-          [targetUser.pushToken],
+          tokens,
           'Task Reassigned',
           `A task has been reassigned to you: ${task.description || 'Check the app for details'}`,
           { type: 'task', taskId: taskIdObj.toString() },
