@@ -6,6 +6,7 @@ import {
   TaskCategorySchema,
 } from '../task-category/entities/task-category.entity';
 import { User, UserSchema } from '../users/entities/user.entity';
+import { UsersModule } from '../users/users.module';
 import { Task, TaskSchema } from './entities/task.entity';
 import { TaskEvent, TaskEventSchema } from './entities/task-event.entity';
 import {
@@ -41,6 +42,7 @@ import { NotificationsModule } from '../../notifications/notifications.module';
       { name: User.name, schema: UserSchema },
     ]),
     NotificationsModule,
+    UsersModule,
   ],
   controllers: [TaskController],
   providers: [

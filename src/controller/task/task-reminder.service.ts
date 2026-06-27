@@ -4,6 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { User, UserDocument } from '../users/entities/user.entity';
+import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/interfaces/user.interface';
 import { Task, TaskDocument } from './entities/task.entity';
 import { TaskStatus } from './task.enums';
@@ -58,6 +59,7 @@ type TaskReminderCandidate = {
   dueDate?: Date | null;
   dueTime?: string | null;
   assigneeIds?: Array<Types.ObjectId | string>;
+  createdBy?: Types.ObjectId | string;
   reminderNotifications?: {
     oneHourSentAt?: Date | null;
     thirtyMinutesSentAt?: Date | null;
@@ -72,6 +74,7 @@ export class TaskReminderService {
   constructor(
     @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private usersService: UsersService,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -156,30 +159,40 @@ export class TaskReminderService {
       return;
     }
 
+    const creatorId = task.createdBy?.toString();
     const assigneeIds = (task.assigneeIds ?? [])
       .map((id) => id.toString())
-      .filter((id) => Types.ObjectId.isValid(id));
+      .filter((id) => Types.ObjectId.isValid(id) && id !== creatorId);
 
     if (assigneeIds.length === 0) {
       this.logger.log(
-        `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because it has no assignees.`,
+        `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because it has no eligible assignees.`,
       );
       return;
     }
 
-    const users = await this.userModel
-      .find({
-        _id: { $in: assigneeIds.map((id) => new Types.ObjectId(id)) },
-        isDeleted: false,
-        role: UserRole.MANAGER,
-        pushToken: { $nin: [null, ''] },
-      })
+    const managers = await this.userModel
+      .find(
+        {
+          _id: { $in: assigneeIds.map((id) => new Types.ObjectId(id)) },
+          isDeleted: false,
+          role: UserRole.MANAGER,
+        },
+        '_id',
+      )
       .lean()
       .exec();
 
-    const tokens = users
-      .map((user) => user.pushToken)
-      .filter((token): token is string => Boolean(token));
+    const managerIds = managers.map((m) => m._id.toString());
+
+    if (managerIds.length === 0) {
+      this.logger.log(
+        `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because it has no manager assignees.`,
+      );
+      return;
+    }
+
+    const tokens = await this.usersService.getPushTokensForUsers(managerIds);
 
     if (tokens.length === 0) {
       this.logger.log(
