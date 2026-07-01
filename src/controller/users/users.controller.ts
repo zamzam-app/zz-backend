@@ -69,6 +69,20 @@ export class UsersController {
     return this.usersService.updatePushToken(req.user.sub, dto);
   }
 
+  /**
+   * POST /users/push-token
+   * Canonical contract for mobile clients (mirrors PATCH above).
+   * PATCH is kept for backward compatibility with older app versions.
+   */
+  @Post('push-token')
+  @UseGuards(JwtAuthGuard)
+  registerPushToken(
+    @Request() req: { user: JwtPayload },
+    @Body() dto: UpdatePushTokenDto,
+  ) {
+    return this.usersService.updatePushToken(req.user.sub, dto);
+  }
+
   @Delete('push-token')
   @UseGuards(JwtAuthGuard)
   removePushToken(

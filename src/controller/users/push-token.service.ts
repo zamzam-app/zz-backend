@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User } from './entities/user.entity';
@@ -7,6 +7,8 @@ import { Expo } from 'expo-server-sdk';
 
 @Injectable()
 export class PushTokenService {
+  private readonly logger = new Logger(PushTokenService.name);
+
   constructor(@InjectModel(User.name) private userModel: Model<User>) {}
 
   /**
@@ -173,6 +175,13 @@ export class PushTokenService {
     }
 
     // Dedupe
-    return [...new Set(allTokens)];
+    const result = [...new Set(allTokens)];
+
+    // ── Debug: log resolved token count to verify DB state without Mongo shell ──
+    this.logger.debug(
+      `getTokensForUsers(${uniqueIds.join(', ')}) → ${result.length} valid token(s)`,
+    );
+
+    return result;
   }
 }
