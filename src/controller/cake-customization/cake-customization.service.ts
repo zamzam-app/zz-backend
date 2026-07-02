@@ -37,6 +37,12 @@ export class CakeCustomizationService {
   async findAll(
     query: QueryCakeCustomizationOptionDto,
   ): Promise<FindAllCakeCustomizationOptionsResult> {
+    if (
+      (query.page !== undefined && query.page < 1) ||
+      (query.limit !== undefined && query.limit < 1)
+    ) {
+      throw new BadRequestException('Page and limit must be positive values');
+    }
     try {
       const page = query.page ?? 1;
       const limit = query.limit ? Math.min(query.limit, 100) : 100;
