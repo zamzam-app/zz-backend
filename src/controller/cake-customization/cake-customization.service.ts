@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, PipelineStage } from 'mongoose';
@@ -29,12 +30,7 @@ export class CakeCustomizationService {
       const createdOption = new this.optionModel(createDto);
       return await createdOption.save();
     } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err instanceof Error
-          ? err.message
-          : 'Failed to create cake customization option',
-      );
+      this.handleError(err, 'Failed to create cake customization option');
     }
   }
 
@@ -43,8 +39,8 @@ export class CakeCustomizationService {
   ): Promise<FindAllCakeCustomizationOptionsResult> {
     try {
       const page = query.page ?? 1;
-      const limit = query.limit;
-      const skip = limit ? (page - 1) * limit : 0;
+      const limit = query.limit ? Math.min(query.limit, 100) : 100;
+      const skip = (page - 1) * limit;
 
       const matchStage: Record<string, unknown> = { isDeleted: false };
 
@@ -52,9 +48,10 @@ export class CakeCustomizationService {
         matchStage.type = { $in: query.type };
       }
 
-      const dataPipeline: PipelineStage.FacetPipelineStage[] = limit
-        ? [{ $skip: skip }, { $limit: limit }]
-        : [];
+      const dataPipeline: PipelineStage.FacetPipelineStage[] = [
+        { $skip: skip },
+        { $limit: limit },
+      ];
 
       const [result] = await this.optionModel
         .aggregate<{
@@ -72,29 +69,26 @@ export class CakeCustomizationService {
         .exec();
 
       const total = result.totalCount[0]?.count ?? 0;
-      const effectiveLimit = limit ?? total;
 
       return {
         data: result.data,
         meta: {
           total,
-          currentPage: limit ? page : 1,
-          hasPrevPage: limit ? page > 1 : false,
-          hasNextPage: limit ? page * limit < total : false,
-          limit: effectiveLimit,
+          currentPage: page,
+          hasPrevPage: page > 1,
+          hasNextPage: page * limit < total,
+          limit,
         },
       };
     } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err instanceof Error
-          ? err.message
-          : 'Failed to fetch cake customization options',
-      );
+      this.handleError(err, 'Failed to fetch cake customization options');
     }
   }
 
   async findOne(id: string): Promise<CakeCustomizationOption> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid ID format');
+    }
     try {
       const [option] = await this.optionModel
         .aggregate<CakeCustomizationOption>([
@@ -109,12 +103,7 @@ export class CakeCustomizationService {
       }
       return option;
     } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err instanceof Error
-          ? err.message
-          : 'Failed to fetch cake customization option',
-      );
+      this.handleError(err, 'Failed to fetch cake customization option');
     }
   }
 
@@ -122,6 +111,9 @@ export class CakeCustomizationService {
     id: string,
     updateDto: UpdateCakeCustomizationOptionDto,
   ): Promise<CakeCustomizationOption> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid ID format');
+    }
     try {
       const existingOption = await this.optionModel
         .findOneAndUpdate(
@@ -138,16 +130,14 @@ export class CakeCustomizationService {
       }
       return existingOption;
     } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err instanceof Error
-          ? err.message
-          : 'Failed to update cake customization option',
-      );
+      this.handleError(err, 'Failed to update cake customization option');
     }
   }
 
   async remove(id: string): Promise<CakeCustomizationOption> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid ID format');
+    }
     try {
       const deletedOption = await this.optionModel
         .findOneAndUpdate(
@@ -164,12 +154,13 @@ export class CakeCustomizationService {
       }
       return deletedOption;
     } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err instanceof Error
-          ? err.message
-          : 'Failed to remove cake customization option',
-      );
+      this.handleError(err, 'Failed to remove cake customization option');
     }
+  }
+
+  private handleError(err: unknown, fallbackMessage: string): never {
+    if (err instanceof HttpException) throw err;
+    console.error(fallbackMessage, err);
+    throw new InternalServerErrorException(fallbackMessage);
   }
 }
