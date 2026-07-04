@@ -202,7 +202,11 @@ export class UsersService {
 
   async findOne(id: string) {
     try {
-      const user = await this.userModel.findById(id).lean().exec();
+      const user = await this.userModel
+        .findById(id)
+        .select('-password')
+        .lean()
+        .exec();
       if (!user) {
         throw new NotFoundException(`User with ID ${id} not found`);
       }
@@ -382,6 +386,20 @@ export class UsersService {
 
   async getPushTokensForUsers(userIds: string[]) {
     return this.pushTokenService.getTokensForUsers(userIds);
+  }
+
+  async hasPushTokenForDevice(
+    userId: string,
+    deviceId: string,
+  ): Promise<boolean> {
+    const user = await this.userModel
+      .findById(userId)
+      .select('+pushTokens')
+      .lean()
+      .exec();
+
+    if (!user || !user.pushTokens) return false;
+    return user.pushTokens.some((pt) => pt.deviceId === deviceId);
   }
 
   async changePassword(
