@@ -392,14 +392,20 @@ export class UsersService {
     userId: string,
     deviceId: string,
   ): Promise<boolean> {
-    const user = await this.userModel
-      .findById(userId)
-      .select('+pushTokens')
-      .lean()
-      .exec();
-
-    if (!user || !user.pushTokens) return false;
-    return user.pushTokens.some((pt) => pt.deviceId === deviceId);
+    try {
+      const user = await this.userModel
+        .findById(userId)
+        .select('+pushTokens')
+        .lean()
+        .exec();
+      if (!user || !user.pushTokens) return false;
+      return user.pushTokens.some((pt) => pt.deviceId === deviceId);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to check push token for device',
+      );
+    }
   }
 
   async changePassword(

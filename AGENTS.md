@@ -26,7 +26,7 @@
 
 ## Project Structure
 
-```
+```text
 src/
 ├── main.ts                      # Entry point — CORS, global prefix (/api), ValidationPipe, Swagger
 ├── app.module.ts                # Root module — wires all feature modules
