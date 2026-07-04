@@ -19,6 +19,10 @@ export class PushTokenService {
       throw new BadRequestException('Invalid Expo push token');
     }
 
+    // Remove this token from any other user before assigning it to the current one.
+    // Prevents unique index collision when a device is re-used across accounts.
+    await this.removeTokenByValue(dto.pushToken);
+
     const now = new Date();
 
     const tokenObj = {
@@ -131,7 +135,24 @@ export class PushTokenService {
 
     // Also clear legacy field if it matches exactly
     await this.userModel
-      .updateMany({ pushToken: token }, { $unset: { pushToken: 1 } })
+      .updateMany({ pushToken: token }, [
+        {
+          $set: {
+            pushToken: {
+              $let: {
+                vars: { remaining: { $ifNull: ['$pushTokens', []] } },
+                in: {
+                  $cond: {
+                    if: { $gt: [{ $size: '$$remaining' }, 0] },
+                    then: { $arrayElemAt: ['$$remaining.token', -1] },
+                    else: null,
+                  },
+                },
+              },
+            },
+          },
+        },
+      ])
       .exec();
   }
 
@@ -147,10 +168,8 @@ export class PushTokenService {
     const objectIds = uniqueIds.map((id) => new Types.ObjectId(id));
 
     const users = await this.userModel
-      .find(
-        { _id: { $in: objectIds }, isDeleted: false },
-        { pushToken: 1, pushTokens: 1 },
-      )
+      .find({ _id: { $in: objectIds }, isDeleted: false })
+      .select('+pushTokens +pushToken')
       .lean()
       .exec();
 
