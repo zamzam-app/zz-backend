@@ -75,46 +75,50 @@ export class PushTokenService {
     if (!opts.token && !opts.deviceId) return;
 
     await this.userModel
-      .updateOne({ _id: new Types.ObjectId(userId) }, [
-        {
-          $set: {
-            pushTokens: {
-              $filter: {
-                input: { $ifNull: ['$pushTokens', []] },
-                as: 'pt',
-                cond: {
-                  $and: [
-                    ...(opts.token
-                      ? [{ $ne: ['$$pt.token', opts.token] }]
-                      : []),
-                    ...(opts.deviceId
-                      ? [{ $ne: ['$$pt.deviceId', opts.deviceId] }]
-                      : []),
-                  ],
-                },
-              },
-            },
-          },
-        },
-        {
-          $set: {
-            pushToken: {
-              $let: {
-                vars: {
-                  tokens: { $ifNull: ['$pushTokens', []] },
-                },
-                in: {
-                  $cond: {
-                    if: { $gt: [{ $size: '$$tokens' }, 0] },
-                    then: { $arrayElemAt: ['$$tokens.token', -1] },
-                    else: null,
+      .updateOne(
+        { _id: new Types.ObjectId(userId) },
+        [
+          {
+            $set: {
+              pushTokens: {
+                $filter: {
+                  input: { $ifNull: ['$pushTokens', []] },
+                  as: 'pt',
+                  cond: {
+                    $and: [
+                      ...(opts.token
+                        ? [{ $ne: ['$$pt.token', opts.token] }]
+                        : []),
+                      ...(opts.deviceId
+                        ? [{ $ne: ['$$pt.deviceId', opts.deviceId] }]
+                        : []),
+                    ],
                   },
                 },
               },
             },
           },
-        },
-      ], { updatePipeline: true })
+          {
+            $set: {
+              pushToken: {
+                $let: {
+                  vars: {
+                    tokens: { $ifNull: ['$pushTokens', []] },
+                  },
+                  in: {
+                    $cond: {
+                      if: { $gt: [{ $size: '$$tokens' }, 0] },
+                      then: { $arrayElemAt: ['$$tokens.token', -1] },
+                      else: null,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+        { updatePipeline: true },
+      )
       .exec();
   }
 
