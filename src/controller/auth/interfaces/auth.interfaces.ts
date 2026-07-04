@@ -22,4 +22,5 @@ export interface LoginResponse extends AuthTokens {
 
 export interface ValidatedUser extends Omit<User, 'password'> {
   _id: Types.ObjectId;
+  tokenSyncRequired: boolean;
 }

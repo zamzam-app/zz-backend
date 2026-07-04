@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  HttpException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User } from './entities/user.entity';
@@ -14,50 +19,61 @@ export class PushTokenService {
    * Also mirrors into legacy pushToken for backward-compat reads.
    */
   async upsertToken(userId: string, dto: UpdatePushTokenDto): Promise<void> {
-    const tokenStr = dto.pushToken.trim();
-    if (!Expo.isExpoPushToken(tokenStr)) {
-      throw new BadRequestException('Invalid Expo push token');
-    }
+    try {
+      const tokenStr = dto.pushToken.trim();
+      if (!Expo.isExpoPushToken(tokenStr)) {
+        throw new BadRequestException('Invalid Expo push token');
+      }
 
-    const now = new Date();
+      // Remove this token from any other user before assigning it to the current one.
+      // Prevents unique index collision when a device is re-used across accounts.
+      await this.removeTokenByValue(tokenStr);
 
-    const tokenObj = {
-      token: tokenStr,
-      platform: dto.platform || 'unknown',
-      deviceId: dto.deviceId || null,
-      appVersion: dto.appVersion || null,
-      lastSeenAt: now,
-      createdAt: now,
-    };
+      const now = new Date();
 
-    await this.userModel
-      .updateOne({ _id: new Types.ObjectId(userId) }, [
-        {
-          $set: {
-            pushTokens: {
-              $concatArrays: [
-                {
-                  $filter: {
-                    input: { $ifNull: ['$pushTokens', []] },
-                    as: 'pt',
-                    cond: {
-                      $and: [
-                        { $ne: ['$$pt.token', tokenStr] },
-                        ...(dto.deviceId
-                          ? [{ $ne: ['$$pt.deviceId', dto.deviceId] }]
-                          : []),
-                      ],
+      const tokenObj = {
+        token: tokenStr,
+        platform: dto.platform || 'unknown',
+        deviceId: dto.deviceId || null,
+        appVersion: dto.appVersion || null,
+        lastSeenAt: now,
+        createdAt: now,
+      };
+
+      await this.userModel
+        .updateOne({ _id: new Types.ObjectId(userId) }, [
+          {
+            $set: {
+              pushTokens: {
+                $concatArrays: [
+                  {
+                    $filter: {
+                      input: { $ifNull: ['$pushTokens', []] },
+                      as: 'pt',
+                      cond: {
+                        $and: [
+                          { $ne: ['$$pt.token', tokenStr] },
+                          ...(dto.deviceId
+                            ? [{ $ne: ['$$pt.deviceId', dto.deviceId] }]
+                            : []),
+                        ],
+                      },
                     },
                   },
-                },
-                [tokenObj],
-              ],
+                  [tokenObj],
+                ],
+              },
+              pushToken: tokenStr,
             },
-            pushToken: tokenStr,
           },
-        },
-      ])
-      .exec();
+        ])
+        .exec();
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to upsert push token',
+      );
+    }
   }
 
   /**
@@ -68,50 +84,61 @@ export class PushTokenService {
     userId: string,
     opts: { token?: string; deviceId?: string },
   ): Promise<void> {
-    if (!opts.token && !opts.deviceId) return;
+    try {
+      if (!opts.token && !opts.deviceId) return;
 
-    await this.userModel
-      .updateOne({ _id: new Types.ObjectId(userId) }, [
-        {
-          $set: {
-            pushTokens: {
-              $filter: {
-                input: { $ifNull: ['$pushTokens', []] },
-                as: 'pt',
-                cond: {
-                  $and: [
-                    ...(opts.token
-                      ? [{ $ne: ['$$pt.token', opts.token] }]
-                      : []),
-                    ...(opts.deviceId
-                      ? [{ $ne: ['$$pt.deviceId', opts.deviceId] }]
-                      : []),
-                  ],
-                },
-              },
-            },
-          },
-        },
-        {
-          $set: {
-            pushToken: {
-              $let: {
-                vars: {
-                  tokens: { $ifNull: ['$pushTokens', []] },
-                },
-                in: {
-                  $cond: {
-                    if: { $gt: [{ $size: '$$tokens' }, 0] },
-                    then: { $arrayElemAt: ['$$tokens.token', -1] },
-                    else: null,
+      await this.userModel
+        .updateOne(
+          { _id: new Types.ObjectId(userId) },
+          [
+            {
+              $set: {
+                pushTokens: {
+                  $filter: {
+                    input: { $ifNull: ['$pushTokens', []] },
+                    as: 'pt',
+                    cond: {
+                      $and: [
+                        ...(opts.token
+                          ? [{ $ne: ['$$pt.token', opts.token] }]
+                          : []),
+                        ...(opts.deviceId
+                          ? [{ $ne: ['$$pt.deviceId', opts.deviceId] }]
+                          : []),
+                      ],
+                    },
                   },
                 },
               },
             },
-          },
-        },
-      ])
-      .exec();
+            {
+              $set: {
+                pushToken: {
+                  $let: {
+                    vars: {
+                      tokens: { $ifNull: ['$pushTokens', []] },
+                    },
+                    in: {
+                      $cond: {
+                        if: { $gt: [{ $size: '$$tokens' }, 0] },
+                        then: { $arrayElemAt: ['$$tokens.token', -1] },
+                        else: null,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+          { updatePipeline: true },
+        )
+        .exec();
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to remove push token',
+      );
+    }
   }
 
   /**
@@ -119,20 +146,44 @@ export class PushTokenService {
    * Called by NotificationsService when Expo reports DeviceNotRegistered.
    */
   async removeTokenByValue(token: string): Promise<void> {
-    if (!token) return;
+    try {
+      if (!token) return;
 
-    await this.userModel
-      .updateMany(
-        { 'pushTokens.token': token },
+      await this.userModel
+        .updateMany(
+          { 'pushTokens.token': token },
 
-        { $pull: { pushTokens: { token } } },
-      )
-      .exec();
+          { $pull: { pushTokens: { token } } },
+        )
+        .exec();
 
-    // Also clear legacy field if it matches exactly
-    await this.userModel
-      .updateMany({ pushToken: token }, { $unset: { pushToken: 1 } })
-      .exec();
+      // Also clear legacy field if it matches exactly
+      await this.userModel
+        .updateMany({ pushToken: token }, [
+          {
+            $set: {
+              pushToken: {
+                $let: {
+                  vars: { remaining: { $ifNull: ['$pushTokens', []] } },
+                  in: {
+                    $cond: {
+                      if: { $gt: [{ $size: '$$remaining' }, 0] },
+                      then: { $arrayElemAt: ['$$remaining.token', -1] },
+                      else: null,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ])
+        .exec();
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to remove push token by value',
+      );
+    }
   }
 
   /**
@@ -141,38 +192,43 @@ export class PushTokenService {
    * who haven't synced yet. Returns a deduped string[].
    */
   async getTokensForUsers(userIds: string[]): Promise<string[]> {
-    if (!userIds || !userIds.length) return [];
+    try {
+      if (!userIds || !userIds.length) return [];
 
-    const uniqueIds = [...new Set(userIds.map((id) => id.toString()))];
-    const objectIds = uniqueIds.map((id) => new Types.ObjectId(id));
+      const uniqueIds = [...new Set(userIds.map((id) => id.toString()))];
+      const objectIds = uniqueIds.map((id) => new Types.ObjectId(id));
 
-    const users = await this.userModel
-      .find(
-        { _id: { $in: objectIds }, isDeleted: false },
-        { pushToken: 1, pushTokens: 1 },
-      )
-      .lean()
-      .exec();
+      const users = await this.userModel
+        .find({ _id: { $in: objectIds }, isDeleted: false })
+        .select('+pushTokens pushToken _id')
+        .lean()
+        .exec();
 
-    const allTokens: string[] = [];
+      const allTokens: string[] = [];
 
-    for (const user of users) {
-      // Add from pushTokens array
-      if (Array.isArray(user.pushTokens)) {
-        for (const pt of user.pushTokens) {
-          if (pt && pt.token && Expo.isExpoPushToken(pt.token)) {
-            allTokens.push(pt.token);
+      for (const user of users) {
+        // Add from pushTokens array
+        if (Array.isArray(user.pushTokens)) {
+          for (const pt of user.pushTokens) {
+            if (pt && pt.token && Expo.isExpoPushToken(pt.token)) {
+              allTokens.push(pt.token);
+            }
           }
+        }
+
+        // Add from legacy field
+        if (user.pushToken && Expo.isExpoPushToken(user.pushToken)) {
+          allTokens.push(user.pushToken);
         }
       }
 
-      // Add from legacy field
-      if (user.pushToken && Expo.isExpoPushToken(user.pushToken)) {
-        allTokens.push(user.pushToken);
-      }
+      // Dedupe
+      return [...new Set(allTokens)];
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to retrieve push tokens for users',
+      );
     }
-
-    // Dedupe
-    return [...new Set(allTokens)];
   }
 }

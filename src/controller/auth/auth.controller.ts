@@ -5,6 +5,7 @@ import {
   Request,
   Body,
   Get,
+  Query,
   Res,
   UseInterceptors,
 } from '@nestjs/common';
@@ -87,7 +88,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile (protected)' })
   async getProfile(
     @Request() req: ExpressRequest & { user: JwtPayload },
+    @Query('deviceId') deviceId?: string,
   ): Promise<ValidatedUser> {
-    return this.authService.getProfile(req.user.sub);
+    return this.authService.getProfile(req.user.sub, deviceId);
   }
 }

@@ -173,7 +173,10 @@ export class AuthService {
     delete sanitizedUser.password;
     delete sanitizedUser.otp;
 
-    const loginResponse = this.login(sanitizedUser as unknown as ValidatedUser);
+    const loginResponse = this.login({
+      ...sanitizedUser,
+      tokenSyncRequired: false,
+    } as unknown as ValidatedUser);
 
     return {
       ...loginResponse,
@@ -181,11 +184,19 @@ export class AuthService {
     };
   }
 
-  async getProfile(userId: string): Promise<ValidatedUser> {
+  async getProfile(userId: string, deviceId?: string): Promise<ValidatedUser> {
     const userDoc = await this.usersService.findOne(userId);
-    const sanitizedUser = { ...userDoc } as Record<string, unknown>;
-    delete sanitizedUser.password;
-    return sanitizedUser as unknown as ValidatedUser;
+
+    let tokenSyncRequired = false;
+    if (deviceId) {
+      const hasToken = await this.usersService.hasPushTokenForDevice(
+        userId,
+        deviceId,
+      );
+      tokenSyncRequired = !hasToken;
+    }
+
+    return { ...(userDoc as unknown as ValidatedUser), tokenSyncRequired };
   }
 
   refresh(refreshToken: string): AuthTokens {
@@ -217,7 +228,7 @@ export class AuthService {
 
     if (user && user.password && (await bcrypt.compare(pass, user.password))) {
       const result = user.toObject();
-      return result as ValidatedUser;
+      return { ...result, tokenSyncRequired: false } as ValidatedUser;
     }
     return null;
   }
