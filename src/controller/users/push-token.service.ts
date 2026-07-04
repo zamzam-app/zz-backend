@@ -114,7 +114,7 @@ export class PushTokenService {
             },
           },
         },
-      ])
+      ], { updatePipeline: true })
       .exec();
   }
 
