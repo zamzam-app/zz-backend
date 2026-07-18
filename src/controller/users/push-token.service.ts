@@ -200,7 +200,7 @@ export class PushTokenService {
 
       const users = await this.userModel
         .find({ _id: { $in: objectIds }, isDeleted: false })
-        .select('+pushTokens pushToken _id')
+        .select('pushTokens pushToken _id')
         .lean()
         .exec();
 
