@@ -1208,13 +1208,14 @@ export class ReviewService implements OnModuleInit {
   async resolveComplaint(
     reviewId: string,
     dto: ResolveComplaintDto,
+    resolvedBy: string,
   ): Promise<Review> {
     try {
       if (!Types.ObjectId.isValid(reviewId)) {
         throw new BadRequestException('Invalid review ID');
       }
 
-      const resolvedByObj = new Types.ObjectId(dto.resolvedBy);
+      const resolvedByObj = new Types.ObjectId(resolvedBy);
       const now = new Date();
 
       const $set: Record<string, unknown> = {
@@ -1276,8 +1277,8 @@ export class ReviewService implements OnModuleInit {
           if (adminTokens.length > 0) {
             const outlet = await this.outletModel.findById(updated.outletId);
             const outletName = outlet?.name ?? 'an outlet';
-            const manager = await this.userModel.findById(dto.resolvedBy);
-            const managerName = manager?.name ?? 'a Manager';
+            const manager = await this.userModel.findById(resolvedBy);
+            const managerName = manager?.name ?? 'a team member';
 
             await this.notificationsService.sendPush(
               adminTokens,

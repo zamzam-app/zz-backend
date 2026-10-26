@@ -51,6 +51,15 @@ const TASK_STATUS_COMPLETED = TaskStatus.COMPLETED;
 const TASK_PRIORITY_HIGH = TaskPriority.HIGH;
 const TASK_OVERVIEW_TIMEZONE = 'Asia/Kolkata';
 
+/** Reads as "<Actor> <phrase>", e.g. "Manager marked 'X' as completed". */
+const STATUS_CHANGE_PHRASE: Record<
+  TaskStatus,
+  (description: string) => string
+> = {
+  [TaskStatus.COMPLETED]: (d) => `marked '${d}' as completed`,
+  [TaskStatus.OPEN]: (d) => `reopened '${d}'`,
+};
+
 type TaskOverviewResult = {
   totalOpenTasks: number;
   completedTasks: number;
@@ -221,7 +230,7 @@ export class TaskService {
               await this.notificationsService.sendPush(
                 tokens,
                 'New Task Assigned',
-                `New Task Assigned: ${doc.description}`,
+                `You've been assigned a task: ${doc.description}`,
                 { type: 'task', taskId: saved._id.toString() },
               );
             }
@@ -898,10 +907,10 @@ export class TaskService {
           body = `You've been assigned a task: ${description}`;
         } else if (statusChanged && scheduleUpdated) {
           title = 'Task Updated';
-          body = `${actorLabel} marked '${description}' ${newStatus} and updated its schedule.`;
+          body = `${actorLabel} ${STATUS_CHANGE_PHRASE[newStatus!](description)} and updated its schedule.`;
         } else if (statusChanged) {
           title = 'Task Status Updated';
-          body = `Task '${description}' marked ${newStatus}`;
+          body = `${actorLabel} ${STATUS_CHANGE_PHRASE[newStatus!](description)}.`;
         } else {
           title = 'Task Modified';
           body = `${actorLabel} has updated the details for '${description}'.`;

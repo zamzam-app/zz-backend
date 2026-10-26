@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  Request,
 } from '@nestjs/common';
 import { ReviewService } from './review.service';
 import { CreateReviewDto } from './dto/create-review.dto';
@@ -23,6 +24,7 @@ import {
 } from './dto/review.swagger';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
+import { JwtPayload } from '../auth/interfaces/auth.interfaces';
 import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
 
 @ApiTags('review')
@@ -65,8 +67,10 @@ export class ReviewController {
   resolveComplaint(
     @Param('reviewId') reviewId: string,
     @Body() body: ResolveComplaintDto,
+    @Request() req: { user: JwtPayload },
   ) {
-    return this.reviewService.resolveComplaint(reviewId, body);
+    // The resolver is always the authenticated user, never a body value.
+    return this.reviewService.resolveComplaint(reviewId, body, req.user.sub);
   }
 
   @Post(':reviewId/mark-read')

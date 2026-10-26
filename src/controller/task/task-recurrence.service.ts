@@ -150,7 +150,7 @@ export class TaskRecurrenceService {
       await this.notificationsService.sendPush(
         tokens,
         'New Task Assigned',
-        `New Task Assigned: ${description}`,
+        `You've been assigned a task: ${description}`,
         { type: 'task', taskId },
       );
     } catch (error) {
