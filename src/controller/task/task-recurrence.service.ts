@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
 import { Task } from './entities/task.entity';
 import { TaskRecurrenceType, TaskStatus } from './task.enums';
 
@@ -9,7 +11,11 @@ import { TaskRecurrenceType, TaskStatus } from './task.enums';
 export class TaskRecurrenceService {
   private readonly logger = new Logger(TaskRecurrenceService.name);
 
-  constructor(@InjectModel(Task.name) private taskModel: Model<Task>) {}
+  constructor(
+    @InjectModel(Task.name) private taskModel: Model<Task>,
+    private usersService: UsersService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   @Cron('0 1 * * *') // Every day at 1:00 AM
   async handleRecurringTasks() {
@@ -103,8 +109,17 @@ export class TaskRecurrenceService {
       };
 
       try {
-        await this.taskModel.create(newTaskData);
+        const created = await this.taskModel.create(newTaskData);
         createdCount++;
+
+        const creatorId = template.createdBy?.toString();
+        await this.notifyAssignees(
+          created._id.toString(),
+          template.description,
+          (template.assigneeIds ?? [])
+            .map((id) => id.toString())
+            .filter((id) => id !== creatorId),
+        );
       } catch (error) {
         this.logger.error(
           `Failed to create task from template ${String(template._id)}`,
@@ -114,5 +129,35 @@ export class TaskRecurrenceService {
     }
 
     this.logger.log(`Successfully created ${createdCount} new task instances.`);
+  }
+
+  /**
+   * Notifies assignees of a generated task exactly like `TaskService.create`
+   * does for an ordinary task: one "New Task Assigned" push per task.
+   * Best-effort: a failure is logged and never affects task generation.
+   */
+  private async notifyAssignees(
+    taskId: string,
+    description: string,
+    assigneeIds: string[],
+  ): Promise<void> {
+    if (assigneeIds.length === 0) return;
+
+    try {
+      const tokens = await this.usersService.getPushTokensForUsers(assigneeIds);
+      if (tokens.length === 0) return;
+
+      await this.notificationsService.sendPush(
+        tokens,
+        'New Task Assigned',
+        `New Task Assigned: ${description}`,
+        { type: 'task', taskId },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send recurring task notification for task ${taskId}`,
+        error,
+      );
+    }
   }
 }
