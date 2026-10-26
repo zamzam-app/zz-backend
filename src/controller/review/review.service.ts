@@ -76,7 +76,8 @@ type PendingComplaintNotification = {
   timer: ReturnType<typeof setTimeout>;
   eventCount: number;
   outletName: string;
-  tokens: Set<string>;
+  userIds: Set<string>;
+  /** Only meaningful for a single complaint; batches don't deep-link to one. */
   reviewId: string;
 };
 
@@ -116,7 +117,14 @@ export class ReviewService implements OnModuleInit {
     );
 
     for (const doc of pendingDocs) {
-      const tokenSet = new Set(doc.tokens);
+      // Records written before this field existed stored device tokens
+      // instead of user IDs; they can't be resolved safely, so drop them.
+      if (!Array.isArray(doc.userIds) || doc.userIds.length === 0) {
+        await this.pendingComplaintModel
+          .deleteOne({ outletId: doc.outletId })
+          .exec();
+        continue;
+      }
 
       const timer = setTimeout(() => {
         this.flushComplaintNotification(doc.outletId).catch((error) => {
@@ -131,7 +139,7 @@ export class ReviewService implements OnModuleInit {
         timer,
         eventCount: doc.eventCount,
         outletName: doc.outletName,
-        tokens: tokenSet,
+        userIds: new Set(doc.userIds),
         reviewId: doc.reviewId,
       });
     }
@@ -408,16 +416,12 @@ export class ReviewService implements OnModuleInit {
             ...managerIds.map((id) => id.toString()),
           ];
 
-          const uniqueTokens = await this.usersService.getPushTokensForUsers([
-            ...new Set(userIdsToNotify),
-          ]);
-
-          if (uniqueTokens.length > 0) {
+          if (userIdsToNotify.length > 0) {
             const outletName = outlet?.name ?? 'an outlet';
             this.scheduleComplaintNotification(
               savedReview.outletId,
               outletName,
-              uniqueTokens,
+              [...new Set(userIdsToNotify)],
               savedReview._id.toString(),
             );
           }
@@ -1385,13 +1389,13 @@ export class ReviewService implements OnModuleInit {
   private scheduleComplaintNotification(
     outletId: string,
     outletName: string,
-    tokens: string[],
+    userIds: string[],
     reviewId: string,
   ) {
     const existing = this.pendingComplaints.get(outletId);
 
-    const tokenSet = existing ? existing.tokens : new Set<string>();
-    tokens.forEach((t) => tokenSet.add(t));
+    const userIdSet = existing ? existing.userIds : new Set<string>();
+    userIds.forEach((id) => userIdSet.add(id));
 
     const eventCount = (existing ? existing.eventCount : 0) + 1;
 
@@ -1412,7 +1416,7 @@ export class ReviewService implements OnModuleInit {
       timer,
       eventCount,
       outletName,
-      tokens: tokenSet,
+      userIds: userIdSet,
       reviewId,
     });
 
@@ -1423,7 +1427,7 @@ export class ReviewService implements OnModuleInit {
         {
           $set: {
             outletName,
-            tokens: Array.from(tokenSet),
+            userIds: Array.from(userIdSet),
             eventCount,
             reviewId,
           },
@@ -1457,8 +1461,8 @@ export class ReviewService implements OnModuleInit {
         );
       });
 
-    const { eventCount, outletName, tokens, reviewId } = pending;
-    if (tokens.size === 0) return;
+    const { eventCount, outletName, userIds, reviewId } = pending;
+    if (userIds.size === 0) return;
 
     const body =
       eventCount === 1
@@ -1466,15 +1470,25 @@ export class ReviewService implements OnModuleInit {
         : `${eventCount} new complaints have been raised at ${outletName}.`;
 
     try {
+      // Resolve tokens now, not when the complaint arrived, so the current
+      // devices of each recipient are used.
+      const tokens = await this.usersService.getPushTokensForUsers(
+        Array.from(userIds),
+      );
+      if (tokens.length === 0) return;
+
       await this.notificationsService.sendPush(
-        Array.from(tokens),
+        tokens,
         'New Complaint',
         body,
-        { type: 'complaint', reviewId },
+        // A batch covers several complaints, so don't point at just one.
+        eventCount === 1
+          ? { type: 'complaint', reviewId }
+          : { type: 'complaint' },
       );
 
       this.logger.log(
-        `Sent batched complaint notification (${eventCount} event(s)) for outlet ${outletId} to ${tokens.size} user(s).`,
+        `Sent batched complaint notification (${eventCount} event(s)) for outlet ${outletId} to ${userIds.size} user(s).`,
       );
     } catch (error) {
       this.logger.error('Failed to send batched complaint notification', error);
