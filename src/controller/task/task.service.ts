@@ -784,52 +784,7 @@ export class TaskService {
         throw new NotFoundException('Task not found');
       }
 
-      if (dto.assigneeIds) {
-        const oldAssigneeIds = existing.assigneeIds.map((id) => id.toString());
-        const newAssigneeIds = dto.assigneeIds.filter(
-          (aId) => !oldAssigneeIds.includes(aId),
-        );
-        if (newAssigneeIds.length > 0) {
-          const tokens =
-            await this.usersService.getPushTokensForUsers(newAssigneeIds);
-          if (tokens.length > 0) {
-            try {
-              await this.notificationsService.sendPush(
-                tokens,
-                'New Task Assigned',
-                `You've been assigned a task: ${updated.description}`,
-                { type: 'task', taskId: updated._id.toString() },
-              );
-            } catch (err) {
-              this.logger.error('Failed to send push notification', err);
-            }
-          }
-        }
-      }
-
-      if (dto.status !== undefined && dto.status !== existing.status) {
-        const userIdsToNotify = new Set([
-          existing.createdBy.toString(),
-          ...updated.assignees.map((a) => a._id.toString()),
-        ]);
-        const tokens = await this.usersService.getPushTokensForUsers(
-          Array.from(userIdsToNotify),
-        );
-        if (tokens.length > 0) {
-          try {
-            await this.notificationsService.sendPush(
-              tokens,
-              'Task Status Updated',
-              `Task '${updated.description}' marked ${dto.status}`,
-              { type: 'task', taskId: updated._id.toString() },
-            );
-          } catch (err) {
-            this.logger.error('Failed to send push notification', err);
-          }
-        }
-      }
-
-      // Notify all current assignees (excluding the modifier) when schedule-relevant fields change.
+      const oldAssigneeIds = existing.assigneeIds.map((id) => id.toString());
       const SCHEDULE_CHANGE_KEYS = [
         'dueDate',
         'dueTime',
@@ -837,30 +792,22 @@ export class TaskService {
         'recurrenceType',
         'recurrenceDays',
       ] as const;
-      const hasScheduleChange = SCHEDULE_CHANGE_KEYS.some(
-        (key) => key in changes,
-      );
-      if (hasScheduleChange) {
-        try {
-          const finalAssigneeIds = updated.assignees
-            .map((a) => a._id.toString())
-            .filter((aId) => aId !== jwtUser.sub);
-          if (finalAssigneeIds.length > 0) {
-            const tokens =
-              await this.usersService.getPushTokensForUsers(finalAssigneeIds);
-            if (tokens.length > 0) {
-              await this.notificationsService.sendPush(
-                tokens,
-                'Task Modified',
-                `${jwtUser.role.charAt(0).toUpperCase() + jwtUser.role.slice(1)} has updated the details for '${updated.description}'.`,
-                { type: 'task', taskId: updated._id.toString() },
-              );
-            }
-          }
-        } catch (err) {
-          this.logger.error('Failed to send push notification', err);
-        }
-      }
+
+      await this.notifyTaskUpdate({
+        taskId: updated._id.toString(),
+        description: updated.description,
+        actor: jwtUser,
+        creatorId: existing.createdBy.toString(),
+        currentAssigneeIds: updated.assignees.map((a) => a._id.toString()),
+        newAssigneeIds: (dto.assigneeIds ?? []).filter(
+          (aId) => !oldAssigneeIds.includes(aId),
+        ),
+        newStatus:
+          dto.status !== undefined && dto.status !== existing.status
+            ? dto.status
+            : undefined,
+        scheduleChanged: SCHEDULE_CHANGE_KEYS.some((key) => key in changes),
+      });
 
       return updated;
     } catch (error) {
@@ -869,6 +816,102 @@ export class TaskService {
         (error instanceof Error ? error.message : undefined) ??
           'Failed to update task',
       );
+    }
+  }
+
+  /**
+   * Sends at most one push per recipient for a single task update.
+   *
+   * - Newly added assignees get "New Task Assigned" (this already implies any
+   *   status/schedule change made in the same update).
+   * - The creator and current assignees get a status message, a schedule
+   *   message, or one combined message when both changed.
+   * - The user who made the change is never notified.
+   *
+   * Best-effort: failures are logged and never propagate to the caller.
+   */
+  private async notifyTaskUpdate(params: {
+    taskId: string;
+    description: string;
+    actor: JwtPayload;
+    creatorId: string;
+    currentAssigneeIds: string[];
+    newAssigneeIds: string[];
+    newStatus?: TaskStatus;
+    scheduleChanged: boolean;
+  }): Promise<void> {
+    const {
+      taskId,
+      description,
+      actor,
+      creatorId,
+      currentAssigneeIds,
+      newAssigneeIds,
+      newStatus,
+      scheduleChanged,
+    } = params;
+
+    try {
+      const newlyAssigned = new Set(newAssigneeIds);
+      // Status changes reach the creator and assignees; schedule changes reach assignees only.
+      const statusAudience = new Set(
+        newStatus ? [creatorId, ...currentAssigneeIds] : [],
+      );
+      const scheduleAudience = new Set(
+        scheduleChanged ? currentAssigneeIds : [],
+      );
+
+      const recipients = new Set([
+        ...newlyAssigned,
+        ...statusAudience,
+        ...scheduleAudience,
+      ]);
+      recipients.delete(actor.sub);
+
+      const actorLabel =
+        actor.role.charAt(0).toUpperCase() + actor.role.slice(1);
+      const groups = new Map<
+        string,
+        { title: string; body: string; userIds: string[] }
+      >();
+
+      for (const userId of recipients) {
+        const statusChanged = statusAudience.has(userId);
+        const scheduleUpdated = scheduleAudience.has(userId);
+
+        let title: string;
+        let body: string;
+        if (newlyAssigned.has(userId)) {
+          title = 'New Task Assigned';
+          body = `You've been assigned a task: ${description}`;
+        } else if (statusChanged && scheduleUpdated) {
+          title = 'Task Updated';
+          body = `${actorLabel} marked '${description}' ${newStatus} and updated its schedule.`;
+        } else if (statusChanged) {
+          title = 'Task Status Updated';
+          body = `Task '${description}' marked ${newStatus}`;
+        } else {
+          title = 'Task Modified';
+          body = `${actorLabel} has updated the details for '${description}'.`;
+        }
+
+        const key = `${title}\n${body}`;
+        const group = groups.get(key) ?? { title, body, userIds: [] };
+        group.userIds.push(userId);
+        groups.set(key, group);
+      }
+
+      for (const { title, body, userIds } of groups.values()) {
+        const tokens = await this.usersService.getPushTokensForUsers(userIds);
+        if (tokens.length === 0) continue;
+
+        await this.notificationsService.sendPush(tokens, title, body, {
+          type: 'task',
+          taskId,
+        });
+      }
+    } catch (err) {
+      this.logger.error('Failed to send push notification', err);
     }
   }
 
