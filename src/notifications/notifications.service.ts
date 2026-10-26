@@ -16,18 +16,27 @@ export class NotificationsService {
     this.expo = new Expo({ accessToken });
   }
 
+  /**
+   * Sends a push to the given tokens.
+   *
+   * Resolves to `false` when at least one chunk could not be submitted to
+   * Expo (network/service failure), so callers that need a retry can
+   * release their own "already sent" marker. Per-ticket errors such as a
+   * dead token are handled here and do not count as a failure.
+   */
   async sendPush(
     tokens: string[],
     title: string,
     body: string,
     data?: Record<string, unknown>,
-  ) {
+  ): Promise<boolean> {
     const messages: ExpoPushMessage[] = tokens
       .filter((token) => Expo.isExpoPushToken(token))
       .map((to) => ({ to, title, body, data, sound: 'default' }));
 
-    if (!messages.length) return;
+    if (!messages.length) return true;
 
+    let allSubmitted = true;
     const chunks = this.expo.chunkPushNotifications(messages);
     for (const chunk of chunks) {
       try {
@@ -66,6 +75,7 @@ export class NotificationsService {
           }
         }
       } catch (err) {
+        allSubmitted = false;
         this.logger.error('Failed to send push notification', err);
         const errorObj = err as {
           response?: { body?: unknown; data?: unknown };
@@ -83,5 +93,7 @@ export class NotificationsService {
         }
       }
     }
+
+    return allSubmitted;
   }
 }

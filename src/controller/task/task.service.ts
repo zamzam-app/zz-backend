@@ -732,6 +732,18 @@ export class TaskService {
       const statusChanged =
         dto.status !== undefined && dto.status !== existing.status;
 
+      // A new deadline (or a reopened task) must get its reminders again, so
+      // clear the "already sent" markers the reminder cron uses for idempotency.
+      const reopened =
+        statusChanged &&
+        dto.status === TaskStatus.OPEN &&
+        existing.status === TaskStatus.COMPLETED;
+      if ('dueDate' in changes || 'dueTime' in changes || reopened) {
+        $set['reminderNotifications.oneHourSentAt'] = null;
+        $set['reminderNotifications.thirtyMinutesSentAt'] = null;
+        $set['reminderNotifications.exactDeadlineSentAt'] = null;
+      }
+
       if (Object.keys($set).length === 0 && !statusChanged) {
         const current = await this.findOneTaskById(id, jwtUser);
         if (!current) {

@@ -3,14 +3,17 @@ import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { NotificationsService } from '../../notifications/notifications.service';
-import { User, UserDocument } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
-import { UserRole } from '../users/interfaces/user.interface';
 import { Task, TaskDocument } from './entities/task.entity';
 import { TaskStatus } from './task.enums';
 
 const TASK_REMINDER_TIMEZONE = 'Asia/Kolkata';
-const REMINDER_JOB_INTERVAL_MS = 60_000;
+/**
+ * How late a reminder may still be sent after its scheduled moment. Lets a
+ * later cron tick catch up when a tick was missed (deploy/restart/slow run)
+ * or a send failed and was released for retry, without sending stale reminders.
+ */
+const REMINDER_CATCHUP_MS = 5 * 60_000;
 
 type ReminderWindowConfig = {
   key: 'oneHour' | 'thirtyMinutes' | 'exactDeadline';
@@ -24,6 +27,11 @@ type ReminderWindowConfig = {
     | 'reminderNotifications.exactDeadlineSentAt';
 };
 
+/**
+ * A task is due for this reminder when its due time falls in
+ * (windowStart, windowEnd], i.e. the reminder's scheduled moment
+ * (dueAt - leadMinutes) is at most REMINDER_CATCHUP_MS in the past.
+ */
 type ReminderWindow = ReminderWindowConfig & {
   windowStart: Date;
   windowEnd: Date;
@@ -59,6 +67,8 @@ type TaskReminderCandidate = {
   dueDate?: Date | null;
   dueTime?: string | null;
   assigneeIds?: Array<Types.ObjectId | string>;
+  activeOwner?: Types.ObjectId | string | null;
+  activeDelegation?: { delegatedTo?: Types.ObjectId | string | null } | null;
   createdBy?: Types.ObjectId | string;
   reminderNotifications?: {
     oneHourSentAt?: Date | null;
@@ -73,7 +83,6 @@ export class TaskReminderService {
 
   constructor(
     @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private usersService: UsersService,
     private notificationsService: NotificationsService,
   ) {}
@@ -114,7 +123,7 @@ export class TaskReminderService {
       reminderWindows[0].windowStart,
     );
     const searchEnd = this.getBusinessDayEnd(
-      reminderWindows[reminderWindows.length - 1].windowStart,
+      reminderWindows[reminderWindows.length - 1].windowEnd,
     );
 
     return this.taskModel
@@ -159,62 +168,85 @@ export class TaskReminderService {
       return;
     }
 
+    // Everyone responsible for the task: all assignees plus the current owner
+    // and delegate (who may not be in `assigneeIds`). The creator is excluded.
     const creatorId = reservedTask.createdBy?.toString();
-    const assigneeIds = (reservedTask.assigneeIds ?? [])
-      .map((id) => id.toString())
-      .filter((id) => Types.ObjectId.isValid(id) && id !== creatorId);
+    const recipientIds = [
+      ...new Set(
+        [
+          ...(reservedTask.assigneeIds ?? []),
+          reservedTask.activeOwner,
+          reservedTask.activeDelegation?.delegatedTo,
+        ]
+          .filter((id) => id != null)
+          .map((id) => id.toString()),
+      ),
+    ].filter((id) => Types.ObjectId.isValid(id) && id !== creatorId);
 
-    if (assigneeIds.length === 0) {
+    if (recipientIds.length === 0) {
       this.logger.log(
-        `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because it has no eligible assignees.`,
-      );
-      return;
-    }
-
-    const managers = await this.userModel
-      .find(
-        {
-          _id: { $in: assigneeIds.map((id) => new Types.ObjectId(id)) },
-          isDeleted: false,
-          role: UserRole.MANAGER,
-        },
-        '_id',
-      )
-      .lean()
-      .exec();
-
-    const managerIds = managers.map((m) => m._id.toString());
-
-    if (managerIds.length === 0) {
-      this.logger.log(
-        `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because it has no manager assignees.`,
-      );
-      return;
-    }
-
-    const tokens = await this.usersService.getPushTokensForUsers(managerIds);
-
-    if (tokens.length === 0) {
-      this.logger.log(
-        `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because no manager push tokens were found.`,
+        `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because it has no eligible recipients.`,
       );
       return;
     }
 
     try {
-      await this.notificationsService.sendPush(
+      const tokens =
+        await this.usersService.getPushTokensForUsers(recipientIds);
+
+      if (tokens.length === 0) {
+        this.logger.log(
+          `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because no recipient push tokens were found.`,
+        );
+        return;
+      }
+
+      const submitted = await this.notificationsService.sendPush(
         tokens,
         reminderWindow.title,
         reminderWindow.bodyTemplate(task.description ?? 'Task'),
         { type: 'task', taskId: task._id.toString() },
       );
 
+      if (!submitted) {
+        await this.releaseReservation(task._id, reminderWindow, referenceTime);
+        return;
+      }
+
       this.logger.log(
-        `Sent ${reminderWindow.key} reminder for task ${String(task._id)} to ${tokens.length} manager(s).`,
+        `Sent ${reminderWindow.key} reminder for task ${String(task._id)} to ${tokens.length} token(s).`,
       );
     } catch (error) {
       this.logger.error(
         `Failed to send ${reminderWindow.key} reminder for task ${String(task._id)}`,
+        error,
+      );
+      await this.releaseReservation(task._id, reminderWindow, referenceTime);
+    }
+  }
+
+  /**
+   * Un-reserves a reminder whose send failed so a later tick can retry it
+   * (until the catch-up window closes). Only releases our own reservation.
+   */
+  private async releaseReservation(
+    taskId: Types.ObjectId | string,
+    reminderWindow: ReminderWindow,
+    reservedAt: Date,
+  ): Promise<void> {
+    try {
+      await this.taskModel
+        .updateOne(
+          { _id: taskId, [reminderWindow.sentField]: reservedAt },
+          { $set: { [reminderWindow.sentField]: null } },
+        )
+        .exec();
+      this.logger.warn(
+        `Released ${reminderWindow.key} reminder for task ${String(taskId)} for retry.`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to release ${reminderWindow.key} reminder for task ${String(taskId)}`,
         error,
       );
     }
@@ -222,14 +254,14 @@ export class TaskReminderService {
 
   private buildReminderWindows(referenceTime: Date): ReminderWindow[] {
     return REMINDER_WINDOWS.map((window) => {
-      const windowStart = new Date(
+      const windowEnd = new Date(
         referenceTime.getTime() + window.leadMinutes * 60_000,
       );
 
       return {
         ...window,
-        windowStart,
-        windowEnd: new Date(windowStart.getTime() + REMINDER_JOB_INTERVAL_MS),
+        windowStart: new Date(windowEnd.getTime() - REMINDER_CATCHUP_MS),
+        windowEnd,
       };
     }).sort(
       (left, right) => left.windowStart.getTime() - right.windowStart.getTime(),
@@ -241,8 +273,8 @@ export class TaskReminderService {
     reminderWindow: ReminderWindow,
   ): boolean {
     return (
-      dueAt.getTime() >= reminderWindow.windowStart.getTime() &&
-      dueAt.getTime() < reminderWindow.windowEnd.getTime()
+      dueAt.getTime() > reminderWindow.windowStart.getTime() &&
+      dueAt.getTime() <= reminderWindow.windowEnd.getTime()
     );
   }
 
