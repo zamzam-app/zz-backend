@@ -117,6 +117,8 @@ export class TaskDelegationService {
    * @param delegatedBy  - The user performing the delegation (current owner).
    * @param delegatedTo  - The user receiving the delegation (new temporary owner).
    * @param note         - Optional reason / context for the delegation.
+   * @param options      - `notify: false` skips the "Task Delegated" push
+   *                       (used when the caller already notifies the assignee).
    *
    * @throws NotFoundException - If the task or target user does not exist.
    * @throws BadRequestException - If self-delegation is attempted or target
@@ -127,7 +129,9 @@ export class TaskDelegationService {
     delegatedBy: Types.ObjectId | string,
     delegatedTo: Types.ObjectId | string,
     note?: string,
+    options: { notify?: boolean } = {},
   ): Promise<DelegateTaskResult> {
+    const { notify = true } = options;
     const taskIdObj = new Types.ObjectId(taskId);
     const fromId = new Types.ObjectId(delegatedBy);
     const toId = new Types.ObjectId(delegatedTo);
@@ -168,20 +172,22 @@ export class TaskDelegationService {
       note,
     );
 
-    const tokens = await this.usersService.getPushTokensForUsers([
-      toId.toString(),
-    ]);
+    if (notify) {
+      const tokens = await this.usersService.getPushTokensForUsers([
+        toId.toString(),
+      ]);
 
-    if (tokens.length > 0) {
-      try {
-        await this.notificationsService.sendPush(
-          tokens,
-          'Task Delegated',
-          `You have been delegated a task: ${task.description || 'Check the app for details'}`,
-          { type: 'task', taskId: taskIdObj.toString() },
-        );
-      } catch (err) {
-        this.logger.error('Failed to send push notification', err);
+      if (tokens.length > 0) {
+        try {
+          await this.notificationsService.sendPush(
+            tokens,
+            'Task Delegated',
+            `You have been delegated a task: ${task.description || 'Check the app for details'}`,
+            { type: 'task', taskId: taskIdObj.toString() },
+          );
+        } catch (err) {
+          this.logger.error('Failed to send push notification', err);
+        }
       }
     }
 

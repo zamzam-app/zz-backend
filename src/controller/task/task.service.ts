@@ -193,6 +193,8 @@ export class TaskService {
             createdByUserId,
             assigneeIds[0],
             'Initial delegation',
+            // "New Task Assigned" below already notifies every assignee.
+            { notify: false },
           );
         } catch (delegationError) {
           await this.taskModel.deleteOne({ _id: saved._id }).exec();
