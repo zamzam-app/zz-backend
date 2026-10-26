@@ -128,10 +128,9 @@ src/
 
 ### Testing
 
-- Unit tests colocated with source files as `*.spec.ts`
-- Jest config in `package.json` (rootDir: `src`, testRegex: `*.spec.ts`)
-- `expo-server-sdk` is mocked in `test/__mocks__/expo-server-sdk.ts`
-- Run: `pnpm test`, `pnpm test:watch`, `pnpm test:cov`
+- **Do NOT write unit tests or integration tests.** Do not create or modify `*.spec.ts`, `*.e2e-spec.ts`, or anything under `test/` unless explicitly asked to in that request.
+- Validate changes with `pnpm do` (format + lint + build) instead.
+- Existing test tooling (Jest config in `package.json`, `test/__mocks__/expo-server-sdk.ts`) is left as-is; do not extend it.
 
 ---
 

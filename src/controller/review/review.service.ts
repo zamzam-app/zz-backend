@@ -1222,6 +1222,8 @@ export class ReviewService implements OnModuleInit {
         };
       }
 
+      // `new: false` returns the document as it was before this update, so the
+      // previous complaintStatus is available for the transition check below.
       const updated = await this.reviewModel
         .findOneAndUpdate(
           {
@@ -1229,7 +1231,7 @@ export class ReviewService implements OnModuleInit {
             isDeleted: false,
           },
           { $set },
-          { new: true },
+          { new: false },
         )
         .exec();
 
@@ -1238,12 +1240,7 @@ export class ReviewService implements OnModuleInit {
       }
 
       // Only notify on an actual transition to RESOLVED, not on re-sends.
-      const previousStatus = await this.reviewModel
-        .findById(reviewId)
-        .select('complaintStatus')
-        .lean()
-        .exec()
-        .then((r) => r?.complaintStatus);
+      const previousStatus = updated.complaintStatus;
 
       if (
         dto.complaintStatus === ComplaintStatus.RESOLVED &&
