@@ -173,21 +173,21 @@ export class TaskDelegationService {
     );
 
     if (notify) {
-      const tokens = await this.usersService.getPushTokensForUsers([
-        toId.toString(),
-      ]);
+      try {
+        const tokens = await this.usersService.getPushTokensForUsers([
+          toId.toString(),
+        ]);
 
-      if (tokens.length > 0) {
-        try {
+        if (tokens.length > 0) {
           await this.notificationsService.sendPush(
             tokens,
             'Task Delegated',
             `You have been delegated a task: ${task.description || 'Check the app for details'}`,
             { type: 'task', taskId: taskIdObj.toString() },
           );
-        } catch (err) {
-          this.logger.error('Failed to send push notification', err);
         }
+      } catch (err) {
+        this.logger.error('Failed to send push notification', err);
       }
     }
 
@@ -258,21 +258,21 @@ export class TaskDelegationService {
       actorId,
     );
 
-    const tokens = await this.usersService.getPushTokensForUsers([
-      newOwnerObj.toString(),
-    ]);
+    try {
+      const tokens = await this.usersService.getPushTokensForUsers([
+        newOwnerObj.toString(),
+      ]);
 
-    if (tokens.length > 0) {
-      try {
+      if (tokens.length > 0) {
         await this.notificationsService.sendPush(
           tokens,
           'Task Reassigned',
           `A task has been reassigned to you: ${task.description || 'Check the app for details'}`,
           { type: 'task', taskId: taskIdObj.toString() },
         );
-      } catch (err) {
-        this.logger.error('Failed to send push notification', err);
       }
+    } catch (err) {
+      this.logger.error('Failed to send push notification', err);
     }
 
     return {

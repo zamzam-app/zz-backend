@@ -386,36 +386,45 @@ export class ReviewService implements OnModuleInit {
       }
 
       if (savedReview.isComplaint) {
-        // Find Admins
-        const admins = await this.userModel
-          .find(
-            {
-              role: UserRole.ADMIN,
-            },
-            '_id',
-          )
-          .lean();
+        // Best-effort: the review is already saved, so a notification
+        // failure must not turn this request into a 500.
+        try {
+          // Find Admins
+          const admins = await this.userModel
+            .find(
+              {
+                role: UserRole.ADMIN,
+              },
+              '_id',
+            )
+            .lean();
 
-        // Find Outlet Managers
-        const outlet = await this.outletModel.findById(savedReview.outletId);
-        const managerIds = outlet?.managerIds ?? [];
+          // Find Outlet Managers
+          const outlet = await this.outletModel.findById(savedReview.outletId);
+          const managerIds = outlet?.managerIds ?? [];
 
-        const userIdsToNotify = [
-          ...admins.map((a) => a._id.toString()),
-          ...managerIds.map((id) => id.toString()),
-        ];
+          const userIdsToNotify = [
+            ...admins.map((a) => a._id.toString()),
+            ...managerIds.map((id) => id.toString()),
+          ];
 
-        const uniqueTokens = await this.usersService.getPushTokensForUsers([
-          ...new Set(userIdsToNotify),
-        ]);
+          const uniqueTokens = await this.usersService.getPushTokensForUsers([
+            ...new Set(userIdsToNotify),
+          ]);
 
-        if (uniqueTokens.length > 0) {
-          const outletName = outlet?.name ?? 'an outlet';
-          this.scheduleComplaintNotification(
-            savedReview.outletId,
-            outletName,
-            uniqueTokens,
-            savedReview._id.toString(),
+          if (uniqueTokens.length > 0) {
+            const outletName = outlet?.name ?? 'an outlet';
+            this.scheduleComplaintNotification(
+              savedReview.outletId,
+              outletName,
+              uniqueTokens,
+              savedReview._id.toString(),
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            'Failed to schedule push notification for new complaint',
+            error,
           );
         }
       }
