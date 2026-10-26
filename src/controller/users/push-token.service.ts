@@ -3,6 +3,8 @@ import {
   BadRequestException,
   HttpException,
   InternalServerErrorException,
+  Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -11,8 +13,87 @@ import { UpdatePushTokenDto } from './dto/update-push-token.dto';
 import { Expo } from 'expo-server-sdk';
 
 @Injectable()
-export class PushTokenService {
+export class PushTokenService implements OnModuleInit {
+  private readonly logger = new Logger(PushTokenService.name);
+
   constructor(@InjectModel(User.name) private userModel: Model<User>) {}
+
+  onModuleInit(): void {
+    // Don't hold up startup; failures are logged and retried on the next boot.
+    void this.migrateLegacyTokens().catch((error) =>
+      this.logger.error('Legacy push token migration failed', error),
+    );
+  }
+
+  /**
+   * One-off, idempotent migration: copies each user's legacy `pushToken` into
+   * `pushTokens[]` so `getTokensForUsers` can stop reading the legacy field
+   * without silencing users who haven't re-synced since the multi-device
+   * change. The migrated entry has no `deviceId`, so the app is told
+   * `tokenSyncRequired` and replaces it with a full entry on its next sync.
+   *
+   * A token already owned by another user (unique index on
+   * `pushTokens.token`) is skipped: that user is its current owner.
+   *
+   * Safe to delete once it reports 0 users to migrate in production.
+   */
+  async migrateLegacyTokens(): Promise<void> {
+    const candidates = await this.userModel
+      .find({
+        pushToken: { $type: 'string', $ne: '' },
+        $expr: {
+          $not: [
+            {
+              $in: ['$pushToken', { $ifNull: ['$pushTokens.token', []] }],
+            },
+          ],
+        },
+      })
+      .select('_id pushToken')
+      .lean()
+      .exec();
+
+    if (candidates.length === 0) return;
+
+    let migrated = 0;
+    let skipped = 0;
+    const now = new Date();
+
+    for (const user of candidates) {
+      const token = user.pushToken;
+      if (!token || !Expo.isExpoPushToken(token)) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        const result = await this.userModel
+          .updateOne(
+            { _id: user._id, 'pushTokens.token': { $ne: token } },
+            {
+              $push: {
+                pushTokens: {
+                  token,
+                  platform: 'unknown',
+                  lastSeenAt: now,
+                  createdAt: now,
+                },
+              },
+            },
+          )
+          .exec();
+        migrated += result.modifiedCount;
+      } catch (error) {
+        // 11000 = token already belongs to another user; leave it with them.
+        if ((error as { code?: number })?.code !== 11000) throw error;
+        skipped++;
+      }
+    }
+
+    this.logger.log(
+      `Legacy push token migration: ${migrated} migrated, ${skipped} skipped, ${candidates.length} candidate(s).`,
+    );
+  }
 
   /**
    * Upsert a token into the user's pushTokens array.
@@ -196,8 +277,8 @@ export class PushTokenService {
 
   /**
    * Collect all valid push tokens for a list of user IDs.
-   * Reads from pushTokens[] and falls back to legacy pushToken for users
-   * who haven't synced yet. Returns a deduped string[].
+   * Reads from pushTokens[] only; the legacy `pushToken` field is migrated
+   * into it on startup (see `migrateLegacyTokens`). Returns a deduped string[].
    */
   async getTokensForUsers(userIds: string[]): Promise<string[]> {
     try {
@@ -208,25 +289,19 @@ export class PushTokenService {
 
       const users = await this.userModel
         .find({ _id: { $in: objectIds }, isDeleted: false })
-        .select('pushTokens pushToken _id')
+        .select('pushTokens _id')
         .lean()
         .exec();
 
       const allTokens: string[] = [];
 
       for (const user of users) {
-        // Add from pushTokens array
         if (Array.isArray(user.pushTokens)) {
           for (const pt of user.pushTokens) {
             if (pt && pt.token && Expo.isExpoPushToken(pt.token)) {
               allTokens.push(pt.token);
             }
           }
-        }
-
-        // Add from legacy field
-        if (user.pushToken && Expo.isExpoPushToken(user.pushToken)) {
-          allTokens.push(user.pushToken);
         }
       }
 
