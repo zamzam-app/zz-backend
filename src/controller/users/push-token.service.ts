@@ -41,32 +41,36 @@ export class PushTokenService {
       };
 
       await this.userModel
-        .updateOne({ _id: new Types.ObjectId(userId) }, [
-          {
-            $set: {
-              pushTokens: {
-                $concatArrays: [
-                  {
-                    $filter: {
-                      input: { $ifNull: ['$pushTokens', []] },
-                      as: 'pt',
-                      cond: {
-                        $and: [
-                          { $ne: ['$$pt.token', tokenStr] },
-                          ...(dto.deviceId
-                            ? [{ $ne: ['$$pt.deviceId', dto.deviceId] }]
-                            : []),
-                        ],
+        .updateOne(
+          { _id: new Types.ObjectId(userId) },
+          [
+            {
+              $set: {
+                pushTokens: {
+                  $concatArrays: [
+                    {
+                      $filter: {
+                        input: { $ifNull: ['$pushTokens', []] },
+                        as: 'pt',
+                        cond: {
+                          $and: [
+                            { $ne: ['$$pt.token', tokenStr] },
+                            ...(dto.deviceId
+                              ? [{ $ne: ['$$pt.deviceId', dto.deviceId] }]
+                              : []),
+                          ],
+                        },
                       },
                     },
-                  },
-                  [tokenObj],
-                ],
+                    [tokenObj],
+                  ],
+                },
+                pushToken: tokenStr,
               },
-              pushToken: tokenStr,
             },
-          },
-        ])
+          ],
+          { updatePipeline: true },
+        )
         .exec();
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -159,24 +163,28 @@ export class PushTokenService {
 
       // Also clear legacy field if it matches exactly
       await this.userModel
-        .updateMany({ pushToken: token }, [
-          {
-            $set: {
-              pushToken: {
-                $let: {
-                  vars: { remaining: { $ifNull: ['$pushTokens', []] } },
-                  in: {
-                    $cond: {
-                      if: { $gt: [{ $size: '$$remaining' }, 0] },
-                      then: { $arrayElemAt: ['$$remaining.token', -1] },
-                      else: null,
+        .updateMany(
+          { pushToken: token },
+          [
+            {
+              $set: {
+                pushToken: {
+                  $let: {
+                    vars: { remaining: { $ifNull: ['$pushTokens', []] } },
+                    in: {
+                      $cond: {
+                        if: { $gt: [{ $size: '$$remaining' }, 0] },
+                        then: { $arrayElemAt: ['$$remaining.token', -1] },
+                        else: null,
+                      },
                     },
                   },
                 },
               },
             },
-          },
-        ])
+          ],
+          { updatePipeline: true },
+        )
         .exec();
     } catch (error) {
       if (error instanceof HttpException) throw error;
