@@ -171,11 +171,13 @@ export class ResolveComplaintDtoSwagger {
   })
   resolutionNotes?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '60d5ecb86217152c9043e02d',
-    description: 'MongoDB ObjectId of the user resolving the complaint',
+    deprecated: true,
+    description:
+      'Ignored. The resolver is always the authenticated user. Still accepted so existing clients keep working.',
   })
-  resolvedBy: string;
+  resolvedBy?: string;
 }
 
 export function ApiReviewResolveComplaint(): ApiDecorator {

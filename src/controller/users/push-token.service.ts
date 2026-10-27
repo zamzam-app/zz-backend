@@ -3,6 +3,8 @@ import {
   BadRequestException,
   HttpException,
   InternalServerErrorException,
+  Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -11,8 +13,87 @@ import { UpdatePushTokenDto } from './dto/update-push-token.dto';
 import { Expo } from 'expo-server-sdk';
 
 @Injectable()
-export class PushTokenService {
+export class PushTokenService implements OnModuleInit {
+  private readonly logger = new Logger(PushTokenService.name);
+
   constructor(@InjectModel(User.name) private userModel: Model<User>) {}
+
+  onModuleInit(): void {
+    // Don't hold up startup; failures are logged and retried on the next boot.
+    void this.migrateLegacyTokens().catch((error) =>
+      this.logger.error('Legacy push token migration failed', error),
+    );
+  }
+
+  /**
+   * One-off, idempotent migration: copies each user's legacy `pushToken` into
+   * `pushTokens[]` so `getTokensForUsers` can stop reading the legacy field
+   * without silencing users who haven't re-synced since the multi-device
+   * change. The migrated entry has no `deviceId`, so the app is told
+   * `tokenSyncRequired` and replaces it with a full entry on its next sync.
+   *
+   * A token already owned by another user (unique index on
+   * `pushTokens.token`) is skipped: that user is its current owner.
+   *
+   * Safe to delete once it reports 0 users to migrate in production.
+   */
+  async migrateLegacyTokens(): Promise<void> {
+    const candidates = await this.userModel
+      .find({
+        pushToken: { $type: 'string', $ne: '' },
+        $expr: {
+          $not: [
+            {
+              $in: ['$pushToken', { $ifNull: ['$pushTokens.token', []] }],
+            },
+          ],
+        },
+      })
+      .select('_id pushToken')
+      .lean()
+      .exec();
+
+    if (candidates.length === 0) return;
+
+    let migrated = 0;
+    let skipped = 0;
+    const now = new Date();
+
+    for (const user of candidates) {
+      const token = user.pushToken;
+      if (!token || !Expo.isExpoPushToken(token)) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        const result = await this.userModel
+          .updateOne(
+            { _id: user._id, 'pushTokens.token': { $ne: token } },
+            {
+              $push: {
+                pushTokens: {
+                  token,
+                  platform: 'unknown',
+                  lastSeenAt: now,
+                  createdAt: now,
+                },
+              },
+            },
+          )
+          .exec();
+        migrated += result.modifiedCount;
+      } catch (error) {
+        // 11000 = token already belongs to another user; leave it with them.
+        if ((error as { code?: number })?.code !== 11000) throw error;
+        skipped++;
+      }
+    }
+
+    this.logger.log(
+      `Legacy push token migration: ${migrated} migrated, ${skipped} skipped, ${candidates.length} candidate(s).`,
+    );
+  }
 
   /**
    * Upsert a token into the user's pushTokens array.
@@ -41,32 +122,36 @@ export class PushTokenService {
       };
 
       await this.userModel
-        .updateOne({ _id: new Types.ObjectId(userId) }, [
-          {
-            $set: {
-              pushTokens: {
-                $concatArrays: [
-                  {
-                    $filter: {
-                      input: { $ifNull: ['$pushTokens', []] },
-                      as: 'pt',
-                      cond: {
-                        $and: [
-                          { $ne: ['$$pt.token', tokenStr] },
-                          ...(dto.deviceId
-                            ? [{ $ne: ['$$pt.deviceId', dto.deviceId] }]
-                            : []),
-                        ],
+        .updateOne(
+          { _id: new Types.ObjectId(userId) },
+          [
+            {
+              $set: {
+                pushTokens: {
+                  $concatArrays: [
+                    {
+                      $filter: {
+                        input: { $ifNull: ['$pushTokens', []] },
+                        as: 'pt',
+                        cond: {
+                          $and: [
+                            { $ne: ['$$pt.token', tokenStr] },
+                            ...(dto.deviceId
+                              ? [{ $ne: ['$$pt.deviceId', dto.deviceId] }]
+                              : []),
+                          ],
+                        },
                       },
                     },
-                  },
-                  [tokenObj],
-                ],
+                    [tokenObj],
+                  ],
+                },
+                pushToken: tokenStr,
               },
-              pushToken: tokenStr,
             },
-          },
-        ])
+          ],
+          { updatePipeline: true },
+        )
         .exec();
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -159,24 +244,28 @@ export class PushTokenService {
 
       // Also clear legacy field if it matches exactly
       await this.userModel
-        .updateMany({ pushToken: token }, [
-          {
-            $set: {
-              pushToken: {
-                $let: {
-                  vars: { remaining: { $ifNull: ['$pushTokens', []] } },
-                  in: {
-                    $cond: {
-                      if: { $gt: [{ $size: '$$remaining' }, 0] },
-                      then: { $arrayElemAt: ['$$remaining.token', -1] },
-                      else: null,
+        .updateMany(
+          { pushToken: token },
+          [
+            {
+              $set: {
+                pushToken: {
+                  $let: {
+                    vars: { remaining: { $ifNull: ['$pushTokens', []] } },
+                    in: {
+                      $cond: {
+                        if: { $gt: [{ $size: '$$remaining' }, 0] },
+                        then: { $arrayElemAt: ['$$remaining.token', -1] },
+                        else: null,
+                      },
                     },
                   },
                 },
               },
             },
-          },
-        ])
+          ],
+          { updatePipeline: true },
+        )
         .exec();
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -188,8 +277,8 @@ export class PushTokenService {
 
   /**
    * Collect all valid push tokens for a list of user IDs.
-   * Reads from pushTokens[] and falls back to legacy pushToken for users
-   * who haven't synced yet. Returns a deduped string[].
+   * Reads from pushTokens[] only; the legacy `pushToken` field is migrated
+   * into it on startup (see `migrateLegacyTokens`). Returns a deduped string[].
    */
   async getTokensForUsers(userIds: string[]): Promise<string[]> {
     try {
@@ -200,14 +289,13 @@ export class PushTokenService {
 
       const users = await this.userModel
         .find({ _id: { $in: objectIds }, isDeleted: false })
-        .select('pushTokens pushToken _id')
+        .select('pushTokens _id')
         .lean()
         .exec();
 
       const allTokens: string[] = [];
 
       for (const user of users) {
-        // Add from pushTokens array
         if (Array.isArray(user.pushTokens)) {
           for (const pt of user.pushTokens) {
             if (pt && pt.token && Expo.isExpoPushToken(pt.token)) {
@@ -215,15 +303,55 @@ export class PushTokenService {
             }
           }
         }
-
-        // Add from legacy field
-        if (user.pushToken && Expo.isExpoPushToken(user.pushToken)) {
-          allTokens.push(user.pushToken);
-        }
       }
 
       // Dedupe
       return [...new Set(allTokens)];
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to retrieve push tokens for users',
+      );
+    }
+  }
+
+  /**
+   * Like `getTokensForUsers`, but keeps tokens grouped by user so each
+   * user's pushes can carry their own app icon badge count. Users without a
+   * valid token are left out of the map.
+   */
+  async getTokensByUser(userIds: string[]): Promise<Map<string, string[]>> {
+    const byUser = new Map<string, string[]>();
+    if (!userIds || !userIds.length) return byUser;
+
+    try {
+      const uniqueIds = [...new Set(userIds.map((id) => id.toString()))];
+      const users = await this.userModel
+        .find({
+          _id: { $in: uniqueIds.map((id) => new Types.ObjectId(id)) },
+          isDeleted: false,
+        })
+        .select('pushTokens _id')
+        .lean()
+        .exec();
+
+      // A token belongs to one user (upsert takes it over from any other
+      // account), but dedupe across users anyway so no device gets two pushes.
+      const seen = new Set<string>();
+      for (const user of users) {
+        const tokens = (user.pushTokens ?? [])
+          .map((pt) => pt?.token)
+          .filter(
+            (token): token is string =>
+              !!token && Expo.isExpoPushToken(token) && !seen.has(token),
+          );
+        tokens.forEach((token) => seen.add(token));
+        if (tokens.length > 0) {
+          byUser.set(user._id.toString(), tokens);
+        }
+      }
+
+      return byUser;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(

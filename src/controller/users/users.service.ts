@@ -24,8 +24,13 @@ import {
 
 import { PushTokenService } from './push-token.service';
 
+/** How long the admin ID list is reused before it is read again. */
+const ADMIN_IDS_CACHE_MS = 60_000;
+
 @Injectable()
 export class UsersService {
+  private adminIdsCache: { ids: string[]; expiresAt: number } | null = null;
+
   constructor(
     @InjectModel(User.name) private userModel: Model<User>,
     private pushTokenService: PushTokenService,
@@ -386,6 +391,28 @@ export class UsersService {
 
   async getPushTokensForUsers(userIds: string[]) {
     return this.pushTokenService.getTokensForUsers(userIds);
+  }
+
+  /**
+   * IDs of all active admins. Admins see every task, so they are part of
+   * every task's unread/push audience. Cached briefly because it is read on
+   * every task event.
+   */
+  async getAdminIds(): Promise<string[]> {
+    const now = Date.now();
+    if (this.adminIdsCache && this.adminIdsCache.expiresAt > now) {
+      return this.adminIdsCache.ids;
+    }
+
+    const admins = await this.userModel
+      .find({ role: UserRole.ADMIN, isDeleted: false })
+      .select('_id')
+      .lean()
+      .exec();
+    const ids = admins.map((a) => a._id.toString());
+
+    this.adminIdsCache = { ids, expiresAt: now + ADMIN_IDS_CACHE_MS };
+    return ids;
   }
 
   async hasPushTokenForDevice(

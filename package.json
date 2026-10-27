@@ -20,6 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migrate:product-pricing": "ts-node scripts/migrate-product-pricing.ts",
     "migrate:product-pricing-cleanup": "ts-node scripts/cleanup-legacy-price.ts",
+    "migrate:task-assignees": "ts-node scripts/backfill-task-assignees.ts",
+    "migrate:reset-task-unread": "ts-node scripts/reset-task-unread.ts",
     "do": "pnpm format && pnpm lint && pnpm build && git add ."
   },
   "dependencies": {

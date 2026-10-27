@@ -2,14 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
 import { Task } from './entities/task.entity';
 import { TaskRecurrenceType, TaskStatus } from './task.enums';
+import { computeTaskAudience } from './task-visibility.util';
 
 @Injectable()
 export class TaskRecurrenceService {
   private readonly logger = new Logger(TaskRecurrenceService.name);
 
-  constructor(@InjectModel(Task.name) private taskModel: Model<Task>) {}
+  constructor(
+    @InjectModel(Task.name) private taskModel: Model<Task>,
+    private usersService: UsersService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   @Cron('0 1 * * *') // Every day at 1:00 AM
   async handleRecurringTasks() {
@@ -103,8 +110,10 @@ export class TaskRecurrenceService {
       };
 
       try {
-        await this.taskModel.create(newTaskData);
+        const created = await this.taskModel.create(newTaskData);
         createdCount++;
+
+        await this.notifyNewInstance(created);
       } catch (error) {
         this.logger.error(
           `Failed to create task from template ${String(template._id)}`,
@@ -114,5 +123,54 @@ export class TaskRecurrenceService {
     }
 
     this.logger.log(`Successfully created ${createdCount} new task instances.`);
+  }
+
+  /**
+   * Notifies everyone who can see a generated task, like `TaskService.create`
+   * does for an ordinary task: assignees get "New Task Assigned", everyone
+   * else (admins) a neutral message. The creator is not notified.
+   * Best-effort: a failure is logged and never affects task generation.
+   */
+  private async notifyNewInstance(
+    task: Task & { _id: unknown },
+  ): Promise<void> {
+    const taskId = String(task._id);
+
+    try {
+      const audience = computeTaskAudience(
+        task,
+        await this.usersService.getAdminIds(),
+      );
+      audience.delete(task.createdBy?.toString() ?? '');
+
+      const assigneeSet = new Set(
+        (task.assigneeIds ?? []).map((id) => id.toString()),
+      );
+      const assigned = [...audience].filter((id) => assigneeSet.has(id));
+      const others = [...audience].filter((id) => !assigneeSet.has(id));
+      const data = { type: 'task', taskId };
+
+      if (assigned.length > 0) {
+        await this.notificationsService.sendPushToUsers(
+          assigned,
+          'New Task Assigned',
+          `You've been assigned a task: ${task.description}`,
+          data,
+        );
+      }
+      if (others.length > 0) {
+        await this.notificationsService.sendPushToUsers(
+          others,
+          'New Task',
+          `New recurring task: ${task.description}`,
+          data,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to send recurring task notification for task ${taskId}`,
+        error,
+      );
+    }
   }
 }

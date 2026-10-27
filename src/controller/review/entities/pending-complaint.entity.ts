@@ -11,8 +11,10 @@ export class PendingComplaint {
   @Prop({ required: true })
   outletName: string;
 
+  // User IDs (not device tokens): tokens are resolved when the batch is sent,
+  // so users who logged in/out during the debounce window are handled correctly.
   @Prop({ type: [String], required: true })
-  tokens: string[];
+  userIds: string[];
 
   @Prop({ default: 1 })
   eventCount: number;

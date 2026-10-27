@@ -15,6 +15,10 @@ import {
 } from './entities/task-delegation.entity';
 import { TaskView, TaskViewSchema } from './entities/task-view.entity';
 import {
+  PendingTaskActivity,
+  PendingTaskActivitySchema,
+} from './entities/pending-task-activity.entity';
+import {
   TaskAttachment,
   TaskAttachmentSchema,
 } from './entities/task-attachment.entity';
@@ -36,6 +40,7 @@ import { NotificationsModule } from '../../notifications/notifications.module';
       { name: TaskEvent.name, schema: TaskEventSchema },
       { name: TaskDelegation.name, schema: TaskDelegationSchema },
       { name: TaskView.name, schema: TaskViewSchema },
+      { name: PendingTaskActivity.name, schema: PendingTaskActivitySchema },
       { name: TaskAttachment.name, schema: TaskAttachmentSchema },
       { name: Outlet.name, schema: OutletSchema },
       { name: TaskCategory.name, schema: TaskCategorySchema },

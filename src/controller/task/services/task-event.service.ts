@@ -4,8 +4,10 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  OnApplicationBootstrap,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { Cron } from '@nestjs/schedule';
 import { Model, Types } from 'mongoose';
 import { NotificationsService } from '../../../notifications/notifications.service';
 import { UsersService } from '../../users/users.service';
@@ -15,8 +17,14 @@ import {
   TaskDelegation,
   TaskDelegationDocument,
 } from '../entities/task-delegation.entity';
-import { TaskEventType } from '../task.enums';
 import {
+  PendingTaskActivity,
+  PendingTaskActivityDocument,
+} from '../entities/pending-task-activity.entity';
+import { TaskEventType } from '../task.enums';
+import { computeTaskAudience } from '../task-visibility.util';
+import {
+  applyProjectionToAudience,
   computeProjection,
   computeUnreadIncrementUserIds,
   generateSortKey,
@@ -30,15 +38,22 @@ const NOTIFIABLE_EVENT_TYPES: ReadonlySet<TaskEventType> = new Set([
 /** How long to wait before flushing batched notifications for a task. */
 const NOTIFICATION_DEBOUNCE_MS = 3_000;
 
+/**
+ * How long past its due time a persisted batch must be before the recovery
+ * cron sends it. Leaves the live in-memory timer time to send it first.
+ */
+const PENDING_ACTIVITY_RECOVERY_GRACE_MS = 15_000;
+const PENDING_ACTIVITY_RECOVERY_LIMIT = 100;
+
 type PendingNotification = {
   /** Node.js timer handle — cleared and reset on each new event. */
   timer: ReturnType<typeof setTimeout>;
   /** Number of notifiable events accumulated in this window. */
   eventCount: number;
-  /** Stored taskId to re-fetch the freshest version when the debounce timer fires. */
-  taskId: string;
   /** Accumulated actor IDs to exclude from the recipient list. */
   actorIds: Set<string>;
+  /** True once the batch is also stored in `PendingTaskActivity`. */
+  persisted: boolean;
 };
 
 export interface AppendEventResult {
@@ -76,7 +91,7 @@ export interface AppendEventOptions {
  * - Use `skipProjection` ONLY for backfill/migration scripts.
  */
 @Injectable()
-export class TaskEventService {
+export class TaskEventService implements OnApplicationBootstrap {
   private readonly logger = new Logger(TaskEventService.name);
 
   /**
@@ -85,6 +100,9 @@ export class TaskEventService {
    * When multiple notifiable events fire for the same task within
    * `NOTIFICATION_DEBOUNCE_MS`, they are collapsed into a single
    * push notification (e.g. "5 new updates on task '…'").
+   *
+   * Each batch is also stored in `PendingTaskActivity`, so a restart in the
+   * debounce window only delays the push (see `recoverPendingActivity`).
    */
   private readonly pendingNotifications = new Map<
     string,
@@ -97,9 +115,16 @@ export class TaskEventService {
     private readonly taskEventModel: Model<TaskEventDocument>,
     @InjectModel(TaskDelegation.name)
     private readonly taskDelegationModel: Model<TaskDelegationDocument>,
+    @InjectModel(PendingTaskActivity.name)
+    private readonly pendingActivityModel: Model<PendingTaskActivityDocument>,
     private readonly usersService: UsersService,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  onApplicationBootstrap(): void {
+    // Send batches left behind by a restart without waiting for the cron.
+    void this.recoverPendingActivity();
+  }
 
   /**
    * Appends an immutable event to the task's event log and updates the
@@ -137,6 +162,10 @@ export class TaskEventService {
     if (!task) {
       throw new NotFoundException('Task not found');
     }
+
+    // Admins see every task, so they are part of every event's unread
+    // audience. Read before writing anything so a failure leaves no event.
+    const adminIds = await this.usersService.getAdminIds();
 
     const now = new Date();
     const nextVersion = task.version + 1;
@@ -192,12 +221,31 @@ export class TaskEventService {
 
     // --------------------------------------------------
     // 6. Compute unreadMap increments
+    //    Recipients come from the task as it will be after this event, so a
+    //    user added by the event (assignment, delegation) also gets +1.
     // --------------------------------------------------
-    const unreadUserIds = computeUnreadIncrementUserIds(task, actorId);
+    const audienceAfter = applyProjectionToAudience(task, projection);
+    const unreadUserIds = computeUnreadIncrementUserIds(
+      audienceAfter,
+      actorId,
+      adminIds,
+    );
     const unreadIncrements: Record<string, number> = {};
     for (const uid of unreadUserIds) {
       unreadIncrements[`unreadMap.${uid}`] = 1;
     }
+
+    // Users who can no longer see the task (e.g. removed as an assignee)
+    // lose any count they still had for it, so no badge points at a task
+    // that is missing from their list.
+    const audience = computeTaskAudience(audienceAfter, adminIds);
+    const staleUnread: Record<string, ''> = {};
+    for (const uid of task.unreadMap?.keys() ?? []) {
+      if (!audience.has(uid)) {
+        staleUnread[`unreadMap.${uid}`] = '';
+      }
+    }
+    const $unset = { ...projection.$unset, ...staleUnread };
 
     const updateQuery: Record<string, any> = { _id: taskIdObj };
     if (!task.version) {
@@ -221,8 +269,9 @@ export class TaskEventService {
             ...projection.$inc,
             ...unreadIncrements,
           },
-          ...(Object.keys(projection.$unset).length > 0
-            ? { $unset: projection.$unset }
+          ...(Object.keys($unset).length > 0 ? { $unset } : {}),
+          ...(Object.keys(projection.$addToSet).length > 0
+            ? { $addToSet: projection.$addToSet }
             : {}),
         },
         { new: true },
@@ -268,74 +317,167 @@ export class TaskEventService {
    * timer is started. If one already exists, the timer is reset to
    * `NOTIFICATION_DEBOUNCE_MS` and the event count is incremented.
    *
-   * When the timer finally fires, `flushNotification` sends a single
-   * push with the accumulated count.
+   * The batch is also upserted into `PendingTaskActivity` (best-effort).
+   * When the timer fires, `flushNotification` sends a single push with the
+   * accumulated count.
    */
   private scheduleNotification(
     task: TaskDocument,
     actorId: Types.ObjectId,
   ): void {
     const taskId = task._id.toString();
+    const actor = actorId.toString();
     const existing = this.pendingNotifications.get(taskId);
 
-    if (existing) {
-      // Reset the debounce window
-      clearTimeout(existing.timer);
-      existing.eventCount += 1;
-      existing.actorIds.add(actorId.toString());
-      existing.timer = setTimeout(
-        () => this.flushNotification(taskId),
-        NOTIFICATION_DEBOUNCE_MS,
-      );
-      return;
-    }
-
-    const actorIds = new Set<string>([actorId.toString()]);
     const timer = setTimeout(
-      () => this.flushNotification(taskId),
+      () => void this.flushNotification(taskId),
       NOTIFICATION_DEBOUNCE_MS,
     );
 
-    this.pendingNotifications.set(taskId, {
-      timer,
-      eventCount: 1,
-      taskId,
-      actorIds,
-    });
+    let pending: PendingNotification;
+    if (existing) {
+      // Reset the debounce window
+      clearTimeout(existing.timer);
+      existing.timer = timer;
+      existing.eventCount += 1;
+      existing.actorIds.add(actor);
+      pending = existing;
+    } else {
+      pending = {
+        timer,
+        eventCount: 1,
+        actorIds: new Set<string>([actor]),
+        persisted: false,
+      };
+      this.pendingNotifications.set(taskId, pending);
+    }
+
+    this.pendingActivityModel
+      .updateOne(
+        { taskId },
+        {
+          $inc: { eventCount: 1 },
+          $addToSet: { actorIds: actor },
+          $set: { flushAt: new Date(Date.now() + NOTIFICATION_DEBOUNCE_MS) },
+          $setOnInsert: { taskId },
+        },
+        { upsert: true },
+      )
+      .exec()
+      .then(() => {
+        pending.persisted = true;
+      })
+      .catch((err) => {
+        this.logger.warn(
+          `Failed to persist pending activity notification for task ${taskId}`,
+          err instanceof Error ? err.message : String(err),
+        );
+      });
   }
 
   /**
    * Drains the pending notification for a task and sends a single push.
    *
+   * The persisted record is claimed (deleted) first. Whoever deletes it
+   * sends the push, so a recovering instance never sends it a second time.
+   *
    * Body varies by count:
    *  - 1 event:  "New activity on task '[description]'."
    *  - N events: "N new updates on task '[description]'."
    */
-  private flushNotification(taskId: string): void {
+  private async flushNotification(taskId: string): Promise<void> {
     const pending = this.pendingNotifications.get(taskId);
-    if (!pending) {
-      return;
-    }
     this.pendingNotifications.delete(taskId);
 
-    const { eventCount, taskId: pendingTaskId, actorIds } = pending;
+    let eventCount = pending?.eventCount ?? 0;
+    const actorIds = new Set(pending?.actorIds ?? []);
 
-    this.sendBatchedNotification(pendingTaskId, actorIds, eventCount).catch(
-      (err) => {
-        this.logger.error(
-          `Failed to send batched notification for task ${taskId}`,
-          err instanceof Error ? err.message : String(err),
-        );
-      },
-    );
+    try {
+      const claimed = await this.pendingActivityModel
+        .findOneAndDelete({ taskId })
+        .lean()
+        .exec();
+
+      if (claimed) {
+        eventCount = Math.max(eventCount, claimed.eventCount ?? 0);
+        (claimed.actorIds ?? []).forEach((id) => actorIds.add(id));
+      } else if (!pending || pending.persisted) {
+        // Another instance (or the recovery cron) already sent this batch.
+        return;
+      }
+    } catch (err) {
+      // The store is unreachable: send from memory rather than drop the push.
+      this.logger.warn(
+        `Failed to claim pending activity notification for task ${taskId}`,
+        err instanceof Error ? err.message : String(err),
+      );
+      if (!pending) return;
+    }
+
+    if (eventCount === 0) return;
+
+    try {
+      await this.sendBatchedNotification(taskId, actorIds, eventCount);
+    } catch (err) {
+      this.logger.error(
+        `Failed to send batched notification for task ${taskId}`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
+  /**
+   * Sends batches whose debounce window ended more than
+   * `PENDING_ACTIVITY_RECOVERY_GRACE_MS` ago without being sent: the process
+   * that buffered them restarted or crashed before its timer fired.
+   */
+  @Cron('*/30 * * * * *')
+  async recoverPendingActivity(): Promise<void> {
+    try {
+      const overdue = await this.pendingActivityModel
+        .find({
+          flushAt: {
+            $lte: new Date(Date.now() - PENDING_ACTIVITY_RECOVERY_GRACE_MS),
+          },
+        })
+        .limit(PENDING_ACTIVITY_RECOVERY_LIMIT)
+        .lean()
+        .exec();
+
+      for (const row of overdue) {
+        // This instance still has a live timer for it.
+        if (this.pendingNotifications.has(row.taskId)) continue;
+
+        // Claim only if no new event has pushed the window back meanwhile.
+        const claimed = await this.pendingActivityModel
+          .findOneAndDelete({ _id: row._id, flushAt: row.flushAt })
+          .lean()
+          .exec();
+        if (!claimed) continue;
+
+        try {
+          await this.sendBatchedNotification(
+            claimed.taskId,
+            new Set(claimed.actorIds ?? []),
+            claimed.eventCount ?? 1,
+          );
+        } catch (err) {
+          this.logger.error(
+            `Failed to send recovered notification for task ${claimed.taskId}`,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error('Error in recoverPendingActivity cron job', err);
+    }
   }
 
   /**
    * Sends a single push notification for batched timeline activity.
    *
-   * Audience: union of `createdBy`, `assigneeIds`, `activeOwner`, and
-   * `activeDelegation.delegatedTo` — minus all actors who triggered
-   * events in the debounce window.
+   * Audience: everyone who can see the task (all admins, assignees, the
+   * creator) minus all actors who triggered events in the debounce window.
    *
    * This is intentionally fire-and-forget; failures are logged but never
    * propagated to the caller.
@@ -353,29 +495,10 @@ export class TaskEventService {
       return;
     }
 
-    const recipientIdSet = new Set<string>();
-
-    // Task creator
-    if (task.createdBy) {
-      recipientIdSet.add(task.createdBy.toString());
-    }
-
-    // All assignees
-    if (task.assigneeIds?.length) {
-      for (const id of task.assigneeIds) {
-        recipientIdSet.add(id.toString());
-      }
-    }
-
-    // Active owner (v2 delegation)
-    if (task.activeOwner) {
-      recipientIdSet.add(task.activeOwner.toString());
-    }
-
-    // Active delegation target (v2 delegation)
-    if (task.activeDelegation?.delegatedTo) {
-      recipientIdSet.add(task.activeDelegation.delegatedTo.toString());
-    }
+    const recipientIdSet = computeTaskAudience(
+      task,
+      await this.usersService.getAdminIds(),
+    );
 
     // Exclude all actors from the debounce window
     for (const actorId of actorIds) {
@@ -386,28 +509,24 @@ export class TaskEventService {
       return;
     }
 
-    const tokens = await this.usersService.getPushTokensForUsers(
-      Array.from(recipientIdSet),
-    );
-
-    if (tokens.length === 0) {
-      return;
-    }
-
     const body =
       eventCount === 1
         ? `New activity on task '${task.description}'.`
         : `${eventCount} new updates on task '${task.description}'.`;
 
     try {
-      await this.notificationsService.sendPush(tokens, 'New Activity', body, {
-        type: 'task',
-        taskId: task._id.toString(),
-      });
-
-      this.logger.log(
-        `Sent batched notification (${eventCount} event(s)) for task ${task._id.toString()} to ${tokens.length} user(s).`,
+      const { tokenCount } = await this.notificationsService.sendPushToUsers(
+        Array.from(recipientIdSet),
+        'New Activity',
+        body,
+        { type: 'task', taskId: task._id.toString() },
       );
+
+      if (tokenCount > 0) {
+        this.logger.log(
+          `Sent batched notification (${eventCount} event(s)) for task ${task._id.toString()} to ${tokenCount} device(s).`,
+        );
+      }
     } catch (err) {
       this.logger.error('Failed to send push notification', err);
     }
