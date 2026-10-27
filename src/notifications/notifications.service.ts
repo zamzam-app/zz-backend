@@ -272,21 +272,33 @@ export class NotificationsService {
             await this.expo.getPushNotificationReceiptsAsync(ids);
 
           for (const [ticketId, receipt] of Object.entries(receipts)) {
-            checked.push(ticketId);
-            if (receipt.status !== 'error') continue;
+            if (receipt.status !== 'error') {
+              checked.push(ticketId);
+              continue;
+            }
 
-            failed++;
             const token = tokenByTicket.get(ticketId);
             const maskedToken = token ? this.maskToken(token) : 'unknown';
             const reason = receipt.details?.error ?? 'unknown';
 
-            this.logger.error(
-              `Push receipt error for ${maskedToken} (${reason}): ${receipt.message}`,
-            );
-
-            if (reason === 'DeviceNotRegistered' && token) {
-              await this.pushTokenService.removeTokenByValue(token);
-              this.logger.warn(`Removed dead token: ${maskedToken}`);
+            // A receipt is only marked checked (and its record deleted) once
+            // its handling succeeded, so a failed dead-token removal is
+            // retried on the next run instead of being lost.
+            try {
+              if (reason === 'DeviceNotRegistered' && token) {
+                await this.pushTokenService.removeTokenByValue(token);
+                this.logger.warn(`Removed dead token: ${maskedToken}`);
+              }
+              checked.push(ticketId);
+              failed++;
+              this.logger.error(
+                `Push receipt error for ${maskedToken} (${reason}): ${receipt.message}`,
+              );
+            } catch (err) {
+              this.logger.error(
+                `Failed to handle push receipt error for ${maskedToken} (${reason}); will retry`,
+                err,
+              );
             }
           }
         } catch (err) {

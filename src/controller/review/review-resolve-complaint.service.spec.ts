@@ -11,8 +11,7 @@ describe('ReviewService resolveComplaint notifications', () => {
   let reviewModel: { findOneAndUpdate: jest.Mock };
   let userModel: { find: jest.Mock; findById: jest.Mock };
   let outletModel: { findById: jest.Mock };
-  let usersService: { getPushTokensForUsers: jest.Mock };
-  let notificationsService: { sendPush: jest.Mock };
+  let notificationsService: { sendPushToUsers: jest.Mock };
 
   const reviewId = new Types.ObjectId();
   const outletId = new Types.ObjectId();
@@ -30,11 +29,14 @@ describe('ReviewService resolveComplaint notifications', () => {
     });
   };
 
+  // The resolver comes from the authenticated user (third argument), not
+  // from the request body.
   const resolveWith = (complaintStatus: ComplaintStatus) =>
-    service.resolveComplaint(reviewId.toString(), {
-      complaintStatus,
-      resolvedBy: managerId.toString(),
-    });
+    service.resolveComplaint(
+      reviewId.toString(),
+      { complaintStatus },
+      managerId.toString(),
+    );
 
   beforeEach(() => {
     reviewModel = { findOneAndUpdate: jest.fn() };
@@ -47,12 +49,11 @@ describe('ReviewService resolveComplaint notifications', () => {
     outletModel = {
       findById: jest.fn().mockResolvedValue({ name: 'Outlet A' }),
     };
-    usersService = {
-      getPushTokensForUsers: jest
+    notificationsService = {
+      sendPushToUsers: jest
         .fn()
-        .mockResolvedValue(['ExponentPushToken[admin]']),
+        .mockResolvedValue({ submitted: true, tokenCount: 1 }),
     };
-    notificationsService = { sendPush: jest.fn().mockResolvedValue(undefined) };
 
     service = new ReviewService(
       reviewModel as never,
@@ -62,7 +63,7 @@ describe('ReviewService resolveComplaint notifications', () => {
       userModel as never,
       outletModel as never,
       {} as never,
-      usersService as never,
+      {} as never, // usersService (not used by resolveComplaint)
       {} as never,
       notificationsService as never,
     );
@@ -81,14 +82,27 @@ describe('ReviewService resolveComplaint notifications', () => {
     );
   });
 
+  it('records the authenticated user as the resolver', async () => {
+    mockPreviousStatus(ComplaintStatus.PENDING);
+
+    await resolveWith(ComplaintStatus.RESOLVED);
+
+    const [, update] = reviewModel.findOneAndUpdate.mock.calls[0] as [
+      unknown,
+      { $set: { resolvedBy: Types.ObjectId } },
+    ];
+    expect(update.$set.resolvedBy.toString()).toBe(managerId.toString());
+    expect(userModel.findById).toHaveBeenCalledWith(managerId.toString());
+  });
+
   it('notifies admins when a pending complaint becomes resolved', async () => {
     mockPreviousStatus(ComplaintStatus.PENDING);
 
     await resolveWith(ComplaintStatus.RESOLVED);
 
-    expect(notificationsService.sendPush).toHaveBeenCalledTimes(1);
-    expect(notificationsService.sendPush).toHaveBeenCalledWith(
-      ['ExponentPushToken[admin]'],
+    expect(notificationsService.sendPushToUsers).toHaveBeenCalledTimes(1);
+    expect(notificationsService.sendPushToUsers).toHaveBeenCalledWith(
+      [adminId.toString()],
       'Complaint Resolved',
       'A complaint at Outlet A has been resolved by Manager One.',
       { type: 'complaint', reviewId: reviewId.toString() },
@@ -100,7 +114,7 @@ describe('ReviewService resolveComplaint notifications', () => {
 
     await resolveWith(ComplaintStatus.RESOLVED);
 
-    expect(notificationsService.sendPush).not.toHaveBeenCalled();
+    expect(notificationsService.sendPushToUsers).not.toHaveBeenCalled();
   });
 
   it('does not notify when the complaint is dismissed', async () => {
@@ -108,6 +122,6 @@ describe('ReviewService resolveComplaint notifications', () => {
 
     await resolveWith(ComplaintStatus.DISMISSED);
 
-    expect(notificationsService.sendPush).not.toHaveBeenCalled();
+    expect(notificationsService.sendPushToUsers).not.toHaveBeenCalled();
   });
 });
