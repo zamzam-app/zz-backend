@@ -6,6 +6,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { UsersService } from '../users/users.service';
 import { Task } from './entities/task.entity';
 import { TaskRecurrenceType, TaskStatus } from './task.enums';
+import { computeTaskAudience } from './task-visibility.util';
 
 @Injectable()
 export class TaskRecurrenceService {
@@ -112,14 +113,7 @@ export class TaskRecurrenceService {
         const created = await this.taskModel.create(newTaskData);
         createdCount++;
 
-        const creatorId = template.createdBy?.toString();
-        await this.notifyAssignees(
-          created._id.toString(),
-          template.description,
-          (template.assigneeIds ?? [])
-            .map((id) => id.toString())
-            .filter((id) => id !== creatorId),
-        );
+        await this.notifyNewInstance(created);
       } catch (error) {
         this.logger.error(
           `Failed to create task from template ${String(template._id)}`,
@@ -132,27 +126,46 @@ export class TaskRecurrenceService {
   }
 
   /**
-   * Notifies assignees of a generated task exactly like `TaskService.create`
-   * does for an ordinary task: one "New Task Assigned" push per task.
+   * Notifies everyone who can see a generated task, like `TaskService.create`
+   * does for an ordinary task: assignees get "New Task Assigned", everyone
+   * else (admins) a neutral message. The creator is not notified.
    * Best-effort: a failure is logged and never affects task generation.
    */
-  private async notifyAssignees(
-    taskId: string,
-    description: string,
-    assigneeIds: string[],
+  private async notifyNewInstance(
+    task: Task & { _id: unknown },
   ): Promise<void> {
-    if (assigneeIds.length === 0) return;
+    const taskId = String(task._id);
 
     try {
-      const tokens = await this.usersService.getPushTokensForUsers(assigneeIds);
-      if (tokens.length === 0) return;
-
-      await this.notificationsService.sendPush(
-        tokens,
-        'New Task Assigned',
-        `You've been assigned a task: ${description}`,
-        { type: 'task', taskId },
+      const audience = computeTaskAudience(
+        task,
+        await this.usersService.getAdminIds(),
       );
+      audience.delete(task.createdBy?.toString() ?? '');
+
+      const assigneeSet = new Set(
+        (task.assigneeIds ?? []).map((id) => id.toString()),
+      );
+      const assigned = [...audience].filter((id) => assigneeSet.has(id));
+      const others = [...audience].filter((id) => !assigneeSet.has(id));
+      const data = { type: 'task', taskId };
+
+      if (assigned.length > 0) {
+        await this.notificationsService.sendPushToUsers(
+          assigned,
+          'New Task Assigned',
+          `You've been assigned a task: ${task.description}`,
+          data,
+        );
+      }
+      if (others.length > 0) {
+        await this.notificationsService.sendPushToUsers(
+          others,
+          'New Task',
+          `New recurring task: ${task.description}`,
+          data,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Failed to send recurring task notification for task ${taskId}`,

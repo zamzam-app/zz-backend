@@ -10,7 +10,12 @@ import {
   Request,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Request as ExpressRequest } from 'express';
 import { JwtPayload } from '../auth/interfaces/auth.interfaces';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -119,6 +124,31 @@ export class TaskController {
     @Request() req: ExpressRequest & { user: JwtPayload },
   ) {
     return this.taskViewService.getAggregatedUnreadCount(req.user.sub);
+  }
+
+  @Get('unread-summary')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Unread counts for every Tasks badge',
+    description:
+      'Returns `perTask` (unread activities per task), `segments` (number of tasks with unread activity in Open / Recurring / Done) and `nav` (Open + Recurring). Only tasks visible to the signed-in user are counted; screen filters are ignored.',
+  })
+  @ApiOkResponse({
+    schema: {
+      example: {
+        nav: 3,
+        segments: { open: 2, recurring: 1, done: 1 },
+        perTask: {
+          '65f1c0a1b2c3d4e5f6a7b8c9': 4,
+          '65f1c0a1b2c3d4e5f6a7b8ca': 1,
+        },
+      },
+    },
+  })
+  async getUnreadSummary(
+    @Request() req: ExpressRequest & { user: JwtPayload },
+  ) {
+    return this.taskViewService.getUnreadSummary(req.user);
   }
 
   @Get('unread-ids')

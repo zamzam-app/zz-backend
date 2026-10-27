@@ -10,6 +10,19 @@ import {
   PushReceiptDocument,
 } from './entities/push-receipt.entity';
 
+/**
+ * Returns each user's share of the app icon badge (for example their unread
+ * task count). Users missing from the map count as 0.
+ */
+export type BadgeSource = (userIds: string[]) => Promise<Map<string, number>>;
+
+export interface SendPushToUsersResult {
+  /** False when at least one chunk could not be submitted to Expo. */
+  submitted: boolean;
+  /** Number of device tokens the push was sent to. */
+  tokenCount: number;
+}
+
 /** Expo recommends waiting ~15 minutes before asking for receipts. */
 const RECEIPT_MIN_AGE_MS = 15 * 60_000;
 const RECEIPT_BATCH_LIMIT = 1000;
@@ -18,6 +31,7 @@ const RECEIPT_BATCH_LIMIT = 1000;
 export class NotificationsService {
   private expo: Expo;
   private readonly logger = new Logger(NotificationsService.name);
+  private readonly badgeSources = new Map<string, BadgeSource>();
 
   constructor(
     private configService: ConfigService,
@@ -36,6 +50,81 @@ export class NotificationsService {
   }
 
   /**
+   * Registers a contributor to the app icon badge. The badge sent with
+   * `sendPushToUsers` is the sum of every registered source, which must match
+   * what the app itself shows (tasks + reviews). Sources register themselves
+   * on module init so this service does not depend on their modules.
+   */
+  registerBadgeSource(name: string, source: BadgeSource): void {
+    this.badgeSources.set(name, source);
+  }
+
+  /**
+   * Sends a push to every device of the given users, with each user's app
+   * icon badge set so the icon is right while the app is in the background.
+   *
+   * If any badge source fails, the push is still sent, without a badge:
+   * the app corrects the badge itself when it is next opened.
+   */
+  async sendPushToUsers(
+    userIds: string[],
+    title: string,
+    body: string,
+    data?: Record<string, unknown>,
+  ): Promise<SendPushToUsersResult> {
+    const uniqueIds = [...new Set(userIds.map((id) => id.toString()))];
+    if (uniqueIds.length === 0) return { submitted: true, tokenCount: 0 };
+
+    const tokensByUser = await this.pushTokenService.getTokensByUser(uniqueIds);
+    if (tokensByUser.size === 0) return { submitted: true, tokenCount: 0 };
+
+    const badges = await this.resolveBadges([...tokensByUser.keys()]);
+
+    // One send per distinct badge value.
+    const tokensByBadge = new Map<number | undefined, string[]>();
+    for (const [userId, tokens] of tokensByUser) {
+      const badge = badges?.get(userId);
+      const group = tokensByBadge.get(badge) ?? [];
+      group.push(...tokens);
+      tokensByBadge.set(badge, group);
+    }
+
+    let submitted = true;
+    let tokenCount = 0;
+    for (const [badge, tokens] of tokensByBadge) {
+      tokenCount += tokens.length;
+      const ok = await this.sendPush(tokens, title, body, data, { badge });
+      submitted = submitted && ok;
+    }
+
+    return { submitted, tokenCount };
+  }
+
+  /** Sums every badge source per user, or `null` if any source failed. */
+  private async resolveBadges(
+    userIds: string[],
+  ): Promise<Map<string, number> | null> {
+    if (this.badgeSources.size === 0) return null;
+
+    try {
+      const parts = await Promise.all(
+        [...this.badgeSources.values()].map((source) => source(userIds)),
+      );
+      const totals = new Map<string, number>();
+      for (const userId of userIds) {
+        totals.set(
+          userId,
+          parts.reduce((sum, part) => sum + (part.get(userId) ?? 0), 0),
+        );
+      }
+      return totals;
+    } catch (err) {
+      this.logger.warn('Failed to compute push badge counts', err);
+      return null;
+    }
+  }
+
+  /**
    * Sends a push to the given tokens.
    *
    * Resolves to `false` when at least one chunk could not be submitted to
@@ -48,10 +137,19 @@ export class NotificationsService {
     title: string,
     body: string,
     data?: Record<string, unknown>,
+    options: { badge?: number } = {},
   ): Promise<boolean> {
+    const { badge } = options;
     const messages: ExpoPushMessage[] = tokens
       .filter((token) => Expo.isExpoPushToken(token))
-      .map((to) => ({ to, title, body, data, sound: 'default' }));
+      .map((to) => ({
+        to,
+        title,
+        body,
+        data,
+        sound: 'default',
+        ...(badge !== undefined ? { badge } : {}),
+      }));
 
     if (!messages.length) return true;
 

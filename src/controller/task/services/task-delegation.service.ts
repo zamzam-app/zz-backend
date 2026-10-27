@@ -16,6 +16,7 @@ import { UsersService } from '../../users/users.service';
 import { Outlet, OutletDocument } from '../../outlet/entities/outlet.entity';
 import { UserRole } from '../../users/interfaces/user.interface';
 import { TaskEventType } from '../task.enums';
+import { computeTaskAudience } from '../task-visibility.util';
 import { TaskEventService } from './task-event.service';
 import { NotificationsService } from '../../../notifications/notifications.service';
 
@@ -173,22 +174,14 @@ export class TaskDelegationService {
     );
 
     if (notify) {
-      try {
-        const tokens = await this.usersService.getPushTokensForUsers([
-          toId.toString(),
-        ]);
-
-        if (tokens.length > 0) {
-          await this.notificationsService.sendPush(
-            tokens,
-            'Task Delegated',
-            `You have been delegated a task: ${task.description || 'Check the app for details'}`,
-            { type: 'task', taskId: taskIdObj.toString() },
-          );
-        }
-      } catch (err) {
-        this.logger.error('Failed to send push notification', err);
-      }
+      await this.notifyOwnerChange({
+        task: result.task,
+        actorId: fromId,
+        targetId: toId,
+        title: 'Task Delegated',
+        targetBody: `You have been delegated a task: ${task.description || 'Check the app for details'}`,
+        othersBody: (name) => `'${task.description}' was delegated to ${name}.`,
+      });
     }
 
     return {
@@ -258,22 +251,14 @@ export class TaskDelegationService {
       actorId,
     );
 
-    try {
-      const tokens = await this.usersService.getPushTokensForUsers([
-        newOwnerObj.toString(),
-      ]);
-
-      if (tokens.length > 0) {
-        await this.notificationsService.sendPush(
-          tokens,
-          'Task Reassigned',
-          `A task has been reassigned to you: ${task.description || 'Check the app for details'}`,
-          { type: 'task', taskId: taskIdObj.toString() },
-        );
-      }
-    } catch (err) {
-      this.logger.error('Failed to send push notification', err);
-    }
+    await this.notifyOwnerChange({
+      task: result.task,
+      actorId,
+      targetId: newOwnerObj,
+      title: 'Task Reassigned',
+      targetBody: `A task has been reassigned to you: ${task.description || 'Check the app for details'}`,
+      othersBody: (name) => `'${task.description}' was reassigned to ${name}.`,
+    });
 
     return {
       event: result as unknown as { event: unknown; task: TaskDocument },
@@ -491,6 +476,59 @@ export class TaskDelegationService {
     // --------------------------------------------------
     if (task.outletId) {
       await this.validateOutletAccess(delegatedTo, task.outletId, targetUser);
+    }
+  }
+
+  /**
+   * Pushes a delegation/reassignment to everyone who can see the task
+   * (all admins, assignees, the creator), except the user who did it. The
+   * new owner gets the personal message, everyone else a neutral one.
+   *
+   * Best-effort: failures are logged and never propagate to the caller.
+   */
+  private async notifyOwnerChange(params: {
+    task: TaskDocument;
+    actorId: Types.ObjectId;
+    targetId: Types.ObjectId;
+    title: string;
+    targetBody: string;
+    othersBody: (targetName: string) => string;
+  }): Promise<void> {
+    const { task, actorId, targetId, title, targetBody, othersBody } = params;
+    const data = { type: 'task', taskId: task._id.toString() };
+    const target = targetId.toString();
+
+    try {
+      const audience = computeTaskAudience(
+        task,
+        await this.usersService.getAdminIds(),
+      );
+      audience.delete(actorId.toString());
+
+      if (audience.delete(target)) {
+        await this.notificationsService.sendPushToUsers(
+          [target],
+          title,
+          targetBody,
+          data,
+        );
+      }
+
+      if (audience.size > 0) {
+        const targetUser = await this.userModel
+          .findById(targetId)
+          .select('name')
+          .lean()
+          .exec();
+        await this.notificationsService.sendPushToUsers(
+          [...audience],
+          title,
+          othersBody(targetUser?.name || 'another manager'),
+          data,
+        );
+      }
+    } catch (err) {
+      this.logger.error('Failed to send push notification', err);
     }
   }
 

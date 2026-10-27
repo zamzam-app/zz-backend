@@ -314,4 +314,49 @@ export class PushTokenService implements OnModuleInit {
       );
     }
   }
+
+  /**
+   * Like `getTokensForUsers`, but keeps tokens grouped by user so each
+   * user's pushes can carry their own app icon badge count. Users without a
+   * valid token are left out of the map.
+   */
+  async getTokensByUser(userIds: string[]): Promise<Map<string, string[]>> {
+    const byUser = new Map<string, string[]>();
+    if (!userIds || !userIds.length) return byUser;
+
+    try {
+      const uniqueIds = [...new Set(userIds.map((id) => id.toString()))];
+      const users = await this.userModel
+        .find({
+          _id: { $in: uniqueIds.map((id) => new Types.ObjectId(id)) },
+          isDeleted: false,
+        })
+        .select('pushTokens _id')
+        .lean()
+        .exec();
+
+      // A token belongs to one user (upsert takes it over from any other
+      // account), but dedupe across users anyway so no device gets two pushes.
+      const seen = new Set<string>();
+      for (const user of users) {
+        const tokens = (user.pushTokens ?? [])
+          .map((pt) => pt?.token)
+          .filter(
+            (token): token is string =>
+              !!token && Expo.isExpoPushToken(token) && !seen.has(token),
+          );
+        tokens.forEach((token) => seen.add(token));
+        if (tokens.length > 0) {
+          byUser.set(user._id.toString(), tokens);
+        }
+      }
+
+      return byUser;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        (error as Error)?.message ?? 'Failed to retrieve push tokens for users',
+      );
+    }
+  }
 }

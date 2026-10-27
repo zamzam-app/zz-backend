@@ -2,6 +2,10 @@ import { randomBytes } from 'node:crypto';
 import { Types } from 'mongoose';
 import { TaskDocument } from '../entities/task.entity';
 import { TaskEventType, TaskStatus } from '../task.enums';
+import {
+  TaskAudienceSource,
+  computeTaskAudience,
+} from '../task-visibility.util';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -14,6 +18,8 @@ export interface ProjectionUpdate {
   $inc: Record<string, number>;
   /** Fields to unset via `$unset`. */
   $unset: Record<string, ''>;
+  /** Array members to add via `$addToSet` (`$each` lists). */
+  $addToSet: Record<string, { $each: Types.ObjectId[] }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,46 +53,54 @@ export function generateSortKey(): string {
  * for a given event.
  *
  * Rules:
+ * - Everyone in the task's audience gets +1: all admins, the assignees, the
+ *   creator (and, transitionally, the current delegate). See
+ *   `task-visibility.util.ts`.
  * - The event **actor** never gets their own unread incremented.
- * - All current assignees, the active owner, the delegated-to user, and
- *   the task creator all get increments — **unless** they are the actor.
  *
- * This ensures that:
- * - The user who performed the action doesn't see it as "unread".
- * - Everyone else who should know about it sees a badge.
+ * Pass the task state **after** the event's projection, so that a user who
+ * is added to the task by this event also gets the count for it.
  */
 export function computeUnreadIncrementUserIds(
-  task: Pick<
-    TaskDocument,
-    'assigneeIds' | 'activeOwner' | 'activeDelegation' | 'createdBy'
-  >,
+  task: TaskAudienceSource,
   actorId: Types.ObjectId,
+  adminIds: Iterable<string>,
 ): string[] {
-  const userIds = new Set<string>();
-  const actorStr = actorId.toString();
+  const audience = computeTaskAudience(task, adminIds);
+  audience.delete(actorId.toString());
+  return Array.from(audience);
+}
 
-  const addIfNotActor = (id: Types.ObjectId | string | null | undefined) => {
-    if (!id) return;
-    if (id.toString() !== actorStr) {
-      userIds.add(id.toString());
+/**
+ * Applies the audience-relevant parts of a projection (`assigneeIds`,
+ * `activeDelegation`) to the current task, giving the state the task will
+ * have once the update is written. Used to pick unread recipients.
+ */
+export function applyProjectionToAudience(
+  task: TaskAudienceSource,
+  projection: ProjectionUpdate,
+): TaskAudienceSource {
+  const assigneeIds = (
+    (projection.$set['assigneeIds'] as Types.ObjectId[] | undefined) ??
+    task.assigneeIds ??
+    []
+  ).map((id) => id.toString());
+  for (const id of projection.$addToSet['assigneeIds']?.$each ?? []) {
+    if (!assigneeIds.includes(id.toString())) {
+      assigneeIds.push(id.toString());
     }
-  };
-
-  // Assignees
-  for (const id of task.assigneeIds ?? []) {
-    addIfNotActor(id);
   }
 
-  // Active owner
-  addIfNotActor(task.activeOwner);
+  let activeDelegation = task.activeDelegation ?? null;
+  if ('activeDelegation' in projection.$unset) {
+    activeDelegation = null;
+  } else if (projection.$set['activeDelegation']) {
+    activeDelegation = projection.$set['activeDelegation'] as {
+      delegatedTo?: Types.ObjectId;
+    };
+  }
 
-  // Active delegation target
-  addIfNotActor(task.activeDelegation?.delegatedTo);
-
-  // Task creator
-  addIfNotActor(task.createdBy);
-
-  return Array.from(userIds);
+  return { assigneeIds, createdBy: task.createdBy, activeDelegation };
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +133,7 @@ export function computeProjection(
   const $set: Record<string, unknown> = {};
   const $inc: Record<string, number> = {};
   const $unset: Record<string, ''> = {};
+  const $addToSet: Record<string, { $each: Types.ObjectId[] }> = {};
 
   // --------------------------------------------------
   // Common updates applied to every event
@@ -200,6 +215,10 @@ export function computeProjection(
 
       if (toId) {
         $set['activeOwner'] = new Types.ObjectId(toId);
+        // Delegating or reassigning a task assigns the target, so it shows
+        // in their task list like any other assigned task. Nobody is removed
+        // here: the previous owner/delegate stays assigned.
+        $addToSet['assigneeIds'] = { $each: [new Types.ObjectId(toId)] };
       }
 
       if (hasDelegationMeta) {
@@ -270,5 +289,5 @@ export function computeProjection(
       break;
   }
 
-  return { $set, $inc, $unset };
+  return { $set, $inc, $unset, $addToSet };
 }

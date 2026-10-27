@@ -39,6 +39,10 @@ import {
   TaskBoardItem,
 } from './interfaces/query-task.interface';
 import { buildTaskBadges } from './task-badge.util';
+import {
+  buildTaskVisibilityFilter,
+  computeTaskAudience,
+} from './task-visibility.util';
 import { TaskDelegationService } from './services/task-delegation.service';
 import { TaskEventService } from './services/task-event.service';
 import {
@@ -219,25 +223,42 @@ export class TaskService {
         }
       }
 
-      // Notify all assignees (excluding the task creator) about the new assignment.
-      if (assigneeIds.length > 0) {
-        try {
-          const notifiableIds = assigneeIds.filter((id) => id !== jwtUser.sub);
-          if (notifiableIds.length > 0) {
-            const tokens =
-              await this.usersService.getPushTokensForUsers(notifiableIds);
-            if (tokens.length > 0) {
-              await this.notificationsService.sendPush(
-                tokens,
-                'New Task Assigned',
-                `You've been assigned a task: ${doc.description}`,
-                { type: 'task', taskId: saved._id.toString() },
-              );
-            }
-          }
-        } catch (err) {
-          this.logger.error('Failed to send push notification', err);
+      // Notify everyone who can see the new task except its creator:
+      // assignees get "New Task Assigned", everyone else (admins) a neutral
+      // message naming the assignees.
+      try {
+        const audience = computeTaskAudience(
+          saved,
+          await this.usersService.getAdminIds(),
+        );
+        audience.delete(jwtUser.sub);
+
+        const assigneeSet = new Set(assigneeIds);
+        const assigned = [...audience].filter((id) => assigneeSet.has(id));
+        const others = [...audience].filter((id) => !assigneeSet.has(id));
+        const data = { type: 'task', taskId: saved._id.toString() };
+
+        if (assigned.length > 0) {
+          await this.notificationsService.sendPushToUsers(
+            assigned,
+            'New Task Assigned',
+            `You've been assigned a task: ${doc.description}`,
+            data,
+          );
         }
+        if (others.length > 0) {
+          const names = await this.userNames(assigneeIds);
+          await this.notificationsService.sendPushToUsers(
+            others,
+            'New Task',
+            names
+              ? `New task: ${doc.description} (assigned to ${names})`
+              : `New task: ${doc.description}`,
+            data,
+          );
+        }
+      } catch (err) {
+        this.logger.error('Failed to send push notification', err);
       }
 
       const one = await this.findOneTaskById(saved._id.toString(), jwtUser);
@@ -818,8 +839,6 @@ export class TaskService {
         taskId: updated._id.toString(),
         description: updated.description,
         actor: jwtUser,
-        creatorId: existing.createdBy.toString(),
-        currentAssigneeIds: updated.assignees.map((a) => a._id.toString()),
         newAssigneeIds: (dto.assigneeIds ?? []).filter(
           (aId) => !oldAssigneeIds.includes(aId),
         ),
@@ -843,11 +862,14 @@ export class TaskService {
   /**
    * Sends at most one push per recipient for a single task update.
    *
+   * Audience: everyone who can see the task (all admins, assignees, the
+   * creator), never the user who made the change.
+   *
    * - Newly added assignees get "New Task Assigned" (this already implies any
    *   status/schedule change made in the same update).
-   * - The creator and current assignees get a status message, a schedule
-   *   message, or one combined message when both changed.
-   * - The user who made the change is never notified.
+   * - Everyone else gets a status message, a schedule message, one combined
+   *   message when both changed, or, when only the assignees changed, a
+   *   message naming the new assignees.
    *
    * Best-effort: failures are logged and never propagate to the caller.
    */
@@ -855,8 +877,6 @@ export class TaskService {
     taskId: string;
     description: string;
     actor: JwtPayload;
-    creatorId: string;
-    currentAssigneeIds: string[];
     newAssigneeIds: string[];
     newStatus?: TaskStatus;
     scheduleChanged: boolean;
@@ -865,29 +885,32 @@ export class TaskService {
       taskId,
       description,
       actor,
-      creatorId,
-      currentAssigneeIds,
       newAssigneeIds,
       newStatus,
       scheduleChanged,
     } = params;
 
-    try {
-      const newlyAssigned = new Set(newAssigneeIds);
-      // Status changes reach the creator and assignees; schedule changes reach assignees only.
-      const statusAudience = new Set(
-        newStatus ? [creatorId, ...currentAssigneeIds] : [],
-      );
-      const scheduleAudience = new Set(
-        scheduleChanged ? currentAssigneeIds : [],
-      );
+    if (!newStatus && !scheduleChanged && newAssigneeIds.length === 0) {
+      return;
+    }
 
-      const recipients = new Set([
-        ...newlyAssigned,
-        ...statusAudience,
-        ...scheduleAudience,
-      ]);
+    try {
+      const task = await this.taskModel
+        .findById(taskId)
+        .select('assigneeIds createdBy activeDelegation')
+        .lean()
+        .exec();
+      if (!task) return;
+
+      const recipients = computeTaskAudience(
+        task,
+        await this.usersService.getAdminIds(),
+      );
       recipients.delete(actor.sub);
+
+      const newlyAssigned = new Set(newAssigneeIds);
+      const assigneeNames =
+        newAssigneeIds.length > 0 ? await this.userNames(newAssigneeIds) : '';
 
       const actorLabel =
         actor.role.charAt(0).toUpperCase() + actor.role.slice(1);
@@ -897,23 +920,25 @@ export class TaskService {
       >();
 
       for (const userId of recipients) {
-        const statusChanged = statusAudience.has(userId);
-        const scheduleUpdated = scheduleAudience.has(userId);
-
         let title: string;
         let body: string;
         if (newlyAssigned.has(userId)) {
           title = 'New Task Assigned';
           body = `You've been assigned a task: ${description}`;
-        } else if (statusChanged && scheduleUpdated) {
+        } else if (newStatus && scheduleChanged) {
           title = 'Task Updated';
-          body = `${actorLabel} ${STATUS_CHANGE_PHRASE[newStatus!](description)} and updated its schedule.`;
-        } else if (statusChanged) {
+          body = `${actorLabel} ${STATUS_CHANGE_PHRASE[newStatus](description)} and updated its schedule.`;
+        } else if (newStatus) {
           title = 'Task Status Updated';
-          body = `${actorLabel} ${STATUS_CHANGE_PHRASE[newStatus!](description)}.`;
-        } else {
+          body = `${actorLabel} ${STATUS_CHANGE_PHRASE[newStatus](description)}.`;
+        } else if (scheduleChanged) {
           title = 'Task Modified';
           body = `${actorLabel} has updated the details for '${description}'.`;
+        } else {
+          title = 'Task Assigned';
+          body = assigneeNames
+            ? `'${description}' was assigned to ${assigneeNames}.`
+            : `'${description}' has new assignees.`;
         }
 
         const key = `${title}\n${body}`;
@@ -923,10 +948,7 @@ export class TaskService {
       }
 
       for (const { title, body, userIds } of groups.values()) {
-        const tokens = await this.usersService.getPushTokensForUsers(userIds);
-        if (tokens.length === 0) continue;
-
-        await this.notificationsService.sendPush(tokens, title, body, {
+        await this.notificationsService.sendPushToUsers(userIds, title, body, {
           type: 'task',
           taskId,
         });
@@ -934,6 +956,22 @@ export class TaskService {
     } catch (err) {
       this.logger.error('Failed to send push notification', err);
     }
+  }
+
+  /** Comma-separated names of the given users, for push copy. */
+  private async userNames(userIds: string[]): Promise<string> {
+    const ids = userIds.filter((id) => Types.ObjectId.isValid(id));
+    if (ids.length === 0) return '';
+
+    const users = await this.userModel
+      .find({ _id: { $in: ids.map((id) => new Types.ObjectId(id)) } })
+      .select('name')
+      .lean()
+      .exec();
+    return users
+      .map((u) => u.name)
+      .filter(Boolean)
+      .join(', ');
   }
 
   async updateStatus(
@@ -1111,16 +1149,31 @@ export class TaskService {
       if (!Types.ObjectId.isValid(query.assigneeId)) {
         throw new BadRequestException('Invalid assignee ID filter');
       }
-      baseAnd.push({
-        $or: [
-          { assigneeIds: new Types.ObjectId(query.assigneeId) },
-          {
-            'activeDelegation.delegatedTo': new Types.ObjectId(
-              query.assigneeId,
-            ),
-          },
-        ],
-      });
+
+      const isAdmin = jwtUser.role === UserRole.ADMIN;
+      if (!isAdmin && query.assigneeId === jwtUser.sub) {
+        // "My tasks": tasks assigned to me or created by me. The unread
+        // badges count exactly this set (see TaskViewService).
+        baseAnd.push(buildTaskVisibilityFilter(jwtUser.sub));
+      } else {
+        baseAnd.push({
+          $or: [
+            { assigneeIds: new Types.ObjectId(query.assigneeId) },
+            // TRANSITIONAL: delegates from before delegation assigned the
+            // target (see task-visibility.util.ts).
+            {
+              'activeDelegation.delegatedTo': new Types.ObjectId(
+                query.assigneeId,
+              ),
+            },
+          ],
+        });
+        // A non-admin filtering by someone else still only sees tasks
+        // visible to themselves.
+        if (!isAdmin) {
+          baseAnd.push(buildTaskVisibilityFilter(jwtUser.sub));
+        }
+      }
     }
 
     const dueDateCond: Record<string, Date> = {};

@@ -106,6 +106,11 @@ export class ReviewService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    // The app icon badge includes the Reviews tab count.
+    this.notificationsService.registerBadgeSource('reviews', (userIds) =>
+      this.getUnreadCountsForUsers(userIds),
+    );
+
     const pendingDocs = await this.pendingComplaintModel.find().lean().exec();
 
     if (pendingDocs.length === 0) {
@@ -1270,18 +1275,14 @@ export class ReviewService implements OnModuleInit {
             )
             .lean();
 
-          const adminTokens = await this.usersService.getPushTokensForUsers(
-            admins.map((a) => a._id.toString()),
-          );
-
-          if (adminTokens.length > 0) {
+          if (admins.length > 0) {
             const outlet = await this.outletModel.findById(updated.outletId);
             const outletName = outlet?.name ?? 'an outlet';
             const manager = await this.userModel.findById(resolvedBy);
             const managerName = manager?.name ?? 'a team member';
 
-            await this.notificationsService.sendPush(
-              adminTokens,
+            await this.notificationsService.sendPushToUsers(
+              admins.map((a) => a._id.toString()),
               'Complaint Resolved',
               `A complaint at ${outletName} has been resolved by ${managerName}.`,
               { type: 'complaint', reviewId: updated._id.toString() },
@@ -1303,6 +1304,40 @@ export class ReviewService implements OnModuleInit {
           'Failed to resolve complaint',
       );
     }
+  }
+
+  /**
+   * Reviews tab unread count (same number as `getBadgeStatus().unreadCount`)
+   * for several users at once. Used for the badge sent with pushes; a user
+   * whose count cannot be read is left out (counts as 0).
+   */
+  async getUnreadCountsForUsers(
+    userIds: string[],
+  ): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+
+    await Promise.all(
+      [...new Set(userIds)].map(async (userId) => {
+        try {
+          const badgeScope = await this.getBadgeScopeForUser(userId);
+          if (badgeScope.scopeType === 'none') return;
+
+          const unreadCount = await this.reviewModel
+            .countDocuments({
+              ...this.buildPendingBadgeMatch(badgeScope.outletIds),
+              readBy: {
+                $not: { $elemMatch: { userId: new Types.ObjectId(userId) } },
+              },
+            })
+            .exec();
+          counts.set(userId, unreadCount);
+        } catch {
+          // Unknown or deleted user: no review badge.
+        }
+      }),
+    );
+
+    return counts;
   }
 
   private async getBadgeScopeForUser(userId: string): Promise<{
@@ -1473,13 +1508,8 @@ export class ReviewService implements OnModuleInit {
     try {
       // Resolve tokens now, not when the complaint arrived, so the current
       // devices of each recipient are used.
-      const tokens = await this.usersService.getPushTokensForUsers(
+      const { tokenCount } = await this.notificationsService.sendPushToUsers(
         Array.from(userIds),
-      );
-      if (tokens.length === 0) return;
-
-      await this.notificationsService.sendPush(
-        tokens,
         'New Complaint',
         body,
         // A batch covers several complaints, so don't point at just one.
@@ -1487,6 +1517,7 @@ export class ReviewService implements OnModuleInit {
           ? { type: 'complaint', reviewId }
           : { type: 'complaint' },
       );
+      if (tokenCount === 0) return;
 
       this.logger.log(
         `Sent batched complaint notification (${eventCount} event(s)) for outlet ${outletId} to ${userIds.size} user(s).`,

@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { NotificationsService } from '../../../notifications/notifications.service';
+import { JwtPayload } from '../../auth/interfaces/auth.interfaces';
 import { Task, TaskDocument } from '../entities/task.entity';
 import { TaskView, TaskViewDocument } from '../entities/task-view.entity';
 import { User, UserDocument } from '../../users/entities/user.entity';
+import { UserRole } from '../../users/interfaces/user.interface';
+import { TaskStatus } from '../task.enums';
+import { buildTaskVisibilityFilter } from '../task-visibility.util';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,6 +31,23 @@ export interface AggregatedUnreadSummary {
   totalUnread: number;
   /** Number of tasks that have at least one unread event. */
   taskCount: number;
+}
+
+/**
+ * Everything the Tasks badges need, from one request.
+ *
+ * - `perTask`: unread **activities** per task (task item badge).
+ * - `segments`: number of **tasks** with unread activity per Tasks screen
+ *   segment (Open = open, not recurring; Recurring = open, recurring;
+ *   Done = completed).
+ * - `nav`: Open + Recurring (nav bar and app icon). Done is excluded.
+ *
+ * Only tasks the user can see in their own list are counted.
+ */
+export interface TaskUnreadSummary {
+  nav: number;
+  segments: { open: number; recurring: number; done: number };
+  perTask: Record<string, number>;
 }
 
 /**
@@ -88,8 +110,10 @@ function decodeRecentlyViewedCursor(
  *
  * 1. **Increment** — When a TaskEvent is appended via `TaskEventService.appendEvent`,
  *    the projection utility `computeUnreadIncrementUserIds` determines which users
- *    should see the new event as "unread" (everyone except the actor). The service
- *    then atomically `$inc`s `unreadMap.<userId>` for each affected user.
+ *    should see the new event as "unread": everyone who can see the task (all
+ *    admins, assignees, the creator) except the actor. The service then
+ *    atomically `$inc`s `unreadMap.<userId>` for each affected user, and
+ *    `$unset`s entries for users who can no longer see the task.
  *
  * 2. **Reset** — When the user opens a task (calls `markTaskViewed`), this service:
  *    - Upserts a `TaskView` record with `lastViewedAt = now`
@@ -124,13 +148,21 @@ function decodeRecentlyViewedCursor(
  *   `(userId, lastViewedAt: -1)` index on the TaskView collection.
  */
 @Injectable()
-export class TaskViewService {
+export class TaskViewService implements OnModuleInit {
   constructor(
     @InjectModel(TaskView.name)
     private readonly taskViewModel: Model<TaskViewDocument>,
     @InjectModel(Task.name) private readonly taskModel: Model<TaskDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  onModuleInit(): void {
+    // The app icon badge includes the Tasks nav bar count.
+    this.notificationsService.registerBadgeSource('tasks', (userIds) =>
+      this.getNavCountsForUsers(userIds),
+    );
+  }
 
   // -----------------------------------------------------------------------
   // Mark task as viewed
@@ -336,6 +368,96 @@ export class TaskViewService {
     return {
       totalUnread: result[0].totalUnread,
       taskCount: result[0].taskCount,
+    };
+  }
+
+  /**
+   * Returns the per-task, per-segment and nav bar unread counts for the
+   * signed-in user (see `TaskUnreadSummary`). Segment counts ignore the
+   * Tasks screen's search and filters.
+   */
+  async getUnreadSummary(jwtUser: JwtPayload): Promise<TaskUnreadSummary> {
+    const userIdStr = new Types.ObjectId(jwtUser.sub).toString();
+
+    const tasks = await this.taskModel
+      .find(this.unreadMatch(userIdStr, jwtUser.role), {
+        _id: 1,
+        status: 1,
+        isRecurring: 1,
+        [`unreadMap.${userIdStr}`]: 1,
+      })
+      .lean()
+      .exec();
+
+    const summary: TaskUnreadSummary = {
+      nav: 0,
+      segments: { open: 0, recurring: 0, done: 0 },
+      perTask: {},
+    };
+
+    for (const task of tasks as unknown as Array<Record<string, unknown>>) {
+      const unreadMap = task.unreadMap as Record<string, number> | undefined;
+      const count = unreadMap?.[userIdStr] ?? 0;
+      if (count <= 0) continue;
+
+      summary.perTask[(task._id as Types.ObjectId).toString()] = count;
+      if (task.status === TaskStatus.COMPLETED) {
+        summary.segments.done += 1;
+      } else if (task.isRecurring) {
+        summary.segments.recurring += 1;
+      } else {
+        summary.segments.open += 1;
+      }
+    }
+
+    summary.nav = summary.segments.open + summary.segments.recurring;
+    return summary;
+  }
+
+  /**
+   * Nav bar count (open tasks with unread activity) for several users at
+   * once. Used for the badge sent with task and complaint pushes.
+   */
+  async getNavCountsForUsers(userIds: string[]): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    const uniqueIds = [...new Set(userIds)].filter((id) =>
+      Types.ObjectId.isValid(id),
+    );
+    if (uniqueIds.length === 0) return counts;
+
+    const users = await this.userModel
+      .find({
+        _id: { $in: uniqueIds.map((id) => new Types.ObjectId(id)) },
+      })
+      .select('_id role')
+      .lean()
+      .exec();
+
+    await Promise.all(
+      users.map(async (user) => {
+        const userIdStr = user._id.toString();
+        const count = await this.taskModel
+          .countDocuments({
+            ...this.unreadMatch(userIdStr, user.role),
+            status: TaskStatus.OPEN,
+          } as Record<string, unknown>)
+          .exec();
+        counts.set(userIdStr, count);
+      }),
+    );
+
+    return counts;
+  }
+
+  /** Tasks the user can see that have unread activity for them. */
+  private unreadMatch(
+    userIdStr: string,
+    role: UserRole | string | undefined,
+  ): Record<string, unknown> {
+    return {
+      isDeleted: false,
+      [`unreadMap.${userIdStr}`]: { $exists: true, $gt: 0 },
+      ...(role === UserRole.ADMIN ? {} : buildTaskVisibilityFilter(userIdStr)),
     };
   }
 

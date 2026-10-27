@@ -6,6 +6,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { UsersService } from '../users/users.service';
 import { Task, TaskDocument } from './entities/task.entity';
 import { TaskStatus } from './task.enums';
+import { computeTaskAudience } from './task-visibility.util';
 
 const TASK_REMINDER_TIMEZONE = 'Asia/Kolkata';
 /**
@@ -168,45 +169,39 @@ export class TaskReminderService {
       return;
     }
 
-    // Everyone responsible for the task: all assignees plus the current owner
-    // and delegate (who may not be in `assigneeIds`). The creator is excluded.
-    const creatorId = reservedTask.createdBy?.toString();
-    const recipientIds = [
-      ...new Set(
-        [
-          ...(reservedTask.assigneeIds ?? []),
-          reservedTask.activeOwner,
-          reservedTask.activeDelegation?.delegatedTo,
-        ]
-          .filter((id) => id != null)
-          .map((id) => id.toString()),
-      ),
-    ].filter((id) => Types.ObjectId.isValid(id) && id !== creatorId);
-
-    if (recipientIds.length === 0) {
-      this.logger.log(
-        `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because it has no eligible recipients.`,
-      );
-      return;
-    }
-
     try {
-      const tokens =
-        await this.usersService.getPushTokensForUsers(recipientIds);
+      // Everyone who can see the task (all admins, assignees, delegate),
+      // except the creator, who set the deadline themselves.
+      const recipients = computeTaskAudience(
+        reservedTask,
+        await this.usersService.getAdminIds(),
+      );
+      recipients.delete(reservedTask.createdBy?.toString() ?? '');
+      const recipientIds = [...recipients].filter((id) =>
+        Types.ObjectId.isValid(id),
+      );
 
-      if (tokens.length === 0) {
+      if (recipientIds.length === 0) {
+        this.logger.log(
+          `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because it has no eligible recipients.`,
+        );
+        return;
+      }
+
+      const { submitted, tokenCount } =
+        await this.notificationsService.sendPushToUsers(
+          recipientIds,
+          reminderWindow.title,
+          reminderWindow.bodyTemplate(task.description ?? 'Task'),
+          { type: 'task', taskId: task._id.toString() },
+        );
+
+      if (tokenCount === 0) {
         this.logger.log(
           `Skipping ${reminderWindow.key} reminder for task ${String(task._id)} because no recipient push tokens were found.`,
         );
         return;
       }
-
-      const submitted = await this.notificationsService.sendPush(
-        tokens,
-        reminderWindow.title,
-        reminderWindow.bodyTemplate(task.description ?? 'Task'),
-        { type: 'task', taskId: task._id.toString() },
-      );
 
       if (!submitted) {
         await this.releaseReservation(task._id, reminderWindow, referenceTime);
@@ -214,7 +209,7 @@ export class TaskReminderService {
       }
 
       this.logger.log(
-        `Sent ${reminderWindow.key} reminder for task ${String(task._id)} to ${tokens.length} token(s).`,
+        `Sent ${reminderWindow.key} reminder for task ${String(task._id)} to ${tokenCount} token(s).`,
       );
     } catch (error) {
       this.logger.error(
