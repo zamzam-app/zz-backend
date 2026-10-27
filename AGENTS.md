@@ -176,10 +176,14 @@ Uses `node:20-alpine` with `corepack enable` for pnpm support.
 
 1. **Event-sourced tasks** — The task system uses append-only `TaskEvent` documents with optimistic concurrency (version field). All mutations go through `TaskEventService.appendEvent()`. The `Task` document is a read-model projected from events.
 
-2. **Debounced notifications** — Both task activity and complaint notifications are debounced in-memory (3s for tasks, 120s for complaints) to avoid notification spam. Complaint debounce state is also persisted to MongoDB to survive server restarts.
+2. **Debounced notifications** — Both task activity and complaint notifications are debounced (3s for tasks, 120s for complaints) to avoid notification spam. Both are also persisted to MongoDB to survive server restarts: complaints in `PendingComplaint`, task activity in `PendingTaskActivity` (sent by the `recoverPendingActivity` cron if a restart missed it).
 
 3. **Push token management** — Users have both a legacy `pushToken: string` field and a newer `pushTokens: UserPushToken[]` array. The `PushTokenService` manages both with backward-compat fallback. See `.agents/notification-system.md` for details.
 
 4. **Soft deletes everywhere** — No hard deletes. All entities use `isDeleted` flag.
 
 5. **Outlet-scoped access** — Managers can only access data for outlets they're assigned to. Admins have global access.
+
+6. **Task visibility and audience** — `task-visibility.util.ts` holds the one rule for who sees a task: admins see every task; everyone else sees tasks they are assigned to (`assigneeIds`) or created. Delegating or reassigning a task adds the target to `assigneeIds`. The same audience (minus the actor) gets the task's unread counts (`unreadMap`) and its pushes. `GET /tasks/unread-summary` returns every Tasks badge for the app.
+
+7. **Sending pushes** — Send pushes with `NotificationsService.sendPushToUsers(userIds, title, body, data)`, not `sendPush` with raw tokens. It resolves each user's devices and sets their app icon `badge` from the registered badge sources (`tasks` in `TaskViewService`, `reviews` in `ReviewService`, registered on module init). If a badge source fails, the push is sent without a badge.

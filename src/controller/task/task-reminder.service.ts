@@ -170,7 +170,7 @@ export class TaskReminderService {
     }
 
     try {
-      // Everyone who can see the task (all admins, assignees, delegate),
+      // Everyone who can see the task (all admins, assignees),
       // except the creator, who set the deadline themselves.
       const recipients = computeTaskAudience(
         reservedTask,

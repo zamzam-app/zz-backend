@@ -53,9 +53,8 @@ export function generateSortKey(): string {
  * for a given event.
  *
  * Rules:
- * - Everyone in the task's audience gets +1: all admins, the assignees, the
- *   creator (and, transitionally, the current delegate). See
- *   `task-visibility.util.ts`.
+ * - Everyone in the task's audience gets +1: all admins, the assignees and
+ *   the creator. See `task-visibility.util.ts`.
  * - The event **actor** never gets their own unread incremented.
  *
  * Pass the task state **after** the event's projection, so that a user who
@@ -72,9 +71,9 @@ export function computeUnreadIncrementUserIds(
 }
 
 /**
- * Applies the audience-relevant parts of a projection (`assigneeIds`,
- * `activeDelegation`) to the current task, giving the state the task will
- * have once the update is written. Used to pick unread recipients.
+ * Applies the audience-relevant part of a projection (`assigneeIds`) to the
+ * current task, giving the state the task will have once the update is
+ * written. Used to pick unread recipients.
  */
 export function applyProjectionToAudience(
   task: TaskAudienceSource,
@@ -91,16 +90,7 @@ export function applyProjectionToAudience(
     }
   }
 
-  let activeDelegation = task.activeDelegation ?? null;
-  if ('activeDelegation' in projection.$unset) {
-    activeDelegation = null;
-  } else if (projection.$set['activeDelegation']) {
-    activeDelegation = projection.$set['activeDelegation'] as {
-      delegatedTo?: Types.ObjectId;
-    };
-  }
-
-  return { assigneeIds, createdBy: task.createdBy, activeDelegation };
+  return { assigneeIds, createdBy: task.createdBy };
 }
 
 // ---------------------------------------------------------------------------

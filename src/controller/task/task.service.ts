@@ -897,7 +897,7 @@ export class TaskService {
     try {
       const task = await this.taskModel
         .findById(taskId)
-        .select('assigneeIds createdBy activeDelegation')
+        .select('assigneeIds createdBy')
         .lean()
         .exec();
       if (!task) return;
@@ -1156,18 +1156,7 @@ export class TaskService {
         // badges count exactly this set (see TaskViewService).
         baseAnd.push(buildTaskVisibilityFilter(jwtUser.sub));
       } else {
-        baseAnd.push({
-          $or: [
-            { assigneeIds: new Types.ObjectId(query.assigneeId) },
-            // TRANSITIONAL: delegates from before delegation assigned the
-            // target (see task-visibility.util.ts).
-            {
-              'activeDelegation.delegatedTo': new Types.ObjectId(
-                query.assigneeId,
-              ),
-            },
-          ],
-        });
+        baseAnd.push({ assigneeIds: new Types.ObjectId(query.assigneeId) });
         // A non-admin filtering by someone else still only sees tasks
         // visible to themselves.
         if (!isAdmin) {
