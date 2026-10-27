@@ -7,6 +7,13 @@ import { UsersService } from '../users/users.service';
 import { Task } from './entities/task.entity';
 import { TaskRecurrenceType, TaskStatus } from './task.enums';
 import { computeTaskAudience } from './task-visibility.util';
+import {
+  IST_TIME_ZONE,
+  getIstDateParts,
+  getIstDayEnd,
+  getIstDayStart,
+  isIstLastDayOfMonth,
+} from '../../util/ist-date.util';
 
 @Injectable()
 export class TaskRecurrenceService {
@@ -18,23 +25,24 @@ export class TaskRecurrenceService {
     private notificationsService: NotificationsService,
   ) {}
 
-  @Cron('0 1 * * *') // Every day at 1:00 AM
+  // Every day at 00:05 IST. The app follows IST only, so "today", the weekday
+  // and the day of the month are all worked out in IST, whatever the server's
+  // own timezone is.
+  @Cron('5 0 * * *', { timeZone: IST_TIME_ZONE })
   async handleRecurringTasks() {
     this.logger.log('Running recurring tasks job...');
     const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 (Sunday) to 6 (Saturday)
-    const dayOfMonth = now.getDate(); // 1 to 31
-
-    // Check if today is the last day of the current month
-    const nextDay = new Date(now);
-    nextDay.setDate(now.getDate() + 1);
-    const isLastDayOfMonth = nextDay.getDate() === 1;
+    const { weekday: dayOfWeek, day: dayOfMonth } = getIstDateParts(now);
+    const isLastDayOfMonth = isIstLastDayOfMonth(now);
 
     // Find all recurring tasks
     const recurringTasks = await this.taskModel
       .find({
         isRecurring: true,
         $or: [
+          {
+            recurrenceType: TaskRecurrenceType.DAILY,
+          },
           {
             recurrenceType: TaskRecurrenceType.WEEKLY,
             recurrenceDays: dayOfWeek,
@@ -57,21 +65,9 @@ export class TaskRecurrenceService {
     let createdCount = 0;
 
     for (const template of recurringTasks) {
-      // Create date without time for matching idempotency
-      const startOfDay = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-      );
-      const endOfDay = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        23,
-        59,
-        59,
-        999,
-      );
+      // The IST day, for matching idempotency
+      const startOfDay = getIstDayStart(now);
+      const endOfDay = getIstDayEnd(now);
 
       // Idempotency check: does this task already exist for today?
       const existingTask = await this.taskModel
@@ -100,7 +96,7 @@ export class TaskRecurrenceService {
         taskCategoryId: template.taskCategoryId,
         priority: template.priority,
         status: TaskStatus.OPEN,
-        dueDate: now, // Set to today
+        dueDate: startOfDay, // Today (IST)
         dueTime: template.dueTime, // Inherit template due time
         isRecurring: false,
         outletId: template.outletId,

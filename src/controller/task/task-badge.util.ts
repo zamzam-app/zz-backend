@@ -31,7 +31,9 @@ export function buildTaskBadges(task: TaskBadgeSource): TaskBadge[] {
           ? 'Monthly'
           : task.recurrenceType === TaskRecurrenceType.WEEKLY
             ? 'Weekly'
-            : 'Recurring',
+            : task.recurrenceType === TaskRecurrenceType.DAILY
+              ? 'Daily'
+              : 'Recurring',
       tone: 'info',
     });
   }

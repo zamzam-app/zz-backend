@@ -1315,29 +1315,87 @@ export class ReviewService implements OnModuleInit {
     userIds: string[],
   ): Promise<Map<string, number>> {
     const counts = new Map<string, number>();
+    const ids = [...new Set(userIds)].filter((id) =>
+      Types.ObjectId.isValid(id),
+    );
+    if (ids.length === 0) return counts;
+
+    // One read for all users, and one read of the outlet list shared by all
+    // admins, instead of both once per user.
+    const users = await this.userModel
+      .find({
+        _id: { $in: ids.map((id) => new Types.ObjectId(id)) },
+        isDeleted: false,
+      })
+      .select('_id role outlets')
+      .lean()
+      .exec();
+
+    let allOutletIds: Promise<Types.ObjectId[]> | null = null;
+    const getAllOutletIds = () =>
+      (allOutletIds ??= this.outletModel
+        .find({ isDeleted: false })
+        .select('_id')
+        .lean()
+        .exec()
+        .then((outlets) => outlets.map((o) => o._id)));
 
     await Promise.all(
-      [...new Set(userIds)].map(async (userId) => {
+      users.map(async (user) => {
+        const userId = user._id.toString();
         try {
-          const badgeScope = await this.getBadgeScopeForUser(userId);
-          if (badgeScope.scopeType === 'none') return;
+          let outletIds: Types.ObjectId[];
+          if (user.role === UserRole.ADMIN) {
+            outletIds = await getAllOutletIds();
+          } else if (user.role === UserRole.MANAGER) {
+            outletIds = await this.getManagerOutletIds(userId, user.outlets);
+          } else {
+            return;
+          }
+          if (outletIds.length === 0) return;
 
           const unreadCount = await this.reviewModel
             .countDocuments({
-              ...this.buildPendingBadgeMatch(badgeScope.outletIds),
+              ...this.buildPendingBadgeMatch(outletIds),
               readBy: {
-                $not: { $elemMatch: { userId: new Types.ObjectId(userId) } },
+                $not: { $elemMatch: { userId: user._id } },
               },
             })
             .exec();
           counts.set(userId, unreadCount);
-        } catch {
-          // Unknown or deleted user: no review badge.
+        } catch (error) {
+          // A user whose count can't be read gets no review badge.
+          this.logger.warn(
+            `Could not compute the review badge count for user ${userId}`,
+            error,
+          );
         }
       }),
     );
 
     return counts;
+  }
+
+  /** Outlets a manager can see: their own list plus outlets that list them. */
+  private async getManagerOutletIds(
+    userId: string,
+    profileOutlets: unknown[] | undefined,
+  ): Promise<Types.ObjectId[]> {
+    const outletIds = new Set<string>(
+      (profileOutlets ?? []).map((id) => String(id)),
+    );
+
+    const managerOutlets = await this.outletModel
+      .find({
+        isDeleted: false,
+        managerIds: new Types.ObjectId(userId),
+      } as Record<string, unknown>)
+      .select('_id')
+      .lean()
+      .exec();
+    managerOutlets.forEach((outlet) => outletIds.add(outlet._id.toString()));
+
+    return Array.from(outletIds).map((id) => new Types.ObjectId(id));
   }
 
   private async getBadgeScopeForUser(userId: string): Promise<{

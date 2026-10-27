@@ -223,43 +223,9 @@ export class TaskService {
         }
       }
 
-      // Notify everyone who can see the new task except its creator:
-      // assignees get "New Task Assigned", everyone else (admins) a neutral
-      // message naming the assignees.
-      try {
-        const audience = computeTaskAudience(
-          saved,
-          await this.usersService.getAdminIds(),
-        );
-        audience.delete(jwtUser.sub);
-
-        const assigneeSet = new Set(assigneeIds);
-        const assigned = [...audience].filter((id) => assigneeSet.has(id));
-        const others = [...audience].filter((id) => !assigneeSet.has(id));
-        const data = { type: 'task', taskId: saved._id.toString() };
-
-        if (assigned.length > 0) {
-          await this.notificationsService.sendPushToUsers(
-            assigned,
-            'New Task Assigned',
-            `You've been assigned a task: ${doc.description}`,
-            data,
-          );
-        }
-        if (others.length > 0) {
-          const names = await this.userNames(assigneeIds);
-          await this.notificationsService.sendPushToUsers(
-            others,
-            'New Task',
-            names
-              ? `New task: ${doc.description} (assigned to ${names})`
-              : `New task: ${doc.description}`,
-            data,
-          );
-        }
-      } catch (err) {
-        this.logger.error('Failed to send push notification', err);
-      }
+      // Pushes go out after the response is sent: they involve badge counts
+      // for every recipient and an Expo call, and the creator shouldn't wait.
+      void this.notifyTaskCreated(saved, assigneeIds, jwtUser.sub);
 
       const one = await this.findOneTaskById(saved._id.toString(), jwtUser);
       if (!one) {
@@ -690,6 +656,16 @@ export class TaskService {
           .sort();
         const newAssignees = [...dto.assigneeIds].sort();
         if (JSON.stringify(oldAssignees) !== JSON.stringify(newAssignees)) {
+          // Members can't be added to or removed from a completed task, unless
+          // the same request reopens it.
+          const isReopening =
+            dto.status === TaskStatus.OPEN &&
+            existing.status === TaskStatus.COMPLETED;
+          if (existing.status === TaskStatus.COMPLETED && !isReopening) {
+            throw new BadRequestException(
+              "Assignees can't be changed on a completed task. Reopen the task first.",
+            );
+          }
           $set.assigneeIds = dto.assigneeIds.map(
             (id) => new Types.ObjectId(id),
           );
@@ -835,7 +811,7 @@ export class TaskService {
         'recurrenceDays',
       ] as const;
 
-      await this.notifyTaskUpdate({
+      void this.notifyTaskUpdate({
         taskId: updated._id.toString(),
         description: updated.description,
         actor: jwtUser,
@@ -856,6 +832,60 @@ export class TaskService {
         (error instanceof Error ? error.message : undefined) ??
           'Failed to update task',
       );
+    }
+  }
+
+  /**
+   * Notifies everyone who can see a new task except its creator: assignees get
+   * "New Task Assigned", everyone else (admins) a neutral message naming the
+   * assignees.
+   *
+   * Best-effort: failures are logged and never propagate to the caller.
+   */
+  private async notifyTaskCreated(
+    task: TaskDocument,
+    assigneeIds: string[],
+    creatorId: string,
+  ): Promise<void> {
+    try {
+      const audience = computeTaskAudience(
+        task,
+        await this.usersService.getAdminIds(),
+      );
+      audience.delete(creatorId);
+
+      const assigneeSet = new Set(assigneeIds);
+      const assigned = [...audience].filter((id) => assigneeSet.has(id));
+      const others = [...audience].filter((id) => !assigneeSet.has(id));
+      const data = { type: 'task', taskId: task._id.toString() };
+
+      const sends: Promise<unknown>[] = [];
+      if (assigned.length > 0) {
+        sends.push(
+          this.notificationsService.sendPushToUsers(
+            assigned,
+            'New Task Assigned',
+            `You've been assigned a task: ${task.description}`,
+            data,
+          ),
+        );
+      }
+      if (others.length > 0) {
+        const names = await this.userNames(assigneeIds);
+        sends.push(
+          this.notificationsService.sendPushToUsers(
+            others,
+            'New Task',
+            names
+              ? `New task: ${task.description} (assigned to ${names})`
+              : `New task: ${task.description}`,
+            data,
+          ),
+        );
+      }
+      await Promise.all(sends);
+    } catch (err) {
+      this.logger.error('Failed to send push notification', err);
     }
   }
 
@@ -1288,11 +1318,20 @@ export class TaskService {
       if (!Types.ObjectId.isValid(aid)) {
         throw new BadRequestException(`Invalid assignee ID: ${aid}`);
       }
+    }
 
-      const user = await this.userModel
-        .findOne({ _id: aid, isDeleted: false })
-        .lean()
-        .exec();
+    // One query for all assignees instead of one per assignee.
+    const users = await this.userModel
+      .find({
+        _id: { $in: assigneeIds.map((id) => new Types.ObjectId(id)) },
+        isDeleted: false,
+      })
+      .lean()
+      .exec();
+    const usersById = new Map(users.map((u) => [u._id.toString(), u]));
+
+    for (const aid of assigneeIds) {
+      const user = usersById.get(aid);
       if (!user) {
         throw new BadRequestException(`Assignee not found: ${aid}`);
       }

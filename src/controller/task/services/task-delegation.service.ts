@@ -15,7 +15,7 @@ import { User, UserDocument } from '../../users/entities/user.entity';
 import { UsersService } from '../../users/users.service';
 import { Outlet, OutletDocument } from '../../outlet/entities/outlet.entity';
 import { UserRole } from '../../users/interfaces/user.interface';
-import { TaskEventType } from '../task.enums';
+import { TaskEventType, TaskStatus } from '../task.enums';
 import { computeTaskAudience } from '../task-visibility.util';
 import { TaskEventService } from './task-event.service';
 import { NotificationsService } from '../../../notifications/notifications.service';
@@ -143,13 +143,19 @@ export class TaskDelegationService {
     const task = await this.taskModel
       .findOne({ _id: taskIdObj, isDeleted: false })
       .select(
-        'description outletId activeOwner activeDelegation createdBy version',
+        'description outletId activeOwner activeDelegation createdBy version status',
       )
       .lean()
       .exec();
 
     if (!task) {
       throw new NotFoundException('Task not found');
+    }
+
+    if (task.status === TaskStatus.COMPLETED) {
+      throw new BadRequestException(
+        "Completed tasks can't be delegated or reassigned. Reopen the task first.",
+      );
     }
 
     // --------------------------------------------------
@@ -174,7 +180,7 @@ export class TaskDelegationService {
     );
 
     if (notify) {
-      await this.notifyOwnerChange({
+      void this.notifyOwnerChange({
         task: result.task,
         actorId: fromId,
         targetId: toId,
@@ -224,12 +230,18 @@ export class TaskDelegationService {
     // --------------------------------------------------
     const task = await this.taskModel
       .findOne({ _id: taskIdObj, isDeleted: false })
-      .select('description outletId activeOwner createdBy version')
+      .select('description outletId activeOwner createdBy version status')
       .lean()
       .exec();
 
     if (!task) {
       throw new NotFoundException('Task not found');
+    }
+
+    if (task.status === TaskStatus.COMPLETED) {
+      throw new BadRequestException(
+        "Completed tasks can't be delegated or reassigned. Reopen the task first.",
+      );
     }
 
     // --------------------------------------------------
@@ -251,7 +263,7 @@ export class TaskDelegationService {
       actorId,
     );
 
-    await this.notifyOwnerChange({
+    void this.notifyOwnerChange({
       task: result.task,
       actorId,
       targetId: newOwnerObj,

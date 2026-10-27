@@ -10,6 +10,7 @@ export enum TaskStatus {
 }
 
 export enum TaskRecurrenceType {
+  DAILY = 'DAILY',
   WEEKLY = 'WEEKLY',
   MONTHLY = 'MONTHLY',
 }
