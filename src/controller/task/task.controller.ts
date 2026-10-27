@@ -131,7 +131,7 @@ export class TaskController {
   @ApiOperation({
     summary: 'Unread counts for every Tasks badge',
     description:
-      'Returns `perTask` (unread activities per task), `segments` (number of tasks with unread activity in Open / Recurring / Done) and `nav` (Open + Recurring). Only tasks visible to the signed-in user are counted; screen filters are ignored.',
+      'Returns `perTask` (unread activities per task), `taskSegments` (the segment of each of those tasks), `segments` (number of tasks with unread activity in Open / Recurring / Done) and `nav` (Open + Recurring). Only tasks visible to the signed-in user are counted; screen filters are ignored.',
   })
   @ApiOkResponse({
     schema: {
@@ -141,6 +141,10 @@ export class TaskController {
         perTask: {
           '65f1c0a1b2c3d4e5f6a7b8c9': 4,
           '65f1c0a1b2c3d4e5f6a7b8ca': 1,
+        },
+        taskSegments: {
+          '65f1c0a1b2c3d4e5f6a7b8c9': 'open',
+          '65f1c0a1b2c3d4e5f6a7b8ca': 'done',
         },
       },
     },

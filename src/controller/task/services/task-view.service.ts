@@ -41,13 +41,18 @@ export interface AggregatedUnreadSummary {
  *   segment (Open = open, not recurring; Recurring = open, recurring;
  *   Done = completed).
  * - `nav`: Open + Recurring (nav bar and app icon). Done is excluded.
+ * - `taskSegments`: the segment of each task in `perTask`, so the app can
+ *   adjust the right header when a task is viewed.
  *
  * Only tasks the user can see in their own list are counted.
  */
+export type TaskUnreadSegment = 'open' | 'recurring' | 'done';
+
 export interface TaskUnreadSummary {
   nav: number;
-  segments: { open: number; recurring: number; done: number };
+  segments: Record<TaskUnreadSegment, number>;
   perTask: Record<string, number>;
+  taskSegments: Record<string, TaskUnreadSegment>;
 }
 
 /**
@@ -393,6 +398,7 @@ export class TaskViewService implements OnModuleInit {
       nav: 0,
       segments: { open: 0, recurring: 0, done: 0 },
       perTask: {},
+      taskSegments: {},
     };
 
     for (const task of tasks as unknown as Array<Record<string, unknown>>) {
@@ -400,14 +406,17 @@ export class TaskViewService implements OnModuleInit {
       const count = unreadMap?.[userIdStr] ?? 0;
       if (count <= 0) continue;
 
-      summary.perTask[(task._id as Types.ObjectId).toString()] = count;
-      if (task.status === TaskStatus.COMPLETED) {
-        summary.segments.done += 1;
-      } else if (task.isRecurring) {
-        summary.segments.recurring += 1;
-      } else {
-        summary.segments.open += 1;
-      }
+      const taskId = (task._id as Types.ObjectId).toString();
+      const segment: TaskUnreadSegment =
+        task.status === TaskStatus.COMPLETED
+          ? 'done'
+          : task.isRecurring
+            ? 'recurring'
+            : 'open';
+
+      summary.perTask[taskId] = count;
+      summary.taskSegments[taskId] = segment;
+      summary.segments[segment] += 1;
     }
 
     summary.nav = summary.segments.open + summary.segments.recurring;
