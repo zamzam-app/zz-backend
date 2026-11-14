@@ -13,6 +13,7 @@ import { Model, PipelineStage, Types } from 'mongoose';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
+import { QueryPublicReviewsDto } from './dto/query-public-reviews.dto';
 import { QueryRatingsSummaryDto } from './dto/query-ratings-summary.dto';
 import { ResolveComplaintDto } from './dto/resolve-complaint.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
@@ -446,6 +447,46 @@ export class ReviewService implements OnModuleInit {
           'Failed to create review',
       );
     }
+  }
+
+  /**
+   * Sanitised review list for the unauthenticated customer site. Complaints
+   * are excluded and only the reviewer's name is exposed (no phone number,
+   * user id, complaint status or other internal fields).
+   */
+  async getPublicReviews(query: QueryPublicReviewsDto) {
+    const { data } = await this.findAll({
+      page: 1,
+      limit: query.limit ?? 6,
+      outletId: query.outletId,
+      isComplaint: false,
+    });
+    return {
+      data: data.map((review) => {
+        const r = review as unknown as {
+          _id: unknown;
+          overallRating?: number;
+          createdAt?: Date;
+          userId?: { name?: string } | null;
+          userResponses?: Array<{
+            questionId?: { _id?: unknown; title?: string } | null;
+            answer?: unknown;
+          }>;
+        };
+        return {
+          _id: r._id,
+          overallRating: r.overallRating,
+          createdAt: r.createdAt,
+          userId: { name: r.userId?.name },
+          userResponses: (r.userResponses ?? []).map((ur) => ({
+            questionId: ur.questionId
+              ? { _id: ur.questionId._id, title: ur.questionId.title }
+              : undefined,
+            answer: ur.answer,
+          })),
+        };
+      }),
+    };
   }
 
   async findAll(query: QueryReviewDto): Promise<FindAllReviewsResult> {

@@ -24,11 +24,15 @@ import {
 } from './dto/review.swagger';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../users/interfaces/user.interface';
 import { JwtPayload } from '../auth/interfaces/auth.interfaces';
+import { QueryPublicReviewsDto } from './dto/query-public-reviews.dto';
 import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
 
 @ApiTags('review')
 @ApiBearerAuth('JWT-auth')
+@Roles(UserRole.ADMIN, UserRole.MANAGER)
 @Controller('review')
 export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
@@ -60,6 +64,13 @@ export class ReviewController {
   @ApiReviewRatingsSummary()
   getRatingsSummary(@Query() query: QueryRatingsSummaryDto) {
     return this.reviewService.getRatingsSummary(query);
+  }
+
+  /** Customer-site testimonials: non-complaint reviews with no contact details. */
+  @Public()
+  @Get('public')
+  getPublicReviews(@Query() query: QueryPublicReviewsDto) {
+    return this.reviewService.getPublicReviews(query);
   }
 
   @Post('resolve-complaint/:reviewId')

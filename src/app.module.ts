@@ -26,6 +26,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { CakeCustomizationModule } from './controller/cake-customization/cake-customization.module';
 
 import { ScheduleModule } from '@nestjs/schedule';
+import { APP_GUARD } from '@nestjs/core';
+import { JwtAuthGuard } from './controller/auth/guards/jwt-auth.guard';
+import { RolesGuard } from './controller/auth/guards/roles.guard';
 
 @Module({
   imports: [
@@ -66,6 +69,13 @@ import { ScheduleModule } from '@nestjs/schedule';
   ],
 
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Deny by default: every route requires a valid JWT and, where @Roles is
+    // set, a matching role. Opt out per route with @Public(). Order matters:
+    // authentication must run before the roles check.
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
 })
 export class AppModule {}

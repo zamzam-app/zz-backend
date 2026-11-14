@@ -1,5 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../users/interfaces/user.interface';
 import { AnalyticsService } from './analytics.service';
 import { QueryCsatTrendlineDto } from '../review/dto/query-csat-trendline.dto';
 import { QueryGlobalCsatDto } from '../review/dto/query-global-csat.dto';
@@ -17,6 +19,7 @@ import {
 
 @ApiTags('analytics')
 @ApiBearerAuth('JWT-auth')
+@Roles(UserRole.ADMIN, UserRole.MANAGER)
 @Controller('analytics')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
