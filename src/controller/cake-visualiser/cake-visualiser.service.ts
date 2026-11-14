@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -10,6 +11,11 @@ import { VisualiseCakeDto } from './dto/visualise-cake.dto';
 // Switch to 'gemini-3-pro-image-preview' for Nano Banana Pro (highest quality, slower)
 const GEMINI_MODEL = 'gemini-3.1-flash-image-preview';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+/** Only fetch base images from our own Cloudinary account host, over HTTPS. */
+const ALLOWED_IMAGE_HOSTS = ['res.cloudinary.com'];
+const MAX_BASE_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+const BASE_IMAGE_TIMEOUT_MS = 10_000;
 
 interface GeminiPart {
   inlineData?: { data: string; mimeType: string };
@@ -49,6 +55,8 @@ export class CakeVisualiserService {
     const parts: object[] = [];
 
     if (dto.baseImage) {
+      // Reject before any request is made: the URL is caller-controlled.
+      this.assertAllowedImageUrl(dto.baseImage);
       try {
         const { base64, mimeType } = await this.fetchImageAsBase64(
           dto.baseImage,
@@ -133,14 +141,59 @@ export class CakeVisualiserService {
     `.trim();
   }
 
+  private assertAllowedImageUrl(imageUrl: string): void {
+    let url: URL;
+    try {
+      url = new URL(imageUrl);
+    } catch {
+      throw new BadRequestException('baseImage must be a valid URL');
+    }
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.port ||
+      !ALLOWED_IMAGE_HOSTS.includes(url.hostname)
+    ) {
+      throw new BadRequestException('baseImage host is not allowed');
+    }
+  }
+
   private async fetchImageAsBase64(
     imageUrl: string,
   ): Promise<{ base64: string; mimeType: string }> {
-    const res = await fetch(imageUrl);
+    // redirect: 'error' stops an allowed host from bouncing us to an internal one.
+    const res = await fetch(imageUrl, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(BASE_IMAGE_TIMEOUT_MS),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching image`);
-    const buffer = await res.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString('base64');
-    const mimeType = res.headers.get('content-type') || 'image/jpeg';
+
+    const mimeType = res.headers.get('content-type') || '';
+    if (!mimeType.startsWith('image/')) {
+      throw new Error('Base image is not an image');
+    }
+    const declared = Number(res.headers.get('content-length'));
+    if (Number.isFinite(declared) && declared > MAX_BASE_IMAGE_BYTES) {
+      throw new Error('Base image is too large');
+    }
+
+    // Read as a stream so the cap holds even without a Content-Length header.
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Empty image response');
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > MAX_BASE_IMAGE_BYTES) {
+        await reader.cancel();
+        throw new Error('Base image is too large');
+      }
+      chunks.push(value);
+    }
+    const base64 = Buffer.concat(chunks).toString('base64');
     return { base64, mimeType };
   }
 }
