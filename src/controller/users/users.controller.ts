@@ -45,8 +45,14 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiUserCreate()
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  async create(@Body() createUserDto: CreateUserDto) {
+    const created = await this.usersService.create(createUserDto);
+    // The saved document includes the password hash and otp: strip them.
+    const safe = { ...created.toObject() } as Record<string, unknown>;
+    delete safe.password;
+    delete safe.otp;
+    delete safe.pushTokens;
+    return safe;
   }
 
   @Get()

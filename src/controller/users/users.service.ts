@@ -160,6 +160,11 @@ export class UsersService {
         {
           $project: {
             associatedOutlets: 0,
+            // Aggregations ignore `select: false`, so strip secrets explicitly.
+            password: 0,
+            otp: 0,
+            pushToken: 0,
+            pushTokens: 0,
           },
         },
       );

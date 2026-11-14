@@ -214,7 +214,12 @@ export class AuthService {
     }
 
     if (user && user.password && (await bcrypt.compare(pass, user.password))) {
-      const result = user.toObject();
+      // Never hand the password hash (or other secrets) back to callers: the
+      // result ends up in the login response.
+      const result = { ...user.toObject() } as Record<string, unknown>;
+      delete result.password;
+      delete result.otp;
+      delete result.pushTokens;
       return { ...result, tokenSyncRequired: false } as ValidatedUser;
     }
     return null;
