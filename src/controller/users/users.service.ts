@@ -227,6 +227,9 @@ export class UsersService {
   async update(id: string, updateUserDto: UpdateUserDto) {
     try {
       const payload = { ...updateUserDto };
+      if (payload.password) {
+        payload.password = await hashPassword(payload.password);
+      }
       if (payload.email != null)
         payload.email = normalizeEmail(payload.email) || payload.email;
       if (payload.phoneNumber != null)

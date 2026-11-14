@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -30,6 +31,9 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from './interfaces/user.interface';
 import { JwtPayload } from '../auth/interfaces/auth.interfaces';
+
+/** Profile fields a non-admin may change on their own account. */
+const SELF_UPDATABLE_FIELDS = ['name', 'email', 'dob', 'gender'];
 
 @ApiTags('users')
 @Controller('users')
@@ -82,7 +86,26 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
   @ApiUserUpdate()
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+  update(
+    @Request() req: { user: JwtPayload },
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    // Admins may edit anyone. Everyone else may only edit their own profile,
+    // and only the fields in SELF_UPDATABLE_FIELDS (never role, password, ...).
+    if (req.user.role !== UserRole.ADMIN) {
+      if (req.user.sub !== id) {
+        throw new ForbiddenException('You can only update your own profile');
+      }
+      const disallowed = Object.keys(updateUserDto).filter(
+        (key) => !SELF_UPDATABLE_FIELDS.includes(key),
+      );
+      if (disallowed.length > 0) {
+        throw new ForbiddenException(
+          `You are not allowed to update: ${disallowed.join(', ')}`,
+        );
+      }
+    }
     return this.usersService.update(id, updateUserDto);
   }
 
