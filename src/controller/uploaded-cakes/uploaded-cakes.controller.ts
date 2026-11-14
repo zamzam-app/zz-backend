@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
@@ -17,6 +18,7 @@ import { UploadedCakesService } from './uploaded-cakes.service';
 export class UploadedCakesController {
   constructor(private readonly uploadedCakesService: UploadedCakesService) {}
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post()
   @Public()
   @ApiUploadedCakeCreate()

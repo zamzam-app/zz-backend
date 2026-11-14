@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -38,6 +39,7 @@ export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('submit-with-otp')
   submitWithOtp(@Body() dto: SubmitReviewWithOtpDto) {
     return this.reviewService.submitWithOtp(dto);

@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import { Controller, ForbiddenException, Get, Query } from '@nestjs/common';
 import { ApiUploadController, ApiUploadSignature } from './dto/upload.swagger';
 import {
@@ -27,6 +28,7 @@ export class UploadController {
 
   /** Customer site uploads (custom cake): images into allow-listed folders only. */
   @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Get('public-signature')
   @ApiUploadSignature()
   getPublicSignature(@Query() query: UploadSignatureQueryDto) {

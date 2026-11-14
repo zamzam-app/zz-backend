@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -25,8 +27,44 @@ import {
   ValidatedUser,
 } from './interfaces/auth.interfaces';
 
+/** Per-phone caps, on top of the per-IP route throttles (an attacker can rotate IPs). */
+const PHONE_WINDOW_MS = 10 * 60 * 1000;
+const MAX_OTP_REQUESTS_PER_PHONE = 3;
+const MAX_OTP_VERIFY_ATTEMPTS_PER_PHONE = 10;
+
 @Injectable()
 export class AuthService {
+  // In-memory, so per instance. Fine for a single API instance.
+  private readonly otpRequestLog = new Map<string, number[]>();
+  private readonly otpVerifyLog = new Map<string, number[]>();
+
+  /** Records an attempt for `key`; throws 429 once `max` is hit within the window. */
+  private enforcePhoneLimit(
+    log: Map<string, number[]>,
+    key: string,
+    max: number,
+  ): void {
+    const now = Date.now();
+    const recent = (log.get(key) ?? []).filter(
+      (t) => now - t < PHONE_WINDOW_MS,
+    );
+    if (recent.length >= max) {
+      log.set(key, recent);
+      throw new HttpException(
+        'Too many attempts for this phone number. Try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    recent.push(now);
+    log.set(key, recent);
+    // Keep the maps from growing without bound.
+    if (log.size > 10_000) {
+      for (const [k, times] of log) {
+        if (times.every((t) => now - t >= PHONE_WINDOW_MS)) log.delete(k);
+      }
+    }
+  }
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -65,6 +103,11 @@ export class AuthService {
     if (!normPhone) {
       throw new BadRequestException('Invalid phone number');
     }
+    this.enforcePhoneLimit(
+      this.otpRequestLog,
+      normPhone,
+      MAX_OTP_REQUESTS_PER_PHONE,
+    );
     let userDoc: UserDocument | null =
       (await this.usersService.findOneByPhoneNumber(
         normPhone,
@@ -89,6 +132,11 @@ export class AuthService {
     if (!normPhone) {
       throw new UnauthorizedException('Invalid OTP');
     }
+    this.enforcePhoneLimit(
+      this.otpVerifyLog,
+      normPhone,
+      MAX_OTP_VERIFY_ATTEMPTS_PER_PHONE,
+    );
     await this.msg91Service.verifyOtp(normPhone, verifyOtpDto.otp);
 
     // 2. Find or Create User by the verified phone number only. The account
