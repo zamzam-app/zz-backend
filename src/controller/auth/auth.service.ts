@@ -152,6 +152,9 @@ export class AuthService {
         ...(verifyOtpDto.dob && { dob: verifyOtpDto.dob }),
       });
     }
+    if (!this.isAccountUsable(byPhone as UserDocument)) {
+      throw new UnauthorizedException('This account is not active');
+    }
     let userDoc = byPhone as UserDocument;
 
     const userId = String(userDoc._id);
@@ -234,11 +237,16 @@ export class AuthService {
     return { ...(userDoc as unknown as ValidatedUser), tokenSyncRequired };
   }
 
-  refresh(refreshToken: string): AuthTokens {
+  async refresh(refreshToken: string): Promise<AuthTokens> {
     if (!refreshToken) {
       throw new UnauthorizedException('No refresh token found');
     }
     return this.refreshTokens(refreshToken);
+  }
+
+  /** Deleted or deactivated accounts must not be able to sign in or refresh. */
+  private isAccountUsable(user?: { isDeleted?: boolean; isActive?: boolean }) {
+    return !!user && user.isDeleted !== true && user.isActive !== false;
   }
 
   async validateUser(
@@ -261,7 +269,12 @@ export class AuthService {
       user = await this.usersService.findOneByName(name, true);
     }
 
-    if (user && user.password && (await bcrypt.compare(pass, user.password))) {
+    if (
+      user &&
+      this.isAccountUsable(user) &&
+      user.password &&
+      (await bcrypt.compare(pass, user.password))
+    ) {
       // Never hand the password hash (or other secrets) back to callers: the
       // result ends up in the login response.
       const result = { ...user.toObject() } as Record<string, unknown>;
@@ -303,21 +316,27 @@ export class AuthService {
     };
   }
 
-  refreshTokens(refreshToken: string): AuthTokens {
+  async refreshTokens(refreshToken: string): Promise<AuthTokens> {
+    let payload: JwtPayload;
     try {
-      const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
+      payload = this.jwtService.verify<JwtPayload>(refreshToken, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
-
-      const newPayload: JwtPayload = {
-        name: payload.name,
-        sub: payload.sub,
-        role: payload.role,
-      };
-
-      return this.generateTokens(newPayload);
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
+
+    // Re-read the user so a removed, deactivated or demoted account cannot keep
+    // refreshing, and the new token carries the current role.
+    const current = await this.usersService.getAuthState(payload.sub);
+    if (!current || !this.isAccountUsable(current)) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return this.generateTokens({
+      name: current.name ?? payload.name,
+      sub: payload.sub,
+      role: current.role,
+    });
   }
 }
