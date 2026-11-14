@@ -16,6 +16,9 @@ import { normalizePhoneNumber } from '../../util/normalize.util';
 import { UserRole } from '../users/interfaces/user.interface';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 
+/** Only the customer fields staff need; never password, otp, tokens, email or role. */
+const STAFF_VISIBLE_USER_FIELDS = 'name phoneNumber dob gender';
+
 @Injectable()
 export class CustomCakeService {
   constructor(
@@ -92,7 +95,7 @@ export class CustomCakeService {
       const queryBuilder = this.customCakeModel
         .find(matchStage)
         .sort({ createdAt: -1 })
-        .populate('userId');
+        .populate('userId', STAFF_VISIBLE_USER_FIELDS);
 
       if (limit) {
         queryBuilder.skip(skip).limit(limit);
@@ -122,7 +125,7 @@ export class CustomCakeService {
   async findOne(id: string): Promise<CustomCakeDocument> {
     const doc = await this.customCakeModel
       .findOne({ _id: new Types.ObjectId(id), isDeleted: false })
-      .populate('userId')
+      .populate('userId', STAFF_VISIBLE_USER_FIELDS)
       .exec();
     if (!doc) {
       throw new NotFoundException(`Custom cake with ID ${id} not found`);
