@@ -9,6 +9,7 @@ import {
   Delete,
   Query,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ReviewService } from './review.service';
 import { CreateReviewDto } from './dto/create-review.dto';
@@ -38,6 +39,13 @@ import { SubmitReviewWithOtpDto } from './dto/submit-review-with-otp.dto';
 export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
 
+  /** Badge and read state belong to the caller; never trust a userId from the client. */
+  private assertSelf(user: JwtPayload, userId: string): void {
+    if (user.sub !== userId) {
+      throw new ForbiddenException('You can only access your own review state');
+    }
+  }
+
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('submit-with-otp')
@@ -57,7 +65,11 @@ export class ReviewController {
 
   @Get('badge-status/:userId')
   @ApiReviewBadgeStatus()
-  getBadgeStatus(@Param('userId') userId: string) {
+  getBadgeStatus(
+    @Param('userId') userId: string,
+    @Request() req: { user: JwtPayload },
+  ) {
+    this.assertSelf(req.user, userId);
     return this.reviewService.getBadgeStatus(userId);
   }
 
@@ -91,7 +103,9 @@ export class ReviewController {
   markRead(
     @Param('reviewId') reviewId: string,
     @Body() body: MarkReviewReadDto,
+    @Request() req: { user: JwtPayload },
   ) {
+    this.assertSelf(req.user, body.userId);
     return this.reviewService.markReviewAsRead(reviewId, body.userId);
   }
 

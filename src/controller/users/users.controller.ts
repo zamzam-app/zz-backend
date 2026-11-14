@@ -66,7 +66,11 @@ export class UsersController {
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiUserFindOne()
-  findOne(@Param('id') id: string) {
+  findOne(@Request() req: { user: JwtPayload }, @Param('id') id: string) {
+    // Admins may read any user; everyone else only themselves.
+    if (req.user.role !== UserRole.ADMIN && req.user.sub !== id) {
+      throw new ForbiddenException('You can only view your own profile');
+    }
     return this.usersService.findOne(id);
   }
 
@@ -119,7 +123,15 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.USER)
   @ApiUserChangePassword()
-  changePassword(@Param('id') id: string, @Body() dto: ChangePasswordDto) {
+  changePassword(
+    @Request() req: { user: JwtPayload },
+    @Param('id') id: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    // Needs the old password, so it is only ever for your own account.
+    if (req.user.sub !== id) {
+      throw new ForbiddenException('You can only change your own password');
+    }
     return this.usersService.changePassword(
       id,
       dto.oldPassword,
