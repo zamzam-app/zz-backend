@@ -91,33 +91,20 @@ export class AuthService {
     }
     await this.msg91Service.verifyOtp(normPhone, verifyOtpDto.otp);
 
-    // 2. Find or Create User (by userId if provided, else by phoneNumber)
-    let userDoc: UserDocument;
-    const requestUserId = verifyOtpDto.userId;
-    if (requestUserId) {
-      const found = await this.usersService.findOne(requestUserId);
-      userDoc = found as unknown as UserDocument;
-    } else {
-      const normEmail = normalizeEmail(verifyOtpDto.email);
-      let byPhone = await this.usersService.findOneByPhoneNumber(normPhone);
-      if (!byPhone && verifyOtpDto.email) {
-        const { data: byEmail, userPresent } =
-          await this.usersService.findUserByIdentifiers({
-            email: normEmail || verifyOtpDto.email,
-          });
-        if (userPresent && byEmail) byPhone = byEmail;
-      }
-      if (!byPhone) {
-        byPhone = await this.usersService.create({
-          phoneNumber: normPhone,
-          role: UserRole.USER,
-          ...(verifyOtpDto.name && { name: verifyOtpDto.name }),
-          ...(verifyOtpDto.email && { email: normEmail || verifyOtpDto.email }),
-          ...(verifyOtpDto.dob && { dob: verifyOtpDto.dob }),
-        });
-      }
-      userDoc = byPhone as UserDocument;
+    // 2. Find or Create User by the verified phone number only. The account
+    // must never be chosen by anything else in the request body.
+    const normEmail = normalizeEmail(verifyOtpDto.email);
+    let byPhone = await this.usersService.findOneByPhoneNumber(normPhone);
+    if (!byPhone) {
+      byPhone = await this.usersService.create({
+        phoneNumber: normPhone,
+        role: UserRole.USER,
+        ...(verifyOtpDto.name && { name: verifyOtpDto.name }),
+        ...(verifyOtpDto.email && { email: normEmail || verifyOtpDto.email }),
+        ...(verifyOtpDto.dob && { dob: verifyOtpDto.dob }),
+      });
     }
+    let userDoc = byPhone as UserDocument;
 
     const userId = String(userDoc._id);
 
