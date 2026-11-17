@@ -7,6 +7,11 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import {
+  getIstDateParts,
+  getIstDayStart,
+  IST_TIME_ZONE,
+} from '../../util/ist-date.util';
 import { QueryCsatTrendlineDto } from '../review/dto/query-csat-trendline.dto';
 import {
   AnalyticsPeriod,
@@ -49,10 +54,24 @@ type GlobalCsatResult = {
 type CsatTrendlinePeriodResult = {
   startDate: string;
   endDate: string;
+  /** Display label of each bucket, formatted in IST. */
   labels: string[];
-  values: number[];
+  /** ISO instant at which each bucket starts. */
+  timestamps: string[];
+  /** Average CSAT per bucket; null when the bucket has no ratings. */
+  values: (number | null)[];
   totalRatings: number;
 };
+
+/** Bucket layout of one trendline series: N+1 boundaries for N buckets. */
+type TrendlineWindow = {
+  boundaries: Date[];
+  labels: string[];
+};
+
+const HOUR_MS = 60 * 60_000;
+const DAY_MS = 24 * HOUR_MS;
+const TRENDLINE_MONTH_BUCKETS = 12;
 
 type CsatTrendlineResult = {
   period: AnalyticsPeriod;
@@ -363,28 +382,12 @@ export class AnalyticsService {
       const period = query.period ?? AnalyticsPeriod.MONTHLY;
       const now = new Date();
 
-      const {
-        currentStart,
-        currentEnd,
-        previousStart,
-        previousEnd,
-        bucketCount,
-        labels,
-      } = this.getTrendlineConfig(period, now);
+      const { current, previous } = this.getTrendlineConfig(period, now);
 
-      const currentPeriod = await this.aggregateTrendlineWindow(
-        currentStart,
-        currentEnd,
-        bucketCount,
-        labels,
-      );
-
-      const previousPeriod = await this.aggregateTrendlineWindow(
-        previousStart,
-        previousEnd,
-        bucketCount,
-        labels,
-      );
+      const [currentPeriod, previousPeriod] = await Promise.all([
+        this.aggregateTrendlineWindow(current, now),
+        this.aggregateTrendlineWindow(previous, now),
+      ]);
 
       return {
         period,
@@ -1187,153 +1190,113 @@ export class AnalyticsService {
     return { period, appliedStartDate, appliedEndDate };
   }
 
+  /**
+   * Builds the bucket layout for both trendline series. Every bucket is a
+   * fixed calendar slot in IST (an hour, a day, 5 days or a month), so point N
+   * of the current series and point N of the previous series always cover the
+   * same kind of slot, and a point's label is the slot its data came from.
+   */
   private getTrendlineConfig(
     period: AnalyticsPeriod,
     now: Date,
-  ): {
-    currentStart: Date;
-    currentEnd: Date;
-    previousStart: Date;
-    previousEnd: Date;
-    bucketCount: number;
-    labels: string[];
-  } {
+  ): { current: TrendlineWindow; previous: TrendlineWindow } {
+    const todayStart = getIstDayStart(now).getTime();
+
+    if (period === AnalyticsPeriod.ALL_TIME) {
+      // Last 12 calendar months (IST), compared with the 12 months before.
+      const { year, month } = getIstDateParts(now);
+      const monthStart = (offset: number) =>
+        // Noon UTC on the 1st is always the 1st in IST as well.
+        getIstDayStart(new Date(Date.UTC(year, month - 1 + offset, 1, 12)));
+      const buildMonths = (firstOffset: number): TrendlineWindow => {
+        const boundaries = Array.from(
+          { length: TRENDLINE_MONTH_BUCKETS + 1 },
+          (_, i) => monthStart(firstOffset + i),
+        );
+        return {
+          boundaries,
+          labels: boundaries
+            .slice(0, -1)
+            .map((date) => this.formatTrendlineLabel(date, 'month')),
+        };
+      };
+      return {
+        current: buildMonths(1 - TRENDLINE_MONTH_BUCKETS),
+        previous: buildMonths(1 - 2 * TRENDLINE_MONTH_BUCKETS),
+      };
+    }
+
+    let bucketMs: number;
+    let bucketCount: number;
+    let labelKind: 'hour' | 'day';
+
     if (period === AnalyticsPeriod.DAILY) {
-      const currentStart = new Date(now);
-      currentStart.setUTCHours(0, 0, 0, 0);
-
-      const currentEnd = now;
-      const previousStart = new Date(currentStart);
-      previousStart.setUTCDate(previousStart.getUTCDate() - 1);
-      const previousEnd = new Date(currentEnd);
-      previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
-
-      const bucketCount = 6;
-      const labels = this.buildTimeLabels(
-        currentStart,
-        currentEnd,
-        bucketCount,
-      );
-      return {
-        currentStart,
-        currentEnd,
-        previousStart,
-        previousEnd,
-        bucketCount,
-        labels,
-      };
+      // The whole IST day, hour by hour.
+      bucketMs = HOUR_MS;
+      bucketCount = 24;
+      labelKind = 'hour';
+    } else if (period === AnalyticsPeriod.WEEKLY) {
+      // The last 7 IST calendar days, today included.
+      bucketMs = DAY_MS;
+      bucketCount = 7;
+      labelKind = 'day';
+    } else {
+      // The last 30 IST calendar days, today included, in 5-day buckets.
+      bucketMs = 5 * DAY_MS;
+      bucketCount = 6;
+      labelKind = 'day';
     }
 
-    if (period === AnalyticsPeriod.WEEKLY) {
-      const currentEnd = now;
-      const currentStart = new Date(currentEnd);
-      currentStart.setUTCDate(currentStart.getUTCDate() - 6);
-      currentStart.setUTCHours(0, 0, 0, 0);
-
-      const previousEnd = new Date(currentStart);
-      previousEnd.setMilliseconds(previousEnd.getMilliseconds() - 1);
-      const previousStart = new Date(previousEnd);
-      previousStart.setUTCDate(previousStart.getUTCDate() - 6);
-      previousStart.setUTCHours(0, 0, 0, 0);
-
-      const bucketCount = 7;
-      const labels = this.buildDateLabels(
-        currentStart,
-        currentEnd,
-        bucketCount,
+    const spanMs = bucketMs * bucketCount;
+    const currentStart = todayStart + DAY_MS - spanMs;
+    const buildFixed = (startMs: number): TrendlineWindow => {
+      const boundaries = Array.from(
+        { length: bucketCount + 1 },
+        (_, i) => new Date(startMs + bucketMs * i),
       );
       return {
-        currentStart,
-        currentEnd,
-        previousStart,
-        previousEnd,
-        bucketCount,
-        labels,
+        boundaries,
+        labels: boundaries
+          .slice(0, -1)
+          .map((date) => this.formatTrendlineLabel(date, labelKind)),
       };
-    }
+    };
 
-    const currentEnd = now;
-    const currentStart = new Date(currentEnd);
-    currentStart.setUTCDate(currentStart.getUTCDate() - 29);
-    currentStart.setUTCHours(0, 0, 0, 0);
-
-    const previousEnd = new Date(currentStart);
-    previousEnd.setMilliseconds(previousEnd.getMilliseconds() - 1);
-    const previousStart = new Date(previousEnd);
-    previousStart.setUTCDate(previousStart.getUTCDate() - 29);
-    previousStart.setUTCHours(0, 0, 0, 0);
-
-    const bucketCount = 6;
-    const labels = this.buildDateLabels(currentStart, currentEnd, bucketCount);
     return {
-      currentStart,
-      currentEnd,
-      previousStart,
-      previousEnd,
-      bucketCount,
-      labels,
+      current: buildFixed(currentStart),
+      previous: buildFixed(currentStart - spanMs),
     };
   }
 
-  private buildDateLabels(
-    start: Date,
-    end: Date,
-    bucketCount: number,
-  ): string[] {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: '2-digit',
-      timeZone: 'UTC',
-    });
-    const labels: string[] = [];
-    const span = end.getTime() - start.getTime();
-    const denominator = Math.max(1, bucketCount - 1);
-    const stepMs = Math.max(1, span / denominator);
-
-    for (let i = 0; i < bucketCount; i += 1) {
-      const point = new Date(start.getTime() + stepMs * i);
-      labels.push(formatter.format(point));
-    }
-    return labels;
-  }
-
-  private buildTimeLabels(
-    start: Date,
-    end: Date,
-    bucketCount: number,
-  ): string[] {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-      timeZone: 'UTC',
-    });
-    const labels: string[] = [];
-    const span = end.getTime() - start.getTime();
-    const denominator = Math.max(1, bucketCount - 1);
-    const stepMs = Math.max(1, span / denominator);
-
-    for (let i = 0; i < bucketCount; i += 1) {
-      const point = new Date(start.getTime() + stepMs * i);
-      labels.push(formatter.format(point));
-    }
-    return labels;
+  private formatTrendlineLabel(
+    date: Date,
+    kind: 'hour' | 'day' | 'month',
+  ): string {
+    const options: Intl.DateTimeFormatOptions =
+      kind === 'hour'
+        ? { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }
+        : kind === 'day'
+          ? { month: 'short', day: '2-digit' }
+          : { month: 'short', year: 'numeric' };
+    return new Intl.DateTimeFormat('en-US', {
+      ...options,
+      timeZone: IST_TIME_ZONE,
+    }).format(date);
   }
 
   private async aggregateTrendlineWindow(
-    start: Date,
-    end: Date,
-    bucketCount: number,
-    labels: string[],
+    window: TrendlineWindow,
+    now: Date,
   ): Promise<CsatTrendlinePeriodResult> {
-    const startMs = start.getTime();
-    const endMs = end.getTime();
-    const bucketMs = Math.max(1, (endMs - startMs) / bucketCount);
+    const { boundaries, labels } = window;
+    const bucketCount = boundaries.length - 1;
+    const start = boundaries[0];
+    const endExclusive = boundaries[bucketCount];
 
     const rows = await this.reviewModel
       .aggregate<{
-        bucketIndex: number;
-        avgCsat: number;
+        _id: Date;
+        avgCsat: number | null;
         totalRatings: number;
       }>([
         {
@@ -1341,66 +1304,50 @@ export class AnalyticsService {
             isDeleted: false,
             createdAt: {
               $gte: start,
-              $lte: end,
+              $lt: endExclusive,
             },
           },
         },
         {
-          $addFields: {
-            bucketIndex: {
-              $min: [
-                bucketCount - 1,
-                {
-                  $floor: {
-                    $divide: [
-                      {
-                        $subtract: [{ $toLong: '$createdAt' }, startMs],
-                      },
-                      bucketMs,
-                    ],
-                  },
-                },
-              ],
+          $bucket: {
+            groupBy: '$createdAt',
+            boundaries,
+            output: {
+              avgCsat: { $avg: '$overallRating' },
+              totalRatings: { $sum: 1 },
             },
-          },
-        },
-        {
-          $group: {
-            _id: '$bucketIndex',
-            avgCsat: { $avg: '$overallRating' },
-            totalRatings: { $sum: 1 },
-          },
-        },
-        {
-          $project: {
-            _id: 0,
-            bucketIndex: '$_id',
-            avgCsat: 1,
-            totalRatings: 1,
           },
         },
       ])
       .exec();
 
-    const values = Array.from({ length: bucketCount }, () => 0);
-    const ratingsPerBucket = Array.from({ length: bucketCount }, () => 0);
+    const indexByBucketStart = new Map(
+      boundaries.slice(0, -1).map((date, index) => [date.getTime(), index]),
+    );
+
+    // null means "no ratings in this bucket" (or the bucket is still in the
+    // future) so charts can leave a gap instead of plotting a CSAT of 0.
+    const values: (number | null)[] = Array.from(
+      { length: bucketCount },
+      () => null,
+    );
+    let totalRatings = 0;
 
     for (const row of rows) {
-      if (row.bucketIndex < 0 || row.bucketIndex >= bucketCount) continue;
-      const rounded = Math.round((row.avgCsat ?? 0) * 10) / 10;
-      values[row.bucketIndex] = rounded;
-      ratingsPerBucket[row.bucketIndex] = row.totalRatings ?? 0;
+      const index = indexByBucketStart.get(new Date(row._id).getTime());
+      if (index === undefined) continue;
+      if (boundaries[index].getTime() > now.getTime()) continue;
+      totalRatings += row.totalRatings ?? 0;
+      if (typeof row.avgCsat === 'number') {
+        values[index] = Math.round(row.avgCsat * 10) / 10;
+      }
     }
-
-    const totalRatings = ratingsPerBucket.reduce(
-      (sum, count) => sum + count,
-      0,
-    );
 
     return {
       startDate: start.toISOString(),
-      endDate: end.toISOString(),
+      endDate: new Date(endExclusive.getTime() - 1).toISOString(),
       labels,
+      timestamps: boundaries.slice(0, -1).map((date) => date.toISOString()),
       values,
       totalRatings,
     };

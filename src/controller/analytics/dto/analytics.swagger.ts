@@ -81,20 +81,35 @@ export function ApiReviewGlobalCsat() {
 }
 
 export class CsatTrendlinePeriodSwagger {
-  @ApiProperty({ example: '2026-02-09T00:00:00.000Z' })
+  @ApiProperty({ example: '2026-02-08T18:30:00.000Z' })
   startDate: string;
 
   @ApiProperty({ example: '2026-03-10T18:29:59.999Z' })
   endDate: string;
 
   @ApiProperty({
-    example: ['Feb 13', 'Feb 18', 'Feb 23', 'Feb 28', 'Mar 05', 'Mar 10'],
+    description:
+      'Display label of each bucket in IST: "HH:00" for daily, "Mon DD" for weekly and monthly, "Mon YYYY" for all-time.',
+    example: ['Feb 09', 'Feb 14', 'Feb 19', 'Feb 24', 'Mar 01', 'Mar 06'],
     type: [String],
   })
   labels: string[];
 
-  @ApiProperty({ example: [3.2, 3.5, 3.4, 3.6, 3.7, 3.8], type: [Number] })
-  values: number[];
+  @ApiProperty({
+    description: 'ISO instant at which each bucket starts.',
+    example: ['2026-02-08T18:30:00.000Z', '2026-02-13T18:30:00.000Z'],
+    type: [String],
+  })
+  timestamps: string[];
+
+  @ApiProperty({
+    description:
+      'Average CSAT per bucket. null when the bucket has no ratings or is still in the future.',
+    example: [3.2, null, 3.4, 3.6, 3.7, 3.8],
+    type: 'array',
+    items: { type: 'number', nullable: true },
+  })
+  values: (number | null)[];
 
   @ApiProperty({ example: 52 })
   totalRatings: number;
@@ -116,7 +131,7 @@ export function ApiReviewCsatTrendline() {
     ApiOperation({
       summary: 'Get CSAT trendline data',
       description:
-        'Returns current and previous period CSAT series for daily, weekly, or monthly trendline charts.',
+        'Returns current and previous period CSAT series for daily, weekly, monthly, or all-time trendline charts, bucketed on IST calendar boundaries.',
     }),
     ApiOkResponse({
       description: 'CSAT trendline fetched successfully.',
