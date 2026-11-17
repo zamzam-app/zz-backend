@@ -53,14 +53,19 @@ export class ReviewController {
     return this.reviewService.submitWithOtp(dto);
   }
 
+  @Roles(UserRole.ADMIN)
   @Post()
   create(@Body() createReviewDto: CreateReviewDto) {
     return this.reviewService.create(createReviewDto);
   }
 
   @Get()
-  findAll(@Query() query: QueryReviewDto) {
-    return this.reviewService.findAll(query);
+  findAll(
+    @Query() query: QueryReviewDto,
+    @Request() req: { user: JwtPayload },
+  ) {
+    // Managers only get reviews of their own outlets.
+    return this.reviewService.findAll(query, req.user);
   }
 
   @Get('badge-status/:userId')
@@ -95,7 +100,12 @@ export class ReviewController {
     @Request() req: { user: JwtPayload },
   ) {
     // The resolver is always the authenticated user, never a body value.
-    return this.reviewService.resolveComplaint(reviewId, body, req.user.sub);
+    return this.reviewService.resolveComplaint(
+      reviewId,
+      body,
+      req.user.sub,
+      req.user,
+    );
   }
 
   @Post(':reviewId/mark-read')
@@ -110,15 +120,17 @@ export class ReviewController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.reviewService.findOne(id);
+  findOne(@Param('id') id: string, @Request() req: { user: JwtPayload }) {
+    return this.reviewService.findOne(id, req.user);
   }
 
+  @Roles(UserRole.ADMIN)
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateReviewDto: UpdateReviewDto) {
     return this.reviewService.update(id, updateReviewDto);
   }
 
+  @Roles(UserRole.ADMIN)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.reviewService.remove(id);

@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   UnauthorizedException,
   Logger,
   OnModuleInit,
@@ -70,6 +71,12 @@ type ReviewBadgeStatus = {
   pendingCount: number;
   hasUnread: boolean;
 };
+
+/** The authenticated staff member making a request (from the verified JWT). */
+export type ReviewActor = { sub: string; role: UserRole };
+
+/** A star-rating question whose title starts with "Overall" must be answered. */
+const OVERALL_RATING_TITLE = /^overall\b/i;
 
 const COMPLAINT_NOTIFICATION_DEBOUNCE_MS = 120_000;
 
@@ -318,8 +325,25 @@ export class ReviewService implements OnModuleInit {
       );
 
       for (const question of form.questions) {
+        const answer = providedAnswers.get(question._id.toString());
+        const isStar = question.type === QuestionType.StarRating;
+
+        // The overall star rating is mandatory on every form, whatever the
+        // question's own "required" setting says.
+        const isOverallStar =
+          isStar && OVERALL_RATING_TITLE.test((question.title ?? '').trim());
+
+        if (isStar && (question.isRequired || isOverallStar)) {
+          // A star answer below 1 (e.g. a cleared 0) is not an answer.
+          if (this.parseStarAnswer(answer) === null) {
+            throw new BadRequestException(
+              `Please give a star rating for '${question.title}'`,
+            );
+          }
+          continue;
+        }
+
         if (question.isRequired) {
-          const answer = providedAnswers.get(question._id.toString());
           if (
             answer === undefined ||
             answer === null ||
@@ -489,13 +513,16 @@ export class ReviewService implements OnModuleInit {
     };
   }
 
-  async findAll(query: QueryReviewDto): Promise<FindAllReviewsResult> {
+  /**
+   * `actor` is the staff member asking. A manager only gets reviews of their
+   * own outlets; an admin, or an internal call with no actor, gets all.
+   */
+  async findAll(
+    query: QueryReviewDto,
+    actor?: ReviewActor,
+  ): Promise<FindAllReviewsResult> {
     try {
-      const hiddenOutletTypeIds = (process.env.HIDDEN_OUTLET_TYPE_IDS || '')
-        .split(',')
-        .map((id) => id.trim())
-        .filter((id) => id.length > 0 && Types.ObjectId.isValid(id))
-        .map((id) => new Types.ObjectId(id));
+      const hiddenOutletTypeIds = this.getHiddenOutletTypeIds();
 
       const page = query.page ?? 1;
       const limit = query.limit;
@@ -504,6 +531,16 @@ export class ReviewService implements OnModuleInit {
       const matchStage: Record<string, unknown> = { isDeleted: false };
       if (query.outletId) {
         matchStage.outletId = new Types.ObjectId(query.outletId);
+      }
+
+      const outletScope = await this.getOutletScopeForActor(actor);
+      if (outletScope) {
+        if (!query.outletId) {
+          matchStage.outletId = { $in: outletScope };
+        } else if (!outletScope.some((id) => id.equals(query.outletId))) {
+          // Asked for an outlet this manager is not assigned to.
+          matchStage.outletId = { $in: [] };
+        }
       }
       if (query.userId) {
         matchStage.userId = new Types.ObjectId(query.userId);
@@ -551,9 +588,23 @@ export class ReviewService implements OnModuleInit {
         {
           $addFields: {
             userId: { $arrayElemAt: ['$userIdLookup', 0] },
+            outletTableId: {
+              $cond: [
+                { $gt: [{ $size: '$outletTableIdLookup' }, 0] },
+                { $arrayElemAt: ['$outletTableIdLookup', 0] },
+                null,
+              ],
+            },
           },
         },
-        { $project: { userIdLookup: 0, outletIdLookup: 0, outletIdObj: 0 } },
+        {
+          $project: {
+            userIdLookup: 0,
+            outletIdLookup: 0,
+            outletIdObj: 0,
+            outletTableIdLookup: 0,
+          },
+        },
         {
           $lookup: {
             from: 'questions',
@@ -649,6 +700,8 @@ export class ReviewService implements OnModuleInit {
             },
           },
           { $match: { outletId: { $ne: null } } }, // Filter out reviews with deleted outlets BEFORE counting
+          // Newest first, so pages (and the public "recent reviews") are stable.
+          { $sort: { createdAt: -1, _id: -1 } },
           {
             $facet: {
               data: dataPipeline,
@@ -825,11 +878,14 @@ export class ReviewService implements OnModuleInit {
     }
   }
 
-  async findOne(id: string): Promise<Review> {
+  /** A manager gets a 404 for a review outside their outlets. */
+  async findOne(id: string, actor?: ReviewActor): Promise<Review> {
     try {
       if (!Types.ObjectId.isValid(id)) {
         throw new BadRequestException('Invalid review ID');
       }
+
+      const outletScope = await this.getOutletScopeForActor(actor);
 
       const [review] = await this.reviewModel
         .aggregate<Review>([
@@ -837,6 +893,7 @@ export class ReviewService implements OnModuleInit {
             $match: {
               _id: new Types.ObjectId(id),
               isDeleted: false,
+              ...(outletScope ? { outletId: { $in: outletScope } } : {}),
             },
           },
           { $limit: 1 },
@@ -1185,7 +1242,10 @@ export class ReviewService implements OnModuleInit {
   private async computeOverallRatingFromResponses(
     response: { questionId: string; answer?: string | string[] | number }[],
   ): Promise<number> {
-    if (!response?.length) return OVERALL_RATING_SCALE.min;
+    // A review is never stored without a real star rating.
+    if (!response?.length) {
+      throw new BadRequestException('At least one star rating is required');
+    }
 
     const questionIds = response.map((r) => r.questionId);
     const questions = await this.questionModel
@@ -1206,33 +1266,21 @@ export class ReviewService implements OnModuleInit {
       const question = questionMap.get(r.questionId);
       if (
         !question ||
-        (question.type as QuestionType) !== QuestionType.StarRating ||
-        r.answer === undefined ||
-        r.answer === null ||
-        r.answer === ''
+        (question.type as QuestionType) !== QuestionType.StarRating
       ) {
         continue;
       }
+
+      // Unanswered (or below one star) does not count towards the rating.
+      const parsed = this.parseStarAnswer(r.answer);
+      if (parsed === null) continue;
 
       let maxRatings = question.maxRatings;
       if (maxRatings == null || !VALID_MAX_RATINGS.has(maxRatings)) {
         maxRatings = 5;
       }
 
-      let num: number;
-      if (typeof r.answer === 'number') {
-        num = r.answer;
-      } else if (Array.isArray(r.answer)) {
-        if (r.answer.length === 0) continue;
-        num = Number(r.answer[0]);
-      } else {
-        num = Number(r.answer);
-      }
-      if (Number.isNaN(num)) {
-        throw new BadRequestException('Star rating answer must be a number');
-      }
-
-      num = Math.min(maxRatings, Math.max(1, num));
+      const num = Math.min(maxRatings, parsed);
       const normalized =
         1 +
         ((num - 1) / (maxRatings - 1)) *
@@ -1240,7 +1288,9 @@ export class ReviewService implements OnModuleInit {
       normalizedValues.push(normalized);
     }
 
-    if (normalizedValues.length === 0) return OVERALL_RATING_SCALE.min;
+    if (normalizedValues.length === 0) {
+      throw new BadRequestException('At least one star rating is required');
+    }
 
     const sum = normalizedValues.reduce((a, b) => a + b, 0);
     const average = sum / normalizedValues.length;
@@ -1251,15 +1301,47 @@ export class ReviewService implements OnModuleInit {
     );
   }
 
+  /**
+   * Reads a star-rating answer. Returns null when it is unanswered, which
+   * includes anything below 1: one star is the lowest rating there is.
+   */
+  private parseStarAnswer(answer: unknown): number | null {
+    const raw: unknown = Array.isArray(answer) ? answer[0] : answer;
+    if (raw === undefined || raw === null || raw === '') return null;
+
+    const num = typeof raw === 'number' ? raw : Number(raw);
+    if (Number.isNaN(num)) {
+      throw new BadRequestException('Star rating answer must be a number');
+    }
+    return num >= 1 ? num : null;
+  }
+
   async resolveComplaint(
     reviewId: string,
     dto: ResolveComplaintDto,
     resolvedBy: string,
+    actor?: ReviewActor,
   ): Promise<Review> {
     try {
       if (!Types.ObjectId.isValid(reviewId)) {
         throw new BadRequestException('Invalid review ID');
       }
+      if (
+        dto.complaintStatus !== ComplaintStatus.RESOLVED &&
+        dto.complaintStatus !== ComplaintStatus.DISMISSED
+      ) {
+        throw new BadRequestException(
+          'A complaint can only be marked as resolved or dismissed',
+        );
+      }
+
+      // Managers may only act on complaints of their own outlets.
+      const outletScope = await this.getOutletScopeForActor(actor);
+      const accessMatch: Record<string, unknown> = {
+        _id: new Types.ObjectId(reviewId),
+        isDeleted: false,
+        ...(outletScope ? { outletId: { $in: outletScope } } : {}),
+      };
 
       const resolvedByObj = new Types.ObjectId(resolvedBy);
       const now = new Date();
@@ -1282,13 +1364,17 @@ export class ReviewService implements OnModuleInit {
         };
       }
 
+      // Only an open complaint can be resolved or dismissed, and only once:
+      // the status check is part of the update filter, so two people acting
+      // at the same moment cannot both succeed.
       // `new: false` returns the document as it was before this update, so the
       // previous complaintStatus is available for the transition check below.
       const updated = await this.reviewModel
         .findOneAndUpdate(
           {
-            _id: new Types.ObjectId(reviewId),
-            isDeleted: false,
+            ...accessMatch,
+            isComplaint: true,
+            ...this.buildOpenComplaintMatch(),
           },
           { $set },
           { new: false },
@@ -1296,7 +1382,21 @@ export class ReviewService implements OnModuleInit {
         .exec();
 
       if (!updated) {
-        throw new NotFoundException('Review not found');
+        // Nothing was changed; work out why so the caller gets a clear answer.
+        const existing = await this.reviewModel
+          .findOne(accessMatch)
+          .select('isComplaint complaintStatus')
+          .lean()
+          .exec();
+        if (!existing) {
+          throw new NotFoundException('Review not found');
+        }
+        if (!existing.isComplaint) {
+          throw new BadRequestException('This review is not a complaint');
+        }
+        throw new ConflictException(
+          `This complaint has already been ${existing.complaintStatus ?? 'handled'}`,
+        );
       }
 
       // Only notify on an actual transition to RESOLVED, not on re-sends.
@@ -1374,12 +1474,10 @@ export class ReviewService implements OnModuleInit {
 
     let allOutletIds: Promise<Types.ObjectId[]> | null = null;
     const getAllOutletIds = () =>
-      (allOutletIds ??= this.outletModel
-        .find({ isDeleted: false })
-        .select('_id')
-        .lean()
-        .exec()
-        .then((outlets) => outlets.map((o) => o._id)));
+      (allOutletIds ??= this.getVisibleOutletIds({
+        _id: new Types.ObjectId(),
+        role: UserRole.ADMIN,
+      }));
 
     await Promise.all(
       users.map(async (user) => {
@@ -1389,7 +1487,7 @@ export class ReviewService implements OnModuleInit {
           if (user.role === UserRole.ADMIN) {
             outletIds = await getAllOutletIds();
           } else if (user.role === UserRole.MANAGER) {
-            outletIds = await this.getManagerOutletIds(userId, user.outlets);
+            outletIds = await this.getVisibleOutletIds(user);
           } else {
             return;
           }
@@ -1417,26 +1515,72 @@ export class ReviewService implements OnModuleInit {
     return counts;
   }
 
-  /** Outlets a manager can see: their own list plus outlets that list them. */
-  private async getManagerOutletIds(
-    userId: string,
-    profileOutlets: unknown[] | undefined,
-  ): Promise<Types.ObjectId[]> {
-    const outletIds = new Set<string>(
-      (profileOutlets ?? []).map((id) => String(id)),
-    );
+  private getHiddenOutletTypeIds(): Types.ObjectId[] {
+    return (process.env.HIDDEN_OUTLET_TYPE_IDS || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0 && Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+  }
 
-    const managerOutlets = await this.outletModel
-      .find({
-        isDeleted: false,
-        managerIds: new Types.ObjectId(userId),
-      } as Record<string, unknown>)
+  /**
+   * The one rule for which outlets' reviews a staff member can see. The
+   * reviews list, a single review, resolving a complaint and the badge counts
+   * all use it, so the badge never counts a review the list cannot show.
+   *
+   * - Deleted outlets and outlets of a hidden type are never included.
+   * - Admin: every remaining outlet.
+   * - Manager: outlets that list them in `managerIds`, plus the outlets on
+   *   their own profile (`user.outlets`).
+   * - Anyone else: none.
+   */
+  private async getVisibleOutletIds(user: {
+    _id: Types.ObjectId;
+    role?: UserRole;
+    outlets?: unknown[];
+  }): Promise<Types.ObjectId[]> {
+    if (user.role !== UserRole.ADMIN && user.role !== UserRole.MANAGER) {
+      return [];
+    }
+
+    const filter: Record<string, unknown> = { isDeleted: false };
+
+    const hiddenOutletTypeIds = this.getHiddenOutletTypeIds();
+    if (hiddenOutletTypeIds.length > 0) {
+      filter.outletType = { $nin: hiddenOutletTypeIds };
+    }
+
+    if (user.role === UserRole.MANAGER) {
+      const profileOutletIds = (user.outlets ?? [])
+        .map((id) => String(id))
+        .filter((id) => Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id));
+      filter.$or = [
+        { managerIds: user._id },
+        { _id: { $in: profileOutletIds } },
+      ];
+    }
+
+    const outlets = await this.outletModel
+      .find(filter)
       .select('_id')
       .lean()
       .exec();
-    managerOutlets.forEach((outlet) => outletIds.add(outlet._id.toString()));
 
-    return Array.from(outletIds).map((id) => new Types.ObjectId(id));
+    return outlets.map((outlet) => outlet._id);
+  }
+
+  /**
+   * Outlet restriction for a request. `null` means unrestricted (an admin, or
+   * an internal call with no actor); a list, possibly empty, means only those
+   * outlets.
+   */
+  private async getOutletScopeForActor(
+    actor?: ReviewActor,
+  ): Promise<Types.ObjectId[] | null> {
+    if (!actor || actor.role === UserRole.ADMIN) return null;
+    const scope = await this.getBadgeScopeForUser(actor.sub);
+    return scope.outletIds;
   }
 
   private async getBadgeScopeForUser(userId: string): Promise<{
@@ -1457,45 +1601,14 @@ export class ReviewService implements OnModuleInit {
       throw new NotFoundException('User not found');
     }
 
-    if (user.role === UserRole.ADMIN) {
-      const activeOutlets = await this.outletModel
-        .find({ isDeleted: false })
-        .select('_id')
-        .lean()
-        .exec();
-
-      if (activeOutlets.length === 0) {
-        return { scopeType: 'none', outletIds: [] };
-      }
-
-      return {
-        scopeType: 'global',
-        outletIds: activeOutlets.map((o) => o._id),
-      };
-    }
-
-    if (user.role !== UserRole.MANAGER) {
+    const outletIds = await this.getVisibleOutletIds(user);
+    if (outletIds.length === 0) {
       return { scopeType: 'none', outletIds: [] };
     }
 
-    const outletIds = new Set<string>(
-      (user.outlets ?? []).map((id) => id.toString()),
-    );
-
-    const managerOutlets = await this.outletModel
-      .find({
-        isDeleted: false,
-        managerIds: new Types.ObjectId(userId),
-      } as Record<string, unknown>)
-      .select('_id')
-      .lean()
-      .exec();
-
-    managerOutlets.forEach((outlet) => outletIds.add(outlet._id.toString()));
-
     return {
-      scopeType: outletIds.size > 0 ? 'outlets' : 'none',
-      outletIds: Array.from(outletIds).map((id) => new Types.ObjectId(id)),
+      scopeType: user.role === UserRole.ADMIN ? 'global' : 'outlets',
+      outletIds,
     };
   }
 
@@ -1505,7 +1618,8 @@ export class ReviewService implements OnModuleInit {
     return {
       isDeleted: false,
       isComplaint: true,
-      complaintStatus: ComplaintStatus.PENDING,
+      // Same "open" rule as the reviews list: pending, or no status at all.
+      ...this.buildOpenComplaintMatch(),
       ...(outletIds.length > 0 ? { outletId: { $in: outletIds } } : {}),
     };
   }
