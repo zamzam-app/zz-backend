@@ -40,7 +40,7 @@ export class AddressController {
     @Body() createAddressDto: CreateAddressDto,
     @Request() req: ExpressRequest & { user: JwtPayload },
   ) {
-    return this.addressService.create(createAddressDto, req.user.sub);
+    return this.addressService.create(createAddressDto, req.user);
   }
 
   @Get()
@@ -62,13 +62,20 @@ export class AddressController {
 
   @Patch(':id')
   @ApiAddressUpdate()
-  update(@Param('id') id: string, @Body() updateAddressDto: UpdateAddressDto) {
-    return this.addressService.update(id, updateAddressDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateAddressDto: UpdateAddressDto,
+    @Request() req: ExpressRequest & { user: JwtPayload },
+  ) {
+    return this.addressService.update(id, updateAddressDto, req.user);
   }
 
   @Delete(':id')
   @ApiAddressRemove()
-  remove(@Param('id') id: string) {
-    return this.addressService.remove(id);
+  remove(
+    @Param('id') id: string,
+    @Request() req: ExpressRequest & { user: JwtPayload },
+  ) {
+    return this.addressService.remove(id, req.user);
   }
 }

@@ -160,6 +160,11 @@ export class UsersService {
         {
           $project: {
             associatedOutlets: 0,
+            // Aggregations ignore `select: false`, so strip secrets explicitly.
+            password: 0,
+            otp: 0,
+            pushToken: 0,
+            pushTokens: 0,
           },
         },
       );
@@ -227,6 +232,9 @@ export class UsersService {
   async update(id: string, updateUserDto: UpdateUserDto) {
     try {
       const payload = { ...updateUserDto };
+      if (payload.password) {
+        payload.password = await hashPassword(payload.password);
+      }
       if (payload.email != null)
         payload.email = normalizeEmail(payload.email) || payload.email;
       if (payload.phoneNumber != null)
@@ -270,11 +278,14 @@ export class UsersService {
 
   async findOneByName(name: string, includePassword = false) {
     try {
-      const query = this.userModel.findOne({ name });
+      // `name` is not unique: if more than one active user shares it, refuse
+      // rather than guess which account the caller means.
+      const query = this.userModel.find({ name, isDeleted: false }).limit(2);
       if (includePassword) {
         query.select('+password');
       }
-      return query.exec();
+      const matches = await query.exec();
+      return matches.length === 1 ? matches[0] : null;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
@@ -285,7 +296,11 @@ export class UsersService {
 
   async findOneByEmail(email: string, includePassword = false) {
     try {
-      const query = this.userModel.findOne({ email });
+      // Emails are stored normalised (lower-case); deleted users cannot log in.
+      const query = this.userModel.findOne({
+        email: normalizeEmail(email) || email,
+        isDeleted: false,
+      });
       if (includePassword) {
         query.select('+password');
       }
@@ -296,6 +311,16 @@ export class UsersService {
         (error as Error)?.message ?? 'Failed to retrieve user by email',
       );
     }
+  }
+
+  /** Current role/status of a user, for re-checking tokens on each request. */
+  async getAuthState(id: string) {
+    if (!Types.ObjectId.isValid(id)) return null;
+    return this.userModel
+      .findById(id)
+      .select('name role isActive isDeleted')
+      .lean()
+      .exec();
   }
 
   async findOneByPhoneNumber(phoneNumber: string) {

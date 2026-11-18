@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -25,8 +27,44 @@ import {
   ValidatedUser,
 } from './interfaces/auth.interfaces';
 
+/** Per-phone caps, on top of the per-IP route throttles (an attacker can rotate IPs). */
+const PHONE_WINDOW_MS = 10 * 60 * 1000;
+const MAX_OTP_REQUESTS_PER_PHONE = 3;
+const MAX_OTP_VERIFY_ATTEMPTS_PER_PHONE = 10;
+
 @Injectable()
 export class AuthService {
+  // In-memory, so per instance. Fine for a single API instance.
+  private readonly otpRequestLog = new Map<string, number[]>();
+  private readonly otpVerifyLog = new Map<string, number[]>();
+
+  /** Records an attempt for `key`; throws 429 once `max` is hit within the window. */
+  private enforcePhoneLimit(
+    log: Map<string, number[]>,
+    key: string,
+    max: number,
+  ): void {
+    const now = Date.now();
+    const recent = (log.get(key) ?? []).filter(
+      (t) => now - t < PHONE_WINDOW_MS,
+    );
+    if (recent.length >= max) {
+      log.set(key, recent);
+      throw new HttpException(
+        'Too many attempts for this phone number. Try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    recent.push(now);
+    log.set(key, recent);
+    // Keep the maps from growing without bound.
+    if (log.size > 10_000) {
+      for (const [k, times] of log) {
+        if (times.every((t) => now - t >= PHONE_WINDOW_MS)) log.delete(k);
+      }
+    }
+  }
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -65,6 +103,11 @@ export class AuthService {
     if (!normPhone) {
       throw new BadRequestException('Invalid phone number');
     }
+    this.enforcePhoneLimit(
+      this.otpRequestLog,
+      normPhone,
+      MAX_OTP_REQUESTS_PER_PHONE,
+    );
     let userDoc: UserDocument | null =
       (await this.usersService.findOneByPhoneNumber(
         normPhone,
@@ -89,35 +132,30 @@ export class AuthService {
     if (!normPhone) {
       throw new UnauthorizedException('Invalid OTP');
     }
+    this.enforcePhoneLimit(
+      this.otpVerifyLog,
+      normPhone,
+      MAX_OTP_VERIFY_ATTEMPTS_PER_PHONE,
+    );
     await this.msg91Service.verifyOtp(normPhone, verifyOtpDto.otp);
 
-    // 2. Find or Create User (by userId if provided, else by phoneNumber)
-    let userDoc: UserDocument;
-    const requestUserId = verifyOtpDto.userId;
-    if (requestUserId) {
-      const found = await this.usersService.findOne(requestUserId);
-      userDoc = found as unknown as UserDocument;
-    } else {
-      const normEmail = normalizeEmail(verifyOtpDto.email);
-      let byPhone = await this.usersService.findOneByPhoneNumber(normPhone);
-      if (!byPhone && verifyOtpDto.email) {
-        const { data: byEmail, userPresent } =
-          await this.usersService.findUserByIdentifiers({
-            email: normEmail || verifyOtpDto.email,
-          });
-        if (userPresent && byEmail) byPhone = byEmail;
-      }
-      if (!byPhone) {
-        byPhone = await this.usersService.create({
-          phoneNumber: normPhone,
-          role: UserRole.USER,
-          ...(verifyOtpDto.name && { name: verifyOtpDto.name }),
-          ...(verifyOtpDto.email && { email: normEmail || verifyOtpDto.email }),
-          ...(verifyOtpDto.dob && { dob: verifyOtpDto.dob }),
-        });
-      }
-      userDoc = byPhone as UserDocument;
+    // 2. Find or Create User by the verified phone number only. The account
+    // must never be chosen by anything else in the request body.
+    const normEmail = normalizeEmail(verifyOtpDto.email);
+    let byPhone = await this.usersService.findOneByPhoneNumber(normPhone);
+    if (!byPhone) {
+      byPhone = await this.usersService.create({
+        phoneNumber: normPhone,
+        role: UserRole.USER,
+        ...(verifyOtpDto.name && { name: verifyOtpDto.name }),
+        ...(verifyOtpDto.email && { email: normEmail || verifyOtpDto.email }),
+        ...(verifyOtpDto.dob && { dob: verifyOtpDto.dob }),
+      });
     }
+    if (!this.isAccountUsable(byPhone as UserDocument)) {
+      throw new UnauthorizedException('This account is not active');
+    }
+    let userDoc = byPhone as UserDocument;
 
     const userId = String(userDoc._id);
 
@@ -199,11 +237,16 @@ export class AuthService {
     return { ...(userDoc as unknown as ValidatedUser), tokenSyncRequired };
   }
 
-  refresh(refreshToken: string): AuthTokens {
+  async refresh(refreshToken: string): Promise<AuthTokens> {
     if (!refreshToken) {
       throw new UnauthorizedException('No refresh token found');
     }
     return this.refreshTokens(refreshToken);
+  }
+
+  /** Deleted or deactivated accounts must not be able to sign in or refresh. */
+  private isAccountUsable(user?: { isDeleted?: boolean; isActive?: boolean }) {
+    return !!user && user.isDeleted !== true && user.isActive !== false;
   }
 
   async validateUser(
@@ -226,8 +269,18 @@ export class AuthService {
       user = await this.usersService.findOneByName(name, true);
     }
 
-    if (user && user.password && (await bcrypt.compare(pass, user.password))) {
-      const result = user.toObject();
+    if (
+      user &&
+      this.isAccountUsable(user) &&
+      user.password &&
+      (await bcrypt.compare(pass, user.password))
+    ) {
+      // Never hand the password hash (or other secrets) back to callers: the
+      // result ends up in the login response.
+      const result = { ...user.toObject() } as Record<string, unknown>;
+      delete result.password;
+      delete result.otp;
+      delete result.pushTokens;
       return { ...result, tokenSyncRequired: false } as ValidatedUser;
     }
     return null;
@@ -263,21 +316,27 @@ export class AuthService {
     };
   }
 
-  refreshTokens(refreshToken: string): AuthTokens {
+  async refreshTokens(refreshToken: string): Promise<AuthTokens> {
+    let payload: JwtPayload;
     try {
-      const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
+      payload = this.jwtService.verify<JwtPayload>(refreshToken, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
-
-      const newPayload: JwtPayload = {
-        name: payload.name,
-        sub: payload.sub,
-        role: payload.role,
-      };
-
-      return this.generateTokens(newPayload);
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
+
+    // Re-read the user so a removed, deactivated or demoted account cannot keep
+    // refreshing, and the new token carries the current role.
+    const current = await this.usersService.getAuthState(payload.sub);
+    if (!current || !this.isAccountUsable(current)) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return this.generateTokens({
+      name: current.name ?? payload.name,
+      sub: payload.sub,
+      role: current.role,
+    });
   }
 }

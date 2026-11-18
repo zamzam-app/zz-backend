@@ -1,6 +1,9 @@
+import { Throttle } from '@nestjs/throttler';
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../users/interfaces/user.interface';
 import { CreateUploadedCakeDto } from './dto/create-uploaded-cake.dto';
 import { QueryUploadedCakeDto } from './dto/query-uploaded-cake.dto';
 import {
@@ -15,6 +18,7 @@ import { UploadedCakesService } from './uploaded-cakes.service';
 export class UploadedCakesController {
   constructor(private readonly uploadedCakesService: UploadedCakesService) {}
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post()
   @Public()
   @ApiUploadedCakeCreate()
@@ -23,14 +27,14 @@ export class UploadedCakesController {
   }
 
   @Get()
-  @Public()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiUploadedCakeFindAll()
   findAll(@Query() query: QueryUploadedCakeDto) {
     return this.uploadedCakesService.findAll(query);
   }
 
   @Get(':id')
-  @Public()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiUploadedCakeFindOne()
   findOne(@Param('id') id: string) {
     return this.uploadedCakesService.findOne(id);

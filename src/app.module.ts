@@ -26,6 +26,10 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { CakeCustomizationModule } from './controller/cake-customization/cake-customization.module';
 
 import { ScheduleModule } from '@nestjs/schedule';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { JwtAuthGuard } from './controller/auth/guards/jwt-auth.guard';
+import { RolesGuard } from './controller/auth/guards/roles.guard';
 
 @Module({
   imports: [
@@ -33,6 +37,9 @@ import { ScheduleModule } from '@nestjs/schedule';
       isGlobal: true,
     }),
     ScheduleModule.forRoot(),
+    // Generous global ceiling per client IP; sensitive routes tighten it with
+    // @Throttle(). The manager app polls often, so keep the default high.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
@@ -66,6 +73,15 @@ import { ScheduleModule } from '@nestjs/schedule';
   ],
 
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Deny by default: every route requires a valid JWT and, where @Roles is
+    // set, a matching role. Opt out per route with @Public(). Order matters:
+    // authentication must run before the roles check.
+    // Throttling runs first so brute-force attempts are cut off before any work.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
 })
 export class AppModule {}

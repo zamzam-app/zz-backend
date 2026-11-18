@@ -19,6 +19,9 @@ import {
 } from './entities/uploaded-cake.entity';
 import { FindAllUploadedCakesResult } from './interfaces/query-uploaded-cake.interface';
 
+/** Only the customer fields staff need; never password, otp, tokens, email or role. */
+const STAFF_VISIBLE_USER_FIELDS = 'name phoneNumber dob gender';
+
 @Injectable()
 export class UploadedCakesService {
   constructor(
@@ -99,7 +102,7 @@ export class UploadedCakesService {
       const queryBuilder = this.uploadedCakeModel
         .find(matchStage)
         .sort({ createdAt: -1 })
-        .populate('userId');
+        .populate('userId', STAFF_VISIBLE_USER_FIELDS);
 
       if (limit) {
         queryBuilder.skip(skip).limit(limit);
@@ -129,7 +132,7 @@ export class UploadedCakesService {
   async findOne(id: string): Promise<UploadedCakeDocument> {
     const doc = await this.uploadedCakeModel
       .findOne({ _id: new Types.ObjectId(id), isDeleted: false })
-      .populate('userId')
+      .populate('userId', STAFF_VISIBLE_USER_FIELDS)
       .exec();
 
     if (doc == null) {

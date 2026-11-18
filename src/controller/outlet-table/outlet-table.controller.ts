@@ -9,6 +9,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../users/interfaces/user.interface';
 import { OutletTableService } from './outlet-table.service';
 import { CreateOutletTableDto } from './dto/create-outlet-table.dto';
 import { UpdateOutletTableDto } from './dto/update-outlet-table.dto';
@@ -23,6 +25,7 @@ import {
 
 @ApiTags('outlet-table')
 @ApiBearerAuth('JWT-auth')
+@Roles(UserRole.ADMIN)
 @Controller('outlet-table')
 export class OutletTableController {
   constructor(private readonly outletTableService: OutletTableService) {}

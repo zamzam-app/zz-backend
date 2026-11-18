@@ -19,11 +19,16 @@ export class AddressService {
 
   async create(
     createAddressDto: CreateAddressDto,
-    userId?: string,
+    user: JwtPayload,
   ): Promise<Address> {
+    // Only admins may create an address on behalf of another user.
+    const userId =
+      user.role === UserRole.ADMIN && createAddressDto.userId
+        ? createAddressDto.userId
+        : user.sub;
     const createdAddress = new this.addressModel({
       ...createAddressDto,
-      userId: createAddressDto.userId || userId,
+      userId,
     });
     return createdAddress.save();
   }
@@ -54,10 +59,37 @@ export class AddressService {
     return address;
   }
 
+  /** Admins may change any address; others only addresses they own. */
+  private async assertCanModify(id: string, user: JwtPayload): Promise<void> {
+    if (user.role === UserRole.ADMIN) return;
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException(`Address with ID ${id} not found`);
+    }
+    const address = await this.addressModel
+      .findOne({ _id: new Types.ObjectId(id), isDeleted: false })
+      .select('userId')
+      .lean()
+      .exec();
+    if (!address) {
+      throw new NotFoundException(`Address with ID ${id} not found`);
+    }
+    if (!address.userId || address.userId.toString() !== user.sub) {
+      throw new ForbiddenException(
+        'You do not have permission to modify this address',
+      );
+    }
+  }
+
   async update(
     id: string,
     updateAddressDto: UpdateAddressDto,
+    user: JwtPayload,
   ): Promise<Address> {
+    await this.assertCanModify(id, user);
+    // Ownership can only be reassigned by an admin.
+    if (user.role !== UserRole.ADMIN) {
+      delete updateAddressDto.userId;
+    }
     const updatedAddress = await this.addressModel
       .findOneAndUpdate(
         { _id: new Types.ObjectId(id), isDeleted: false },
@@ -71,7 +103,8 @@ export class AddressService {
     return updatedAddress;
   }
 
-  async remove(id: string): Promise<{ message: string }> {
+  async remove(id: string, user: JwtPayload): Promise<{ message: string }> {
+    await this.assertCanModify(id, user);
     const result = await this.addressModel
       .findOneAndUpdate(
         { _id: new Types.ObjectId(id), isDeleted: false },

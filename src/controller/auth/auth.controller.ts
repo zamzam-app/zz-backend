@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import {
   Controller,
   Post,
@@ -32,6 +33,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   @ApiOperation({ summary: 'Admin/Manager Login (Username/Email + Password)' })
   @ApiBody({ type: LoginDto })
@@ -42,6 +44,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post('request-otp')
   @ApiOperation({
     summary: 'Request OTP for phone login (creates user if not found)',
@@ -54,6 +57,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('verify-otp')
   @ApiOperation({
     summary: 'User Login (Phone + OTP) using Twilio Verify.',
@@ -66,11 +70,14 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token using refresh token cookie' })
-  refresh(@Request() req: ExpressRequest): Omit<AuthTokens, 'refresh_token'> {
+  async refresh(
+    @Request() req: ExpressRequest,
+  ): Promise<Omit<AuthTokens, 'refresh_token'>> {
     const refreshToken = req.cookies['refresh_token'] as string;
-    const result = this.authService.refresh(refreshToken);
+    const result = await this.authService.refresh(refreshToken);
     return { access_token: result.access_token };
   }
 
